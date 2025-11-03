@@ -1,3 +1,4 @@
+// hooks/use-admin-status.js
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -44,20 +45,23 @@ export function useAdminStatus() {
     const setupAuthListener = async () => {
         // Initial session check
         const { data: { session } } = await supabase.auth.getSession();
-        checkAdmin(session); 
+        await checkAdmin(session); // Use await to ensure initial check completes
 
         // Set up listener for real-time auth changes
-        const { data: subscription } = supabase.auth.onAuthStateChange((event, session) => {
-            checkAdmin(session);
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+            await checkAdmin(session);
         })
-        authSubscription = subscription;
+        
+        if (subscription) {
+            authSubscription = subscription.subscription;
+        }
     };
 
     setupAuthListener();
 
     return () => {
       if (authSubscription) {
-        authSubscription.subscription.unsubscribe()
+        authSubscription.unsubscribe()
       }
     }
   }, [])

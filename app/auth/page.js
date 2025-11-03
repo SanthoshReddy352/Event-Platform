@@ -1,43 +1,49 @@
+// app/auth/page.js
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation' 
 import { supabase } from '@/lib/supabase/client'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-// Import Dialog components for the "Forgot Password" modal
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog' 
+import { useAuth } from '@/context/AuthContext' // IMPORT useAuth
 
 export default function ParticipantAuthPage() {
   const router = useRouter()
+  const searchParams = useSearchParams() 
+  const redirectEventId = searchParams.get('redirect')
+  const finalRedirect = redirectEventId ? `/events/${redirectEventId}` : '/events'; 
+
+  const { user } = useAuth() // Get user from context
+
   const [loading, setLoading] = useState(false)
-  const [sessionLoading, setSessionLoading] = useState(true)
+  // Session loading is now based on the context's loading state
+  const [sessionLoading, setSessionLoading] = useState(true) 
+  
   const [loginData, setLoginData] = useState({ email: '', password: '' })
   const [signupData, setSignupData] = useState({ email: '', password: '', confirmPassword: '' })
   const [error, setError] = useState('')
   const [currentTab, setCurrentTab] = useState('login')
   
-  // NEW State for Forgot Password Dialog
   const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState(false)
   const [resetEmail, setResetEmail] = useState('')
   const [resetMessage, setResetMessage] = useState('')
   const [isResetting, setIsResetting] = useState(false)
 
   useEffect(() => {
-    // Check if user is already logged in
-    const checkSession = async () => {
-        const { data: { session } } = await supabase.auth.getSession()
-        if (session) {
-            router.push('/events') // Redirect authenticated user away from auth page
-        } else {
-            setSessionLoading(false)
-        }
+    // Use the user state from context to check session
+    if (user) {
+        // User is already logged in, send them to their destination
+        router.replace(finalRedirect)
+    } else {
+        // User is not logged in, show the login form
+        setSessionLoading(false)
     }
-    checkSession()
-  }, [router])
+  }, [user, router, finalRedirect])
 
   const handleLogin = async (e) => {
     e.preventDefault()
@@ -52,7 +58,9 @@ export default function ParticipantAuthPage() {
 
       if (error) throw error
 
-      router.push('/events') // Redirect to events page after successful login
+      // MODIFIED: Redirect directly to the final destination.
+      // The Navbar's context will update automatically.
+      router.replace(finalRedirect)
     } catch (error) {
       setError(error.message)
     } finally {
@@ -89,7 +97,6 @@ export default function ParticipantAuthPage() {
     }
   }
   
-  // NEW: Forgot Password Handler
   const handleForgotPassword = async (e) => {
     e.preventDefault()
     setResetMessage('')
@@ -97,9 +104,6 @@ export default function ParticipantAuthPage() {
 
     try {
     const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
-         // You must configure this URL in your Supabase Auth settings 
-         // or set it to point to a page that handles the password update token.
-         // FIX: Changed '/update-password' to '/update_password'
          redirectTo: `${window.location.origin}/update_password`,
     })
 
@@ -128,6 +132,7 @@ export default function ParticipantAuthPage() {
   }
 
   return (
+    // ... (The rest of the JSX for this file is unchanged, copy from your existing file)
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
@@ -179,7 +184,6 @@ export default function ParticipantAuthPage() {
                     />
                   </div>
                   
-                  {/* NEW: Forgot Password Link */}
                   <div className="text-right">
                     <Button 
                         type="button" 
@@ -264,7 +268,6 @@ export default function ParticipantAuthPage() {
         </Tabs>
       </div>
 
-      {/* NEW: Forgot Password Dialog */}
       <Dialog open={isForgotPasswordOpen} onOpenChange={setIsForgotPasswordOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>

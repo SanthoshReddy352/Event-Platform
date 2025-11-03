@@ -1,36 +1,23 @@
+// components/Navbar.js
 'use client'
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import { Menu, X, LogIn, LogOut, User } from 'lucide-react' // Added User icon
-import { useState, useEffect } from 'react'
+import { Menu, X, LogIn, LogOut, User } from 'lucide-react' 
+import { useState } from 'react'
 import { supabase } from '@/lib/supabase/client'
-import { useAdminStatus } from '@/hooks/use-admin-status' 
+import { useAuth } from '@/context/AuthContext' // IMPORT useAuth
 
 export default function Navbar() {
   const pathname = usePathname()
   const router = useRouter()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const [user, setUser] = useState(null)
   
-  const { isAdmin, loading: adminLoading } = useAdminStatus(); // Use new hook
+  // USE THE CONTEXT
+  const { user, isAdmin } = useAuth() 
 
-  // Check user session on mount and subscribe to changes
-  useEffect(() => {
-    // This part is kept to ensure the 'user' state is correctly populated for UI elements
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      setUser(session?.user ?? null)
-    })
-
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null)
-    })
-
-    return () => {
-      subscription?.unsubscribe()
-    }
-  }, [])
+  // REMOVED: All useEffects related to auth, as context now handles it.
 
   const isActive = (path) => pathname === path
 
@@ -40,18 +27,7 @@ export default function Navbar() {
     router.push('/')
   }
   
-  if (adminLoading) {
-    // Placeholder to prevent layout shift while loading status
-    return (
-        <nav className="bg-white border-b shadow-sm sticky top-0 z-50">
-            <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-                <div className="w-24 h-6 bg-gray-200 rounded animate-pulse"></div>
-                <div className="w-32 h-9 bg-gray-200 rounded animate-pulse"></div>
-            </div>
-        </nav>
-    )
-  }
-
+  // REMOVED: The loading placeholder, as the layout now handles this.
 
   return (
     <nav className="bg-white border-b shadow-sm sticky top-0 z-50">
@@ -168,7 +144,6 @@ export default function Navbar() {
               Events
             </Link>
             
-            {/* CONDITIONAL RENDERING: Hide Contact if Admin */}
             {!isAdmin && (
                 <Link
                   href="/contact"
@@ -189,7 +164,6 @@ export default function Navbar() {
                   Profile
                 </Link>
               
-                {/* User is logged in */}
                 {isAdmin && (
                     <Link
                       href="/admin"
@@ -200,7 +174,6 @@ export default function Navbar() {
                     </Link>
                 )}
                 
-                {/* Regular Logged-in User (Participant or Admin) */}
                 <Button 
                   onClick={handleLogout}
                   className="w-full bg-red-500 hover:bg-red-600"
@@ -211,7 +184,6 @@ export default function Navbar() {
               </>
             ) : (
               <>
-                {/* User is logged out */}
                 <Link
                   href="/auth"
                   onClick={() => setMobileMenuOpen(false)}

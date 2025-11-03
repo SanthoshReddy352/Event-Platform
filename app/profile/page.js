@@ -1,6 +1,7 @@
+// app/profile/page.js
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -9,12 +10,15 @@ import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { User, Phone, Mail } from 'lucide-react'
 import Link from 'next/link'
+import { useAuth } from '@/context/AuthContext' // IMPORT useAuth
 
 function ProfileContent() {
   const router = useRouter()
+  // Get user from the GLOBAL context
+  const { user } = useAuth() 
+
   const [loading, setLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [userSession, setUserSession] = useState(null)
   const [profileData, setProfileData] = useState({
     name: '',
     phone_number: '',
@@ -23,39 +27,28 @@ function ProfileContent() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
-  useEffect(() => {
-    fetchProfile()
+  // This function now just fetches profile data, not auth
+  const fetchProfile = useCallback(async (currentUser) => {
+    if (!currentUser) {
+        router.push('/auth');
+        return;
+    }
     
-    // Redirect on auth change if logged out
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-        if (!session) {
-            router.push('/auth')
-        }
-    })
-    
-    return () => subscription?.unsubscribe()
-    
-  }, [router])
-
-  const fetchProfile = async () => {
     setLoading(true)
     setError('')
     try {
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-
-      if (sessionError || !session) {
-        router.push('/auth')
-        return
+      // Get the session token to make an authenticated API call
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+          router.push('/auth');
+          return;
       }
-      
-      setUserSession(session)
-      
-      // Fetch profile data from API route
+
       const response = await fetch('/api/profile', {
         method: 'GET',
         headers: { 
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.access_token}`, // Pass token for server-side auth check
+            'Authorization': `Bearer ${session.access_token}`,
         },
       })
       
@@ -65,16 +58,13 @@ function ProfileContent() {
         setProfileData({
             name: data.profile.name || '',
             phone_number: data.profile.phone_number || '',
-            email: session.user.email,
+            email: currentUser.email, // Get email from context user
         })
-      } else if (data.error === 'Unauthorized') {
-        // Handle token expiry or invalid session silently
-        router.push('/auth')
       } else {
-        // Initialize with default (only email available from session)
+        // Fallback
         setProfileData(prev => ({
             ...prev,
-            email: session.user.email,
+            email: currentUser.email,
         }))
       }
     } catch (err) {
@@ -83,7 +73,17 @@ function ProfileContent() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [router])
+
+  useEffect(() => {
+    // When the user from the context is available, fetch their profile
+    if (user) {
+      fetchProfile(user)
+    } else {
+      // If user becomes null (e.g., logged out from navbar), redirect
+      router.push('/auth')
+    }
+  }, [user, fetchProfile, router])
 
   const handleUpdate = async (e) => {
     e.preventDefault()
@@ -91,7 +91,8 @@ function ProfileContent() {
     setError('')
     setSuccess('')
     
-    if (!userSession?.access_token) {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.access_token) {
         setError("User session expired. Please log in again.")
         setIsSubmitting(false)
         router.push('/auth')
@@ -108,7 +109,7 @@ function ProfileContent() {
         method: 'PUT',
         headers: { 
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${userSession.access_token}`, // Pass token
+            'Authorization': `Bearer ${session.access_token}`, // Pass token
         },
         body: JSON.stringify(updatePayload),
       })
@@ -118,7 +119,7 @@ function ProfileContent() {
       if (data.success) {
         setSuccess('Profile updated successfully!')
         // Re-fetch to ensure local state matches DB
-        fetchProfile() 
+        await fetchProfile(user) 
       } else {
         setError(data.error || 'Failed to update profile.')
       }
@@ -142,6 +143,7 @@ function ProfileContent() {
   }
 
   return (
+    // ... (The rest of the JSX for this file is unchanged, copy from your existing file)
     <div className="container mx-auto px-4 py-12">
       <div className="max-w-xl mx-auto">
         <div className="text-center mb-8">
