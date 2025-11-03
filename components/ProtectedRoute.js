@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react' // CORRECTED: Changed '=>' to 'from'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 
@@ -9,32 +9,78 @@ export default function ProtectedRoute({ children }) {
   const [loading, setLoading] = useState(true)
   const [user, setUser] = useState(null)
 
-  useEffect(() => {
-    const checkUser = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      
-      if (!session) {
-        router.push('/admin/login')
-      } else {
-        setUser(session.user)
-        setLoading(false)
-      }
+  const checkUser = async (session) => {
+    let currentUser = session?.user || null;
+    
+    if (!currentUser) {
+      // 1. No Session: Redirect to admin login
+      router.push('/admin/login')
+      setLoading(false)
+      return;
     }
 
-    checkUser()
+    // 2. Session Exists: Query the public.admin_users table to check for role
+    try {
+      // The SELECT query checks if an entry exists in the admin_users table for this user's ID.
+      // This relies on the RLS policy created in SUPABASE_SETUP.sql allowing authenticated users 
+      // to SELECT only their own entry.
+      const { data, error } = await supabase
+        .from('admin_users')
+        .select('user_id')
+        .eq('user_id', currentUser.id)
+        .maybeSingle() 
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (!session) {
-        router.push('/admin/login')
+      const isAdmin = !!data;
+      
+      if (!isAdmin) {
+        // 3a. Not Admin: Sign them out and redirect
+        await supabase.auth.signOut() 
+        alert("Access Denied. Only administrators can access this portal.")
+        router.push('/') 
       } else {
-        setUser(session.user)
+        // 3b. Is Admin: Grant Access
+        setUser(currentUser)
         setLoading(false)
       }
-    })
+
+    } catch (error) {
+      console.error('Error fetching admin role:', error);
+      // Fallback to login in case of a serious DB connection error
+      router.push('/admin/login')
+      setLoading(false)
+    }
+  }
+
+
+  useEffect(() => {
+    let authSubscription = null;
+
+    const setupAuth = async () => {
+      // Initial session check
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      // Perform the access check
+      await checkUser(session); 
+
+      // Set up listener for real-time auth changes
+      const { data: subscription } = supabase.auth.onAuthStateChange((event, session) => {
+        // On any auth state change, re-run the check logic
+        if (session) {
+            checkUser(session);
+        } else {
+            // No session in listener, redirect
+            router.push('/admin/login');
+        }
+      })
+      authSubscription = subscription;
+    };
+
+    setupAuth();
 
     return () => {
-      subscription?.unsubscribe()
+      if (authSubscription) {
+        authSubscription.subscription.unsubscribe()
+      }
     }
   }, [router])
 

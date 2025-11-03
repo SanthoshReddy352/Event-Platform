@@ -102,3 +102,24 @@ CREATE POLICY "Authenticated users can update event banners"
 CREATE POLICY "Authenticated users can delete event banners"
     ON storage.objects FOR DELETE
     USING (bucket_id = 'event-banners' AND auth.role() = 'authenticated');
+
+-- Add admin_users table to public schema for role management
+CREATE TABLE IF NOT EXISTS admin_users (
+    user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    is_admin BOOLEAN DEFAULT TRUE, 
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Enable Row Level Security
+ALTER TABLE admin_users ENABLE ROW LEVEL SECURITY;
+
+-- RLS Policy: Authenticated users can only see their own entry to check their role
+CREATE POLICY "Authenticated users can read their own admin status"
+    ON admin_users FOR SELECT
+    USING (auth.uid() = user_id);
+
+-- RLS Policy: Allow service role (backend operations) to manage all entries
+CREATE POLICY "Service role can manage all admin users"
+    ON admin_users FOR ALL
+    USING (auth.role() = 'service_role') 
+    WITH CHECK (auth.role() = 'service_role');

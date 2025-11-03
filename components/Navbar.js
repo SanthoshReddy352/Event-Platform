@@ -1,16 +1,57 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import { Menu, X } from 'lucide-react'
-import { useState } from 'react'
+import { Menu, X, LogIn, LogOut } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { supabase } from '@/lib/supabase/client'
+import { useAdminStatus } from '@/hooks/use-admin-status' 
 
 export default function Navbar() {
   const pathname = usePathname()
+  const router = useRouter()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [user, setUser] = useState(null)
+  
+  const { isAdmin, loading: adminLoading } = useAdminStatus(); // Use new hook
+
+  // Check user session on mount and subscribe to changes
+  useEffect(() => {
+    // This part is kept to ensure the 'user' state is correctly populated for UI elements
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      setUser(session?.user ?? null)
+    })
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null)
+    })
+
+    return () => {
+      subscription?.unsubscribe()
+    }
+  }, [])
 
   const isActive = (path) => pathname === path
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+    setMobileMenuOpen(false)
+    router.push('/')
+  }
+  
+  if (adminLoading) {
+    // Placeholder to prevent layout shift while loading status
+    return (
+        <nav className="bg-white border-b shadow-sm sticky top-0 z-50">
+            <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+                <div className="w-24 h-6 bg-gray-200 rounded animate-pulse"></div>
+                <div className="w-32 h-9 bg-gray-200 rounded animate-pulse"></div>
+            </div>
+        </nav>
+    )
+  }
+
 
   return (
     <nav className="bg-white border-b shadow-sm sticky top-0 z-50">
@@ -42,19 +83,52 @@ export default function Navbar() {
             >
               Events
             </Link>
-            <Link
-              href="/contact"
-              className={`transition-colors hover:text-[#00629B] ${
-                isActive('/contact') ? 'text-[#00629B] font-semibold' : 'text-gray-600'
-              }`}
-            >
-              Contact
-            </Link>
-            <Link href="/admin">
-              <Button variant="default" className="bg-[#00629B] hover:bg-[#004d7a]">
-                Admin
-              </Button>
-            </Link>
+            
+            {/* CONDITIONAL RENDERING: Hide Contact if Admin */}
+            {!isAdmin && (
+                <Link
+                  href="/contact"
+                  className={`transition-colors hover:text-[#00629B] ${
+                    isActive('/contact') ? 'text-[#00629B] font-semibold' : 'text-gray-600'
+                  }`}
+                >
+                  Contact
+                </Link>
+            )}
+
+            {user ? (
+              <>
+                {/* User is logged in */}
+                {isAdmin && (
+                    <Link href="/admin">
+                      <Button variant="ghost" className="text-gray-600 hover:text-[#00629B]">
+                        Admin Portal
+                      </Button>
+                    </Link>
+                )}
+                
+                {/* Regular Logged-in User (Participant or Admin) */}
+                <Button variant="default" onClick={handleLogout} className="bg-red-500 hover:bg-red-600">
+                  <LogOut size={16} className="mr-2" />
+                  Logout
+                </Button>
+              </>
+            ) : (
+              <>
+                {/* User is logged out */}
+                <Link href="/admin/login">
+                  <Button variant="ghost" className="text-gray-600 hover:text-[#00629B]">
+                    Admin Login
+                  </Button>
+                </Link>
+                <Link href="/auth">
+                  <Button variant="default" className="bg-[#00629B] hover:bg-[#004d7a]">
+                    <LogIn size={16} className="mr-2" />
+                    Login/Register
+                  </Button>
+                </Link>
+              </>
+            )}
           </div>
 
           {/* Mobile Menu Button */}
@@ -83,21 +157,61 @@ export default function Navbar() {
             >
               Events
             </Link>
-            <Link
-              href="/contact"
-              className="block py-2 text-gray-600 hover:text-[#00629B]"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              Contact
-            </Link>
-            <Link
-              href="/admin"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              <Button className="w-full bg-[#00629B] hover:bg-[#004d7a]">
-                Admin
-              </Button>
-            </Link>
+            
+            {/* CONDITIONAL RENDERING: Hide Contact if Admin */}
+            {!isAdmin && (
+                <Link
+                  href="/contact"
+                  className="block py-2 text-gray-600 hover:text-[#00629B]"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  Contact
+                </Link>
+            )}
+
+            {user ? (
+              <>
+                {/* User is logged in */}
+                {isAdmin && (
+                    <Link
+                      href="/admin"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="block py-2 text-gray-600 hover:text-[#00629B]"
+                    >
+                      Admin Portal
+                    </Link>
+                )}
+                
+                {/* Regular Logged-in User (Participant or Admin) */}
+                <Button 
+                  onClick={handleLogout}
+                  className="w-full bg-red-500 hover:bg-red-600"
+                >
+                  <LogOut size={16} className="mr-2" />
+                  Logout
+                </Button>
+              </>
+            ) : (
+              <>
+                {/* User is logged out */}
+                <Link
+                  href="/auth"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  <Button className="w-full bg-[#00629B] hover:bg-[#004d7a]">
+                    <LogIn size={16} className="mr-2" />
+                    Login/Register
+                  </Button>
+                </Link>
+                <Link
+                  href="/admin/login"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="block pt-2 text-sm text-center text-gray-500 hover:text-[#00629B]"
+                >
+                  Admin Login
+                </Link>
+              </>
+            )}
           </div>
         )}
       </div>

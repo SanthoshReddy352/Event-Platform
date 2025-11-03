@@ -2,8 +2,22 @@
 
 import Link from 'next/link'
 import { Facebook, Twitter, Linkedin, Instagram, Mail } from 'lucide-react'
+import { useAdminStatus } from '@/hooks/use-admin-status'
 
 export default function Footer() {
+  const { isAdmin, loading: adminLoading } = useAdminStatus();
+
+  // Show a loading/fallback footer if status is still loading
+  if (adminLoading) {
+    return (
+        <footer className="bg-gray-900 text-white mt-20">
+            <div className="container mx-auto px-4 py-12">
+                <div className="h-20 w-full bg-gray-800 rounded animate-pulse"></div>
+            </div>
+        </footer>
+    )
+  }
+
   return (
     <footer className="bg-gray-900 text-white mt-20">
       <div className="container mx-auto px-4 py-12">
@@ -30,11 +44,14 @@ export default function Footer() {
                   Events
                 </Link>
               </li>
-              <li>
-                <Link href="/contact" className="text-gray-400 hover:text-white transition-colors">
-                  Contact Us
-                </Link>
-              </li>
+              {/* CONDITIONAL RENDERING: Hide Contact link if Admin */}
+              {!isAdmin && (
+                <li>
+                  <Link href="/contact" className="text-gray-400 hover:text-white transition-colors">
+                    Contact Us
+                  </Link>
+                </li>
+              )}
               <li>
                 <Link href="/admin" className="text-gray-400 hover:text-white transition-colors">
                   Admin Portal
@@ -44,17 +61,20 @@ export default function Footer() {
           </div>
 
           {/* Contact Info */}
-          <div>
-            <h3 className="font-bold text-lg mb-4">Contact</h3>
-            <ul className="space-y-2 text-sm text-gray-400">
-              <li className="flex items-center space-x-2">
-                <Mail size={16} />
-                <span>kareieeewiesba@gmail.com</span>
-              </li>
-              <li>KL University</li>
-              <li>Vijayawada, Andhra Pradesh</li>
-            </ul>
-          </div>
+          {/* CONDITIONAL RENDERING: Hide Contact Info section if Admin */}
+          {!isAdmin && (
+            <div>
+              <h3 className="font-bold text-lg mb-4">Contact</h3>
+              <ul className="space-y-2 text-sm text-gray-400">
+                <li className="flex items-center space-x-2">
+                  <Mail size={16} />
+                  <span>kareieeewiesba@gmail.com</span>
+                </li>
+                <li>KL University</li>
+                <li>Vijayawada, Andhra Pradesh</li>
+              </ul>
+            </div>
+          )}
 
           {/* Social Media */}
           <div>
