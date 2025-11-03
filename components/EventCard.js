@@ -4,16 +4,27 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Calendar, Clock, Users } from 'lucide-react'
-import { format } from 'date-fns'
+// MODIFIED IMPORTS: Explicitly import date-fns functions
+import { parseISO } from 'date-fns'; 
+import { formatInTimeZone } from 'date-fns-tz'; 
+
 
 export default function EventCard({ event }) {
-  const formattedDate = event.event_date
-    ? format(new Date(event.event_date), 'MMMM dd, yyyy')
+  const TIME_ZONE = 'Asia/Kolkata'; // Indian Standard Time
+  
+  // Parse the ISO string (UTC from DB) correctly using date-fns/parseISO
+  const eventDate = event.event_date ? parseISO(event.event_date) : null;
+
+  const formattedDate = eventDate
+    ? formatInTimeZone(eventDate, TIME_ZONE, 'MMMM dd, yyyy')
     : 'Date TBA'
 
-  const formattedTime = event.event_date
-    ? format(new Date(event.event_date), 'hh:mm a')
+  const formattedTime = eventDate
+    ? formatInTimeZone(eventDate, TIME_ZONE, 'hh:mm a')
     : ''
+
+  // Determine if the event is active (visible)
+  const isEventActive = event.is_active;
 
   return (
     <Card className="overflow-hidden hover:shadow-lg transition-shadow">
@@ -30,6 +41,7 @@ export default function EventCard({ event }) {
             {event.title}
           </div>
         )}
+        {/* Only show 'Open' badge if registration is explicitly open */}
         {event.registration_open && (
           <span className="absolute top-2 right-2 bg-green-500 text-white text-xs px-3 py-1 rounded-full">
             Open
@@ -52,8 +64,8 @@ export default function EventCard({ event }) {
           </div>
           {formattedTime && (
             <div className="flex items-center space-x-2">
-              <Clock size={16} className="text-[#00629B]" />
-              <span>{formattedTime}</span>
+              <Clock size={16} className="mr-2 text-[#00629B]" />
+              <span>{formattedTime} IST</span>
             </div>
           )}
         </div>
@@ -63,9 +75,9 @@ export default function EventCard({ event }) {
         <Link href={`/events/${event.id}`} className="w-full">
           <Button
             className="w-full bg-[#00629B] hover:bg-[#004d7a]"
-            disabled={!event.registration_open}
+            disabled={!isEventActive} 
           >
-            {event.registration_open ? 'Register Now' : 'Registration Closed'}
+            {isEventActive ? 'View Event' : 'Inactive'} 
           </Button>
         </Link>
       </CardFooter>
