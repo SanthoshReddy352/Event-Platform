@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS contact_submissions (
 -- Add admin_users table to public schema for role management
 CREATE TABLE IF NOT EXISTS admin_users (
     user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-    is_admin BOOLEAN DEFAULT TRUE, 
+    is_admin BOOLEAN DEFAULT TRUE, -- CORRECTED: changed BOOLEANEAN to BOOLEAN
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
