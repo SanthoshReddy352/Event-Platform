@@ -1,16 +1,50 @@
-// app/events/[id]/page.js
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
-import { useParams, useRouter } from 'next/navigation' 
+import { useState, useEffect, useCallback } from 'react'
+import { useParams, useRouter } from 'next/navigation'
 import DynamicForm from '@/components/DynamicForm'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card' 
 import { Button } from '@/components/ui/button'
-import { Calendar, Clock, ArrowLeft, Loader2 } from 'lucide-react'
+import { Calendar, Clock, ArrowLeft, Loader2, FileClock, XCircle, CheckCircle } from 'lucide-react'
 import { parseISO } from 'date-fns'; 
 import { formatInTimeZone } from 'date-fns-tz'; 
 import Link from 'next/link'
-import { useAuth } from '@/context/AuthContext' // IMPORT useAuth
+import { supabase } from '@/lib/supabase/client' 
+import { useAuth } from '@/context/AuthContext' 
+
+// Helper function to format date ranges
+const formatEventDate = (start, end, timeZone) => {
+  if (!start) return { date: 'Date TBA', time: null };
+  
+  const startDate = formatInTimeZone(start, timeZone, 'MMMM dd, yyyy');
+  // MODIFIED: 'zzz' is now inside the format string
+  const startTime = formatInTimeZone(start, timeZone, 'hh:mm a zzz'); 
+  
+  if (!end) {
+    return { date: startDate, time: startTime };
+  }
+
+  const endDate = formatInTimeZone(end, timeZone, 'MMMM dd, yyyy');
+  // MODIFIED: 'zzz' is now inside the format string
+  const endTime = formatInTimeZone(end, timeZone, 'hh:mm a zzz');
+
+  if (startDate === endDate) {
+    // MODIFIED: Use start time without zzz for cleaner range
+    return { date: startDate, time: `${formatInTimeZone(start, timeZone, 'hh:mm a')} - ${endTime}` }; 
+  }
+  
+  return { 
+    date: `${startDate} - ${endDate}`,
+    time: `${startTime} - ${endTime}`
+  };
+}
+
+// Helper function to format registration dates
+const formatRegDate = (date, timeZone) => {
+  if (!date) return 'Not specified';
+  // MODIFIED: 'zzz' is now inside the format string
+  return formatInTimeZone(date, timeZone, 'MMM dd, yyyy · hh:mm a zzz'); 
+}
 
 export default function EventDetailPage() {
   const params = useParams()
@@ -19,20 +53,17 @@ export default function EventDetailPage() {
   const [loading, setLoading] = useState(true) // For event data fetch
   const [submitted, setSubmitted] = useState(false)
   
-  // Get user and auth loading status from the GLOBAL context
   const { user, loading: authLoading } = useAuth() 
   
   const [isRegistered, setIsRegistered] = useState(false) 
-  const [regCheckLoading, setRegCheckLoading] = useState(true) // NEW: Specific loading for reg check
+  const [regCheckLoading, setRegCheckLoading] = useState(true) 
 
-  // Memoized registration status checker
   const checkRegistrationStatus = useCallback(async (userId, eventId) => {
       if (!userId || !eventId) {
           setIsRegistered(false)
           setRegCheckLoading(false)
           return
       }
-      
       setRegCheckLoading(true)
       try {
           const response = await fetch(`/api/participants/${eventId}?userId=${userId}`)
@@ -46,7 +77,6 @@ export default function EventDetailPage() {
       }
   }, [])
 
-  // 1. Fetch Event Data (Runs once on mount/ID change)
   useEffect(() => {
     const fetchEventData = async () => {
         if (!params.id) return;
@@ -69,16 +99,12 @@ export default function EventDetailPage() {
     fetchEventData();
   }, [params.id]);
 
-  // 2. Registration Check (Runs when auth context or event is ready)
-  // This replaces the complex auth listener
   useEffect(() => {
-    // Wait until event data has been fetched AND auth is no longer loading
     if (loading || authLoading || !event) return; 
 
     if (user) {
         checkRegistrationStatus(user.id, event.id);
     } else {
-        // No user, not registered
         setIsRegistered(false);
         setRegCheckLoading(false);
     }
@@ -87,7 +113,6 @@ export default function EventDetailPage() {
   const handleSubmit = async (formData) => {
     if (!user) {
         alert("Authentication failed. Please log in again.")
-        // Pass redirect param
         router.push(`/auth?redirect=${params.id}`) 
         return
     }
@@ -99,7 +124,7 @@ export default function EventDetailPage() {
     
     if (!user.id) {
         alert("Error: Missing user ID. Please log in again.")
-        router.push(`/auth?redirect=${params.id}`) // Pass redirect param
+        router.push(`/auth?redirect=${params.id}`)
         return;
     }
     
@@ -109,7 +134,7 @@ export default function EventDetailPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           event_id: params.id,
-          user_id: user.id, // Ensure user ID is passed
+          user_id: user.id, 
           responses: formData,
         }),
       })
@@ -129,8 +154,7 @@ export default function EventDetailPage() {
       alert('An error occurred. Please try again.')
     }
   }
-  
-  // Show main page loader if event or auth is still loading
+
   if (loading || !event) {
      return (
         <div className="min-h-screen flex items-center justify-center">
@@ -142,19 +166,43 @@ export default function EventDetailPage() {
      )
   }
 
-  // Determine the correct date/time formatters
-  const TIME_ZONE = 'Asia/Kolkata'; 
-  const eventDateObject = event?.event_date ? parseISO(event.event_date) : null; 
+  // --- NEW AUTOMATED STATUS LOGIC ---
+  const TIME_ZONE = 'Asia/Kolkata';
+  const now = new Date();
   
-  const formattedDate = eventDateObject
-    ? formatInTimeZone(eventDateObject, TIME_ZONE, 'MMMM dd, yyyy')
-    : 'Date TBA'
+  const eventStartDate = event.event_date ? parseISO(event.event_date) : null;
+  const eventEndDate = event.event_end_date ? parseISO(event.event_end_date) : null;
+  const regStartDate = event.registration_start ? parseISO(event.registration_start) : null;
+  const regEndDate = event.registration_end ? parseISO(event.registration_end) : null;
 
-  const formattedTime = eventDateObject
-    ? formatInTimeZone(eventDateObject, TIME_ZONE, 'hh:mm a')
-    : ''
-    
-  const registrationAvailable = event.registration_open && event.is_active;
+  const { date: formattedDate, time: formattedTime } = formatEventDate(eventStartDate, eventEndDate, TIME_ZONE);
+  const formattedRegStart = formatRegDate(regStartDate, TIME_ZONE);
+  const formattedRegEnd = formatRegDate(regEndDate, TIME_ZONE);
+  
+  // Determine event status
+  const isCompleted = eventEndDate && now > eventEndDate;
+  const isRegNotYetOpen = regStartDate && now < regStartDate;
+  
+  // Registration is available ONLY if all these conditions are met
+  const isRegistrationAvailable = 
+    event.is_active &&
+    event.registration_open &&
+    regStartDate && 
+    regEndDate &&
+    now >= regStartDate &&
+    now < regEndDate;
+
+  // Derive the display status
+  let statusBadge;
+  if (isCompleted) {
+    statusBadge = <span className="bg-gray-500 text-white text-sm px-4 py-1 rounded-full">Completed</span>;
+  } else if (isRegistrationAvailable) {
+    statusBadge = <span className="bg-green-500 text-white text-sm px-4 py-1 rounded-full">Registration Open</span>;
+  } else {
+    statusBadge = <span className="bg-red-500 text-white text-sm px-4 py-1 rounded-full">Registration Closed</span>;
+  }
+  
+  // --- END OF STATUS LOGIC ---
 
   const registrationContent = () => {
       // Show loaders if auth or registration status is still checking
@@ -168,39 +216,37 @@ export default function EventDetailPage() {
               </Card>
           )
       }
-  
-      // 1. Already Registered
+      
+      // 1. Event is Completed
+      if (isCompleted) {
+           return (
+              <Card>
+                  <CardContent className="py-12 text-center text-gray-500">
+                      <CheckCircle size={48} className="mx-auto mb-4 text-gray-400" />
+                      <p className="text-lg font-semibold mb-2">Event Completed</p>
+                      <p>This event has already finished.</p>
+                  </CardContent>
+              </Card>
+          )
+      }
+
+      // 2. Already Registered
       if (isRegistered) {
           return (
               <Card className="border-green-500">
                   <CardContent className="py-12 text-center">
                       <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <svg
-                          className="w-8 h-8 text-white"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M5 13l4 4L19 7"
-                          />
-                        </svg>
+                        <CheckCircle className="w-8 h-8 text-white" />
                       </div>
                       <h2 className="text-2xl font-bold mb-2 text-green-600">
                         Already Registered!
                       </h2>
                       <p className="text-gray-600 mb-6">
-                        You have successfully registered for **{event.title}**.
+                        You have successfully registered for {event.title}.
                       </p>
                       <div className="flex justify-center space-x-4">
                         <Link href="/events">
                           <Button variant="outline">Browse More Events</Button>
-                        </Link>
-                        <Link href="/">
-                          <Button className="bg-[#00629B] hover:bg-[#004d7a]">Go Home</Button>
                         </Link>
                       </div>
                   </CardContent>
@@ -208,19 +254,35 @@ export default function EventDetailPage() {
           )
       }
 
-
-      if (!registrationAvailable) {
+      // 3. Registration is not open (deadline passed, not started, or manually closed)
+      if (!isRegistrationAvailable) {
+          let message = 'Registration for this event is currently closed.';
+          if (isRegNotYetOpen) {
+            message = `Registration opens on ${formattedRegStart}.`;
+          } else if (!event.registration_open) {
+            message = 'Registration has been manually closed by the admin.';
+          } else if (regEndDate && now > regEndDate) {
+            message = 'The registration deadline has passed.';
+          } else if (!regStartDate || !regEndDate) {
+            message = 'Registration dates have not been set by the admin.'
+          }
+          
           return (
               <Card>
                   <CardContent className="py-12 text-center text-gray-500">
+                      {isRegNotYetOpen ? (
+                         <FileClock size={48} className="mx-auto mb-4 text-blue-500" />
+                      ) : (
+                         <XCircle size={48} className="mx-auto mb-4 text-red-500" />
+                      )}
                       <p className="text-lg font-semibold mb-2">Registration Closed</p>
-                      <p>Registration for this event is currently closed.</p>
+                      <p>{message}</p>
                   </CardContent>
               </Card>
           )
       }
 
-      // 2. Not Logged In
+      // 4. Not Logged In (and registration is available)
       if (!user) {
           return (
               <Card className="border-yellow-500">
@@ -239,25 +301,13 @@ export default function EventDetailPage() {
           )
       }
       
-      // 3. Successfully submitted in current session
+      // 5. Successfully submitted in current session
       if (submitted) {
           return (
               <Card className="border-green-500">
                   <CardContent className="py-12 text-center">
                       <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <svg
-                          className="w-8 h-8 text-white"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M5 13l4 4L19 7"
-                          />
-                        </svg>
+                        <CheckCircle className="w-8 h-8 text-white" />
                       </div>
                       <h2 className="text-2xl font-bold mb-2 text-green-600">
                         Registration Successful!
@@ -269,16 +319,13 @@ export default function EventDetailPage() {
                         <Link href="/events">
                           <Button variant="outline">Browse More Events</Button>
                         </Link>
-                        <Link href="/">
-                          <Button className="bg-[#00629B] hover:bg-[#004d7a]">Go Home</Button>
-                        </Link>
                       </div>
                   </CardContent>
               </Card>
           )
       }
 
-      // 4. Show Form
+      // 6. Show Form (User logged in, registration open, not yet registered)
       return (
           <Card>
               <CardHeader>
@@ -329,31 +376,43 @@ export default function EventDetailPage() {
               <div className="flex justify-between items-start">
                 <div>
                   <CardTitle className="text-3xl mb-2">{event.title}</CardTitle>
-                  <div className="flex flex-wrap gap-4 text-sm text-gray-600">
+                  <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-gray-600">
                     <div className="flex items-center">
                       <Calendar size={16} className="mr-2 text-[#00629B]" />
-                      {formattedDate}
+                      <span>{formattedDate}</span>
                     </div>
                     {formattedTime && (
                       <div className="flex items-center">
                         <Clock size={16} className="mr-2 text-[#00629B]" />
-                        <span>{formattedTime} IST</span>
+                        <span>{formattedTime}</span>
                       </div>
                     )}
                   </div>
                 </div>
-                {registrationAvailable ? (
-                  <span className="bg-green-500 text-white text-sm px-4 py-1 rounded-full">
-                    Open
-                  </span>
-                ) : (
-                  <span className="bg-red-500 text-white text-sm px-4 py-1 rounded-full">
-                    Closed
-                  </span>
-                )}
+                {statusBadge}
               </div>
             </CardHeader>
             <CardContent>
+              {/* Registration Timeline Card */}
+              <Card className="mb-6 bg-gray-50">
+                <CardHeader>
+                  <CardTitle className="text-lg">Registration Timeline</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2 text-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium w-20">Starts:</span>
+                    {/* This will now display the time correctly */}
+                    <span className="text-gray-700">{formattedRegStart}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium w-20">Ends:</span>
+                    {/* This will now display the time correctly */}
+                    <span className="text-gray-700">{formattedRegEnd}</span>
+                  </div>
+                </CardContent>
+              </Card>
+            
+              <h3 className="font-bold text-xl mb-2">Description</h3>
               <p className="text-gray-700 whitespace-pre-wrap">
                 {event.description || 'No description available'}
               </p>

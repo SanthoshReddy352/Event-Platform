@@ -16,8 +16,8 @@ import { supabase } from '@/lib/supabase/client'
 // Helper to convert datetime-local string (YYYY-MM-DDTHH:MM) back to ISO format (UTC)
 const toISOString = (dateTimeLocalString) => {
     if (!dateTimeLocalString) return null;
-    // Append ':00Z' to treat the input time as UTC, which is required by the Supabase DB.
-    return new Date(dateTimeLocalString + ':00Z').toISOString();
+    // This correctly parses the local time string and converts it to a UTC ISO string
+    return new Date(dateTimeLocalString).toISOString();
 }
 
 function CreateEventContent() {
@@ -26,6 +26,7 @@ function CreateEventContent() {
     title: '',
     description: '',
     event_date: '',
+    event_end_date: '', // MODIFIED: Added field
     is_active: true,
     registration_open: true,
     registration_start: '', 
@@ -91,6 +92,7 @@ function CreateEventContent() {
         banner_url: finalBannerUrl,
         form_fields: [],
         event_date: toISOString(formData.event_date),
+        event_end_date: toISOString(formData.event_end_date), // MODIFIED: Added field
         registration_start: toISOString(formData.registration_start),
         registration_end: toISOString(formData.registration_end),
       }
@@ -149,36 +151,48 @@ function CreateEventContent() {
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="event_date">Event Date & Time</Label>
-              <Input
-                id="event_date"
-                type="datetime-local"
-                value={formData.event_date}
-                onChange={(e) => setFormData({ ...formData, event_date: e.target.value })}
-              />
+            {/* MODIFIED: Event Start/End in a grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="event_date">Event Start Date & Time</Label>
+                <Input
+                  id="event_date"
+                  type="datetime-local"
+                  value={formData.event_date}
+                  onChange={(e) => setFormData({ ...formData, event_date: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="event_end_date">Event End Date & Time</Label>
+                <Input
+                  id="event_end_date"
+                  type="datetime-local"
+                  value={formData.event_end_date}
+                  onChange={(e) => setFormData({ ...formData, event_end_date: e.target.value })}
+                />
+              </div>
             </div>
             
-            {/* Registration Start Date */}
-            <div className="space-y-2">
-              <Label htmlFor="registration_start">Registration Start Date & Time</Label>
-              <Input
-                id="registration_start"
-                type="datetime-local"
-                value={formData.registration_start}
-                onChange={(e) => setFormData({ ...formData, registration_start: e.target.value })}
-              />
-            </div>
-
-            {/* Registration End Date */}
-            <div className="space-y-2">
-              <Label htmlFor="registration_end">Registration End Date & Time</Label>
-              <Input
-                id="registration_end"
-                type="datetime-local"
-                value={formData.registration_end}
-                onChange={(e) => setFormData({ ...formData, registration_end: e.target.value })}
-              />
+            {/* MODIFIED: Registration Start/End in a grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="registration_start">Registration Start Date & Time</Label>
+                <Input
+                  id="registration_start"
+                  type="datetime-local"
+                  value={formData.registration_start}
+                  onChange={(e) => setFormData({ ...formData, registration_start: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="registration_end">Registration End Date & Time</Label>
+                <Input
+                  id="registration_end"
+                  type="datetime-local"
+                  value={formData.registration_end}
+                  onChange={(e) => setFormData({ ...formData, registration_end: e.target.value })}
+                />
+              </div>
             </div>
 
             <div className="flex items-center space-x-4">

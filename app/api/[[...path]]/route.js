@@ -144,7 +144,6 @@ export async function GET(request) {
 
 
     // GET /api/participants/:eventId - Get participants for an event
-    // MODIFIED: Supports checking a single user's registration via query param 'userId'
     if (segments[0] === 'participants' && segments[1] && segments[1] !== 'count') {
       let query = supabase
         .from('participants')
@@ -236,10 +235,11 @@ export async function POST(request) {
         description: body.description,
         banner_url: body.banner_url,
         event_date: body.event_date || null,
+        event_end_date: body.event_end_date || null, // MODIFIED: Added field
         is_active: body.is_active !== undefined ? body.is_active : true,
         registration_open: body.registration_open !== undefined ? body.registration_open : true,
-        registration_start: body.registration_start || null, // NEW FIELD
-        registration_end: body.registration_end || null,     // NEW FIELD
+        registration_start: body.registration_start || null,
+        registration_end: body.registration_end || null,
         form_fields: body.form_fields || [],
       }
 
@@ -391,10 +391,11 @@ export async function PUT(request) {
       if (body.description !== undefined) updateData.description = body.description
       if (body.banner_url !== undefined) updateData.banner_url = body.banner_url
       if (body.event_date !== undefined) updateData.event_date = body.event_date
+      if (body.event_end_date !== undefined) updateData.event_end_date = body.event_end_date // MODIFIED: Added field
       if (body.is_active !== undefined) updateData.is_active = body.is_active
       if (body.registration_open !== undefined) updateData.registration_open = body.registration_open
-      if (body.registration_start !== undefined) updateData.registration_start = body.registration_start // NEW FIELD
-      if (body.registration_end !== undefined) updateData.registration_end = body.registration_end     // NEW FIELD
+      if (body.registration_start !== undefined) updateData.registration_start = body.registration_start
+      if (body.registration_end !== undefined) updateData.registration_end = body.registration_end
       if (body.form_fields !== undefined) updateData.form_fields = body.form_fields
 
       updateData.updated_at = new Date().toISOString()
