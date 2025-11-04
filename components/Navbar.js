@@ -60,8 +60,8 @@ export default function Navbar() {
               Events
             </Link>
             
-            {/* CONDITIONAL RENDERING: Hide Contact if Admin */}
-            {!isAdmin && (
+            {/* CONDITIONAL RENDERING: Show Contact only if logged-in non-admin */}
+            {user && !isAdmin && (
                 <Link
                   href="/contact"
                   className={`transition-colors hover:text-[#00629B] ${
@@ -144,7 +144,7 @@ export default function Navbar() {
               Events
             </Link>
             
-            {!isAdmin && (
+            {user && !isAdmin && (
                 <Link
                   href="/contact"
                   className="block py-2 text-gray-600 hover:text-[#00629B]"

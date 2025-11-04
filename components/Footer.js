@@ -5,7 +5,7 @@ import { Facebook, Twitter, Linkedin, Instagram, Mail } from 'lucide-react'
 import { useAdminStatus } from '@/hooks/use-admin-status'
 
 export default function Footer() {
-  const { isAdmin, loading: adminLoading } = useAdminStatus();
+  const { user, isAdmin, loading: adminLoading } = useAdminStatus();
 
   // Show a loading/fallback footer if status is still loading
   if (adminLoading) {
@@ -44,8 +44,8 @@ export default function Footer() {
                   Events
                 </Link>
               </li>
-              {/* CONDITIONAL RENDERING: Hide Contact link if Admin */}
-              {!isAdmin && (
+              {/* CONDITIONAL RENDERING: Show Contact only if logged-in non-admin */}
+              {user && !isAdmin && (
                 <li>
                   <Link href="/contact" className="text-gray-400 hover:text-white transition-colors">
                     Contact Us
@@ -61,8 +61,8 @@ export default function Footer() {
           </div>
 
           {/* Contact Info */}
-          {/* CONDITIONAL RENDERING: Hide Contact Info section if Admin */}
-          {!isAdmin && (
+          {/* CONDITIONAL RENDERING: Show Contact Info only if logged-in non-admin */}
+          {user && !isAdmin && (
             <div>
               <h3 className="font-bold text-lg mb-4">Contact</h3>
               <ul className="space-y-2 text-sm text-gray-400">
@@ -70,8 +70,8 @@ export default function Footer() {
                   <Mail size={16} />
                   <span>kareieeewiesba@gmail.com</span>
                 </li>
-                <li>Kalasalingam University</li>
-                <li>Srivilliputtur, Tamil Nadu</li>
+                <li>KL University</li>
+                <li>Vijayawada, Andhra Pradesh</li>
               </ul>
             </div>
           )}

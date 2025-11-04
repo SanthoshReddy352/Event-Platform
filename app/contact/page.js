@@ -1,6 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { useAuth } from '@/context/AuthContext'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -16,6 +18,19 @@ export default function ContactPage() {
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
+  
+  const { user, isAdmin, loading } = useAuth()
+  const router = useRouter()
+
+  useEffect(() => {
+    if (!loading) {
+      // If auth is loaded, check conditions
+      // Redirect if user is not logged in OR if user is an admin
+      if (!user || isAdmin) {
+        router.push('/') // Redirect to home page
+      }
+    }
+  }, [user, isAdmin, loading, router])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -43,6 +58,19 @@ export default function ContactPage() {
     }
   }
 
+  // Show loading spinner while auth is checking or redirecting
+  if (loading || !user || isAdmin) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-[#00629B]"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Render page only if auth check passed
   return (
     <div className="container mx-auto px-4 py-12">
       <div className="max-w-5xl mx-auto">
