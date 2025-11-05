@@ -243,8 +243,90 @@ export default function EventDetailPage() {
           )
       }
 
-      // 2. Already Registered
+      // 2. Already Registered - Show status-specific messages
       if (isRegistered) {
+          if (registrationStatus === 'pending') {
+            return (
+                <Card className="border-orange-500" data-testid="registration-pending-card">
+                    <CardContent className="py-12 text-center">
+                        <div className="w-16 h-16 bg-orange-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                          <FileClock className="w-8 h-8 text-white" />
+                        </div>
+                        <h2 className="text-2xl font-bold mb-2 text-orange-600">
+                          Registration Under Review
+                        </h2>
+                        <p className="text-gray-600 mb-2">
+                          Your registration for <strong>{event.title}</strong> has been submitted successfully.
+                        </p>
+                        <p className="text-gray-600 mb-6">
+                          The event organizers are reviewing your application. You'll be notified via email once it's approved.
+                        </p>
+                        <div className="flex justify-center space-x-4">
+                          <Link href="/events">
+                            <Button variant="outline" data-testid="browse-more-events-button">Browse More Events</Button>
+                          </Link>
+                        </div>
+                    </CardContent>
+                </Card>
+            )
+          } else if (registrationStatus === 'approved') {
+            return (
+                <Card className="border-green-500" data-testid="registration-approved-card">
+                    <CardContent className="py-12 text-center">
+                        <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                          <CheckCircle className="w-8 h-8 text-white" />
+                        </div>
+                        <h2 className="text-2xl font-bold mb-2 text-green-600">
+                          Registration Approved! 🎉
+                        </h2>
+                        <p className="text-gray-600 mb-6">
+                          Your registration for <strong>{event.title}</strong> has been approved. We're excited to have you join us!
+                        </p>
+                        <div className="flex justify-center space-x-4">
+                          <Link href="/events">
+                            <Button variant="outline" data-testid="browse-more-events-button">Browse More Events</Button>
+                          </Link>
+                        </div>
+                    </CardContent>
+                </Card>
+            )
+          } else if (registrationStatus === 'rejected') {
+            return (
+                <Card className="border-red-500" data-testid="registration-rejected-card">
+                    <CardContent className="py-12 text-center">
+                        <div className="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                          <XCircle className="w-8 h-8 text-white" />
+                        </div>
+                        <h2 className="text-2xl font-bold mb-2 text-red-600">
+                          Registration Not Approved
+                        </h2>
+                        <p className="text-gray-600 mb-2">
+                          Unfortunately, your registration for <strong>{event.title}</strong> was not approved.
+                        </p>
+                        <p className="text-gray-600 mb-6">
+                          You are welcome to register again or browse other events.
+                        </p>
+                        <div className="flex justify-center space-x-4">
+                          <Button 
+                            onClick={() => {
+                              setIsRegistered(false)
+                              setRegistrationStatus(null)
+                            }}
+                            className="bg-[#00629B] hover:bg-[#004d7a]"
+                            data-testid="register-again-button"
+                          >
+                            Register Again
+                          </Button>
+                          <Link href="/events">
+                            <Button variant="outline" data-testid="browse-more-events-button">Browse More Events</Button>
+                          </Link>
+                        </div>
+                    </CardContent>
+                </Card>
+            )
+          }
+          
+          // Fallback for unknown status
           return (
               <Card className="border-green-500">
                   <CardContent className="py-12 text-center">
