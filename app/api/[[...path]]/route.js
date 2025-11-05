@@ -661,7 +661,25 @@ export async function PUT(request) {
         return NextResponse.json({ success: false, error: error.message }, { status: 500, headers: corsHeaders })
       }
       
-      // TODO: Send approval email to participant
+      // Send approval email to participant
+      try {
+        const { data: { user: participantUser } } = await supabase.auth.admin.getUserById(participant.user_id)
+        
+        if (participantUser?.email) {
+          const participantName = participant.responses?.['Name'] || participant.responses?.['Full Name'] || participant.responses?.['name'] || 'Participant'
+          
+          const { sendApprovalEmail } = await import('@/lib/email')
+          await sendApprovalEmail({
+            to: participantUser.email,
+            participantName,
+            eventTitle: participant.event.title,
+            eventDate: participant.event.event_date
+          })
+        }
+      } catch (emailError) {
+        console.error('Error sending approval email:', emailError)
+        // Don't fail the approval if email fails
+      }
       
       return NextResponse.json({ success: true, participant: data }, { headers: corsHeaders })
     }
