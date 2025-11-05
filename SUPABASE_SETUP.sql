@@ -173,6 +173,17 @@ CREATE POLICY "Users can view their own participant records"
     ON participants FOR SELECT
     USING (user_id = auth.uid());
 
+-- NEW: Allow admins to update participants for approval workflow
+CREATE POLICY "Admins can update participants for events they own (or if super admin)"
+    ON participants FOR UPDATE
+    USING (
+        (public.get_admin_role() = 'super_admin') OR
+        (EXISTS (
+            SELECT 1 FROM events
+            WHERE events.id = participants.event_id AND events.created_by = auth.uid()
+        ))
+    );
+
 -- RLS Policies for contact_submissions
 CREATE POLICY "Contact submissions can be created by anyone"
     ON contact_submissions FOR INSERT
