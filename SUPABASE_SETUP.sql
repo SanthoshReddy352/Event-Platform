@@ -120,6 +120,7 @@ DROP POLICY IF EXISTS "Event owners or super admins can delete events" ON events
 DROP POLICY IF EXISTS "Participants can be created by authenticated users" ON participants;
 DROP POLICY IF EXISTS "Admins can view participants for events they own (or if super admin)" ON participants;
 DROP POLICY IF EXISTS "Users can view their own participant records" ON participants;
+DROP POLICY IF EXISTS "Admins can update participants for events they own (or if super admin)" ON participants;
 
 DROP POLICY IF EXISTS "Contact submissions can be created by anyone" ON contact_submissions;
 DROP POLICY IF EXISTS "Contact submissions are viewable by authenticated users" ON contact_submissions;
