@@ -290,15 +290,26 @@ For issues or questions:
 3. Check browser console for frontend errors
 4. Check API responses in Network tab
 
+## 📋 Recent Updates (v2.0)
+
+### ✅ Implemented
+- ✅ **Registration Approval Workflow** - Admins review and approve/reject registrations
+- ✅ **Email Notifications** - Automated emails for approvals, rejections, and admin alerts
+- ✅ **Role-based Permissions** - Super Admin vs Admin access control
+- ✅ **Enhanced Dashboard** - Role-specific stats and pending approvals
+- ✅ **Registration Status Display** - Participants see their application status
+- ✅ **Comprehensive Documentation** - USER_GUIDE.md, ADMIN_GUIDE.md, DEVELOPER_GUIDE.md
+
 ## 🔄 Future Enhancements
 
-Planned features (mentioned in design doc):
-- [ ] Payment integration (Razorpay)
+Potential features for future releases:
+- [ ] Payment integration (Razorpay/Stripe)
 - [ ] Certificate generation
 - [ ] Results/leaderboard system
-- [ ] Email notifications
 - [ ] Team management
 - [ ] Multi-language support
+- [ ] Event check-in system
+- [ ] SMS notifications
 
 ## 📄 License
 
