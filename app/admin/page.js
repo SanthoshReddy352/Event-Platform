@@ -194,8 +194,8 @@ function AdminDashboardContent() {
       </div>
 
       {/* Quick Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => router.push('/admin/events')}>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => router.push('/admin/events')} data-testid="manage-events-card">
           <CardHeader>
             <CardTitle>Manage Events</CardTitle>
             <CardDescription>
@@ -204,12 +204,33 @@ function AdminDashboardContent() {
           </CardHeader>
           <CardContent>
             <Link href="/admin/events">
-              <Button className="bg-[#00629B] hover:bg-[#004d7a]">Go to Events</Button>
+              <Button className="bg-[#00629B] hover:bg-[#004d7a]" data-testid="go-to-events-button">Go to Events</Button>
             </Link>
           </CardContent>
         </Card>
 
-        <Card className="hover:shadow-lg transition-shadow">
+        <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => router.push('/admin/registrations')} data-testid="review-registrations-card">
+          <CardHeader>
+            <CardTitle>Review Registrations</CardTitle>
+            <CardDescription>
+              Approve or reject pending participant registrations.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Link href="/admin/registrations">
+              <Button className="bg-[#00629B] hover:bg-[#004d7a]" data-testid="go-to-registrations-button">
+                Review Registrations
+                {stats.pendingApprovals > 0 && (
+                  <span className="ml-2 bg-orange-600 text-white text-xs px-2 py-1 rounded-full">
+                    {stats.pendingApprovals}
+                  </span>
+                )}
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+
+        <Card className="hover:shadow-lg transition-shadow" data-testid="view-participants-card">
           <CardHeader>
             <CardTitle>View Participants</CardTitle>
             <CardDescription>
@@ -221,7 +242,7 @@ function AdminDashboardContent() {
               Select an event from the events page to view its participants
             </p>
             <Link href="/admin/events">
-              <Button variant="outline">Select Event</Button>
+              <Button variant="outline" data-testid="select-event-button">Select Event</Button>
             </Link>
           </CardContent>
         </Card>
