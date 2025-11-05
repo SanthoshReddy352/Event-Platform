@@ -155,7 +155,8 @@ export default function EventDetailPage() {
       const data = await response.json()
       if (data.success) {
         setSubmitted(true)
-        setIsRegistered(true) 
+        setIsRegistered(true)
+        setRegistrationStatus('pending') // New registrations are pending by default
       } else if (response.status === 409) {
         alert("Registration failed: You are already registered for this event.")
         setIsRegistered(true)
