@@ -62,17 +62,29 @@ export default function EventDetailPage() {
   const checkRegistrationStatus = useCallback(async (userId, eventId) => {
       if (!userId || !eventId) {
           setIsRegistered(false)
+          setRegistrationStatus(null)
           setRegCheckLoading(false)
           return
       }
       setRegCheckLoading(true)
       try {
-          const response = await fetch(`/api/participants/${eventId}?userId=${userId}`)
+          const { data: { session } } = await supabase.auth.getSession()
+          const response = await fetch(`/api/participants/${eventId}?userId=${userId}`, {
+            headers: session ? { 'Authorization': `Bearer ${session.access_token}` } : {}
+          })
           const data = await response.json()
-          setIsRegistered(data.success && !!data.participant)
+          
+          if (data.success && data.participant) {
+            setIsRegistered(true)
+            setRegistrationStatus(data.participant.status)
+          } else {
+            setIsRegistered(false)
+            setRegistrationStatus(null)
+          }
       } catch (error) {
           console.error('Error checking registration status:', error)
           setIsRegistered(false)
+          setRegistrationStatus(null)
       } finally {
           setRegCheckLoading(false)
       }
