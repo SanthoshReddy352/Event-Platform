@@ -265,14 +265,21 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-key
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/api/events` | GET | Get all events |
-| `/api/events` | POST | Create event |
+| `/api/events` | POST | Create event (Admin) |
 | `/api/events/:id` | GET | Get single event |
-| `/api/events/:id` | PUT | Update event |
-| `/api/events/:id` | DELETE | Delete event |
+| `/api/events/:id` | PUT | Update event (Admin) |
+| `/api/events/:id` | DELETE | Delete event (Admin) |
 | `/api/participants` | POST | Register participant |
-| `/api/participants/:eventId` | GET | Get event participants |
+| `/api/participants/:eventId` | GET | Get event participants (Admin) |
+| `/api/participants/pending` | GET | Get pending registrations (Admin) |
+| `/api/participants/count` | GET | Get total participant count |
+| `/api/participants/:id/approve` | PUT | Approve registration (Admin) |
+| `/api/participants/:id/reject` | PUT | Reject registration (Admin) |
+| `/api/profile` | GET | Get user profile |
+| `/api/profile` | PUT | Update user profile |
 | `/api/contact` | POST | Submit contact form |
-| `/api/upload` | POST | Upload banner image |
+
+For detailed API documentation, see [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md).
 
 ## 🎓 IEEE Club Info
 
