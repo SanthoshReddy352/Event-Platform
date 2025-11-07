@@ -31,6 +31,41 @@ function AdminDashboardContent() {
   const fetchUserAndStats = async () => {
     setLoading(true)
     try {
+      // --- START OF FIX: Cleanup old pending registrations ---
+      // This now runs every time the dashboard loads.
+      const now = new Date(); 
+      const nowISO = now.toISOString();
+      try {
+        // Find event IDs that have already ended
+        const { data: completedEventIds, error: eventIdError } = await supabase
+          .from('events')
+          .select('id')
+          .lt('event_end_date', nowISO); // Find events where end date is in the past
+
+        if (eventIdError) {
+          console.error('Error fetching completed event IDs:', eventIdError.message);
+        } else if (completedEventIds && completedEventIds.length > 0) {
+          const idsToDelete = completedEventIds.map(e => e.id);
+          
+          // Delete 'pending' participants for those completed events
+          const { error: cleanupError } = await supabase
+            .from('participants')
+            .delete()
+            .eq('status', 'pending') // Only delete pending ones
+            .in('event_id', idsToDelete);
+
+          if (cleanupError) {
+            console.error('Error cleaning up pending registrations:', cleanupError.message);
+          } else {
+            console.log(`Cleaned up pending registrations for ${idsToDelete.length} completed event(s).`);
+          }
+        }
+      } catch (cleanupErr) {
+        console.error('Exception during registration cleanup:', cleanupErr.message);
+      }
+      // --- END OF FIX ---
+
+
       const { data: { session } } = await supabase.auth.getSession()
       
       // Fetch events
@@ -46,6 +81,15 @@ function AdminDashboardContent() {
           : allEvents.filter(e => e.created_by === user.id)
         
         const myEventIds = myEvents.map(e => e.id)
+
+        // --- START OF FIX: Correct Active Events Count ---
+        const activeEventsList = myEvents.filter(e => {
+          const eventEndDate = e.event_end_date ? new Date(e.event_end_date) : null;
+          const isCompleted = eventEndDate && now > eventEndDate;
+          // Event is active if toggle is on AND it's not completed
+          return e.is_active && !isCompleted; 
+        });
+        // --- END OF FIX ---
         
         // Fetch participants for my events only
         let totalParticipants = 0
@@ -63,16 +107,20 @@ function AdminDashboardContent() {
           
           participantResults.forEach(result => {
             if (result.success && result.participants) {
-              totalParticipants += result.participants.length
-              pendingApprovals += result.participants.filter(p => p.status === 'pending').length
+              // --- START OF FIX: Correct participant counts ---
+              // Total participants should be ONLY approved ones
+              totalParticipants += result.participants.filter(p => p.status === 'approved').length;
+              // Pending should be only pending
+              pendingApprovals += result.participants.filter(p => p.status === 'pending').length;
+              // --- END OF FIX ---
             }
           })
         }
 
         setStats({
           totalEvents: allEvents.length,
-          activeEvents: myEvents.filter(e => e.is_active).length,
-          totalParticipants,
+          activeEvents: activeEventsList.length, // Use corrected list length
+          totalParticipants, // Use corrected approved count
           pendingApprovals,
           myEvents: myEvents.length,
         })
@@ -177,7 +225,9 @@ function AdminDashboardContent() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">{stats.totalParticipants}</div>
-            <p className="text-xs text-gray-500 mt-1">All statuses</p>
+            {/* --- START OF FIX: Updated description --- */}
+            <p className="text-xs text-gray-500 mt-1">Approved participants</p>
+            {/* --- END OF FIX --- */}
           </CardContent>
         </Card>
 
@@ -233,9 +283,11 @@ function AdminDashboardContent() {
         <Card className="hover:shadow-lg transition-shadow" data-testid="view-participants-card">
           <CardHeader>
             <CardTitle>View Participants</CardTitle>
+            {/* --- START OF FIX: Updated description --- */}
             <CardDescription>
-              See all registrations and export data to CSV.
+              See all *approved* registrations and export data to CSV.
             </CardDescription>
+            {/* --- END OF FIX --- */}
           </CardHeader>
           <CardContent>
             <p className="text-sm text-gray-600 mb-4">
