@@ -4,7 +4,7 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import { Menu, X, LogIn, LogOut, User, Building } from 'lucide-react' // --- MODIFIED: Added Building icon ---
+import { Menu, X, LogIn, LogOut, User, Building } from 'lucide-react'
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/context/AuthContext' 
@@ -14,7 +14,9 @@ export default function Navbar() {
   const router = useRouter()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   
-  const { user, isAdmin } = useAuth() 
+  // --- START OF FIX: Destructure isSuperAdmin ---
+  const { user, isAdmin, isSuperAdmin } = useAuth() 
+  // --- END OF FIX ---
 
   const isActive = (path) => pathname === path
 
@@ -79,8 +81,8 @@ export default function Navbar() {
                   </Button>
                 </Link>
                 
-                {/* --- START OF FIX: Added Club Profile Link --- */}
-                {isAdmin && (
+                {/* --- START OF FIX: Show Club Profile only for regular admins --- */}
+                {isAdmin && !isSuperAdmin && (
                     <Link href="/admin/club-profile">
                       <Button 
                         variant="ghost" 
@@ -171,8 +173,8 @@ export default function Navbar() {
                   Profile
                 </Link>
 
-                {/* --- START OF FIX: Added Mobile Club Profile Link --- */}
-                {isAdmin && (
+                {/* --- START OF FIX: Show Club Profile only for regular admins --- */}
+                {isAdmin && !isSuperAdmin && (
                     <Link
                       href="/admin/club-profile"
                       onClick={() => setMobileMenuOpen(false)}
