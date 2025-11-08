@@ -3,38 +3,33 @@
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import { Calendar, Clock, CheckCircle, XCircle, FileClock } from 'lucide-react'
+import { Calendar, CheckCircle, XCircle, FileClock } from 'lucide-react'
 import { parseISO, format } from 'date-fns'; 
 import { formatInTimeZone } from 'date-fns-tz'; 
 
-// Helper function to format date ranges
+// Helper function to format date ranges (unchanged)
 const formatEventDate = (start, end, timeZone) => {
   if (!start) return 'Date TBA';
   
-  // Get the timezone abbreviation (e.g., "GMT+5:30") once
   const tz = formatInTimeZone(start, timeZone, 'zzz');
-  
   const startDate = formatInTimeZone(start, timeZone, 'MMM dd');
-  const startTime = formatInTimeZone(start, timeZone, 'hh:mm a'); // No zzz
+  const startTime = formatInTimeZone(start, timeZone, 'hh:mm a');
   
   if (!end) {
-    // Single-day event without end time
-    return `${startDate} at ${startTime} ${tz}`; // Append tz
+    return `${startDate} at ${startTime} ${tz}`;
   }
 
   const endDate = formatInTimeZone(end, timeZone, 'MMM dd');
-  const endTime = formatInTimeZone(end, timeZone, 'hh:mm a'); // No zzz
+  const endTime = formatInTimeZone(end, timeZone, 'hh:mm a');
 
   if (startDate === endDate) {
-    // Single-day event
-    return `${startDate} · ${startTime} - ${endTime} ${tz}`; // Append tz
+    return `${startDate} · ${startTime} - ${endTime} ${tz}`;
   }
   
-  // Multi-day event (REMOVED COMMA and consolidated zzz)
   return `${startDate} ${startTime} - ${endDate} ${endTime} ${tz}`;
 }
 
-// Helper function to get event status
+// Helper function to get event status (unchanged)
 const getEventStatus = (event) => {
   const now = new Date();
   const eventEndDate = event.event_end_date ? parseISO(event.event_end_date) : null;
@@ -61,23 +56,20 @@ const getEventStatus = (event) => {
     return { text: 'Registration Closed', color: 'bg-red-500', icon: <XCircle size={16} /> };
   }
 
-  // Check for open registration with dates
   if (regStartDate && regEndDate && now >= regStartDate && now < regEndDate && event.registration_open) {
      return { text: 'Registration Open', color: 'bg-green-500', icon: <CheckCircle size={16} /> };
   }
   
-  // Fallback if no dates are set but it's "open"
   if (event.registration_open && !regStartDate && !regEndDate) {
      return { text: 'Registration Open', color: 'bg-green-500', icon: <CheckCircle size={16} /> };
   }
 
-  // Default fallback
   return { text: 'Closed', color: 'bg-red-500', icon: <XCircle size={16} /> };
 }
 
 
 export default function EventCard({ event }) {
-  const TIME_ZONE = 'Asia/Kolkata'; // Indian Standard Time
+  const TIME_ZONE = 'Asia/Kolkata'; 
   
   const eventStartDate = event.event_date ? parseISO(event.event_date) : null;
   const eventEndDate = event.event_end_date ? parseISO(event.event_end_date) : null;
@@ -85,13 +77,16 @@ export default function EventCard({ event }) {
   const formattedEventDate = formatEventDate(eventStartDate, eventEndDate, TIME_ZONE);
   const status = getEventStatus(event);
 
-  // Determine if the event is active (visible)
   const isEventActive = event.is_active;
   const isCompleted = status.text === 'Completed';
 
+  // --- START OF MODIFICATION: Get club info from event prop ---
+  const club = event.club;
+  // --- END OF MODIFICATION ---
+
   return (
     <Card className="overflow-hidden hover:shadow-lg transition-shadow flex flex-col">
-      {/* Event Banner */}
+      {/* Event Banner (Unchanged) */}
       <div className="w-full h-48 bg-gradient-to-br from-[#00629B] to-[#004d7a] relative">
         {event.banner_url ? (
           <img
@@ -105,7 +100,6 @@ export default function EventCard({ event }) {
           </div>
         )}
         
-        {/* Automated Status Badge */}
         <span 
           className={`absolute top-2 right-2 text-white text-xs px-3 py-1 rounded-full flex items-center gap-1.5 ${status.color}`}
         >
@@ -114,14 +108,16 @@ export default function EventCard({ event }) {
         </span>
       </div>
 
-      <CardHeader>
+      {/* Card Header (Unchanged) */}
+      <CardHeader className="pb-4">
         <CardTitle className="text-xl">{event.title}</CardTitle>
         <CardDescription className="line-clamp-2 h-10">
           {event.description || 'No description available'}
         </CardDescription>
       </CardHeader>
 
-      <CardContent>
+      {/* Card Content (Unchanged) */}
+      <CardContent className="pt-0">
         <div className="space-y-2 text-sm text-gray-600">
           <div className="flex items-start space-x-2">
             <Calendar size={16} className="text-[#00629B] mt-0.5 flex-shrink-0" />
@@ -130,7 +126,21 @@ export default function EventCard({ event }) {
         </div>
       </CardContent>
 
-      <CardFooter className="mt-auto">
+      {/* --- START OF MODIFICATION: Updated CardFooter --- */}
+      <CardFooter className="mt-auto flex flex-col items-start gap-4">
+        {/* Club Info */}
+        {club && club.club_name && (
+          <div className="flex items-center gap-2 w-full pt-4 border-t">
+            <img 
+              src={club.club_logo_url || 'https://via.placeholder.com/40'} 
+              alt={`${club.club_name} logo`}
+              className="w-8 h-8 rounded-full object-contain border"
+            />
+            <span className="text-sm font-medium text-gray-700">{club.club_name}</span>
+          </div>
+        )}
+
+        {/* View Event Button */}
         <Link href={`/events/${event.id}`} className="w-full">
           <Button
             className="w-full bg-[#00629B] hover:bg-[#004d7a]"
@@ -140,6 +150,7 @@ export default function EventCard({ event }) {
           </Button>
         </Link>
       </CardFooter>
+      {/* --- END OF MODIFICATION --- */}
     </Card>
   )
 }

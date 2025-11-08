@@ -5,14 +5,20 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import EventCard from '@/components/EventCard'
-import { Calendar, Users, Trophy, Zap } from 'lucide-react'
+import { Calendar, Users, Trophy, Zap, Building } from 'lucide-react' // Import Building
 
 export default function Home() {
   const [upcomingEvents, setUpcomingEvents] = useState([])
   const [loading, setLoading] = useState(true)
+  
+  // --- START OF MODIFICATION ---
+  const [clubs, setClubs] = useState([])
+  const [loadingClubs, setLoadingClubs] = useState(true)
+  // --- END OF MODIFICATION ---
 
   useEffect(() => {
     fetchUpcomingEvents()
+    fetchClubs() // Fetch clubs on load
   }, [])
 
   const fetchUpcomingEvents = async () => {
@@ -29,9 +35,33 @@ export default function Home() {
     }
   }
 
+  // --- START OF MODIFICATION: Add fetchClubs ---
+  const fetchClubs = async () => {
+    try {
+      const response = await fetch('/api/clubs');
+      const data = await response.json();
+      if (data.success) {
+        // Ensure clubs are unique by name
+        const uniqueClubs = data.clubs.reduce((acc, club) => {
+           if (!acc.find(item => item.club_name === club.club_name)) {
+              acc.push(club);
+           }
+           return acc;
+        }, []);
+        setClubs(uniqueClubs);
+      }
+    } catch (error) {
+      console.error('Error fetching clubs:', error);
+    } finally {
+      setLoadingClubs(false);
+    }
+  }
+  // --- END OF MODIFICATION ---
+
+
   return (
     <div>
-      {/* Hero Section */}
+      {/* Hero Section (Unchanged) */}
       <section className="bg-gradient-to-br from-[#00629B] to-[#004d7a] text-white py-20">
         <div className="container mx-auto px-4">
           <div className="max-w-3xl mx-auto text-center">
@@ -58,63 +88,51 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Features Section */}
+      {/* --- START OF MODIFICATION: Replaced "Why Join" with "Browse by Club" --- */}
       <section className="py-16 bg-gray-50">
         <div className="container mx-auto px-4">
-          <h2 className="text-3xl font-bold text-center mb-12">Why Join IEEE Club?</h2>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+          <h2 className="text-3xl font-bold text-center mb-12">Browse by Club</h2>
+          {loadingClubs ? (
+            <div className="text-center py-12">
+              <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-[#00629B]"></div>
+              <p className="mt-4 text-gray-600">Loading clubs...</p>
+            </div>
+          ) : clubs.length > 0 ? (
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 md:gap-6">
+              {clubs.map((club) => (
+                <Link 
+                  href={`/events?club=${encodeURIComponent(club.club_name)}`} 
+                  key={club.club_name}
+                  className="group"
+                >
+                  <Card className="h-full hover:shadow-xl transition-shadow duration-300">
+                    <CardContent className="pt-6 text-center flex flex-col items-center justify-center">
+                      <img
+                        src={club.club_logo_url}
+                        alt={`${club.club_name} logo`}
+                        className="w-24 h-24 object-contain rounded-full mx-auto mb-4 border-2 border-gray-100 group-hover:border-[#00629B] transition-colors"
+                      />
+                      <h3 className="font-semibold text-md text-gray-900 group-hover:text-[#00629B] transition-colors">
+                        {club.club_name}
+                      </h3>
+                    </CardContent>
+                  </Card>
+                </Link>
+              ))}
+            </div>
+          ) : (
             <Card>
-              <CardContent className="pt-6 text-center">
-                <div className="w-16 h-16 bg-[#00629B] rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Calendar className="text-white" size={32} />
-                </div>
-                <h3 className="font-bold text-lg mb-2">Regular Events</h3>
-                <p className="text-gray-600 text-sm">
-                  24-hour hackathons, workshops, and tech talks throughout the year
-                </p>
+              <CardContent className="py-12 text-center text-gray-500">
+                <Building size={48} className="mx-auto mb-4 text-gray-400" />
+                <p>No clubs have set up their profiles yet. Check back soon!</p>
               </CardContent>
             </Card>
-
-            <Card>
-              <CardContent className="pt-6 text-center">
-                <div className="w-16 h-16 bg-[#00629B] rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Users className="text-white" size={32} />
-                </div>
-                <h3 className="font-bold text-lg mb-2">Community</h3>
-                <p className="text-gray-600 text-sm">
-                  Connect with like-minded tech enthusiasts and industry experts
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="pt-6 text-center">
-                <div className="w-16 h-16 bg-[#00629B] rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Trophy className="text-white" size={32} />
-                </div>
-                <h3 className="font-bold text-lg mb-2">Win Prizes</h3>
-                <p className="text-gray-600 text-sm">
-                  Compete for exciting prizes and recognition in our competitions
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="pt-6 text-center">
-                <div className="w-16 h-16 bg-[#00629B] rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Zap className="text-white" size={32} />
-                </div>
-                <h3 className="font-bold text-lg mb-2">Learn & Grow</h3>
-                <p className="text-gray-600 text-sm">
-                  Enhance your skills through hands-on projects and mentorship
-                </p>
-              </CardContent>
-            </Card>
-          </div>
+          )}
         </div>
       </section>
+      {/* --- END OF MODIFICATION --- */}
 
-      {/* Upcoming Events */}
+      {/* Upcoming Events (Unchanged) */}
       <section className="py-16">
         <div className="container mx-auto px-4">
           <div className="flex justify-between items-center mb-8">
@@ -144,7 +162,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* About IEEE */}
+      {/* About IEEE (Unchanged) */}
       <section className="py-16 bg-gray-50">
         <div className="container mx-auto px-4">
           <div className="max-w-3xl mx-auto text-center">

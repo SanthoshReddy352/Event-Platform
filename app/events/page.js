@@ -1,31 +1,53 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation' // Import useRouter
 import EventCard from '@/components/EventCard'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Search } from 'lucide-react'
-import { parseISO } from 'date-fns' // Import parseISO
+import { Search, X } from 'lucide-react' // Import X
+import { Button } from '@/components/ui/button' // Import Button
+import { parseISO } from 'date-fns' 
 
-export default function EventsPage() {
+// Wrap the main component in Suspense for useSearchParams
+export default function EventsPageWrapper() {
+  return (
+    <Suspense fallback={<LoadingSpinner />}>
+      <EventsPage />
+    </Suspense>
+  )
+}
+
+function EventsPage() {
   const [events, setEvents] = useState([])
   const [filteredEvents, setFilteredEvents] = useState([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [filter, setFilter] = useState('all')
 
+  // --- START OF MODIFICATION: Get URL parameters ---
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const clubFilterParam = searchParams.get('club')
+  const [clubFilter, setClubFilter] = useState(clubFilterParam || null)
+  // --- END OF MODIFICATION ---
+
   useEffect(() => {
     fetchEvents()
   }, [])
 
   useEffect(() => {
+    // Update filter state if URL param changes
+    setClubFilter(clubFilterParam || null)
+  }, [clubFilterParam])
+
+  useEffect(() => {
     filterEvents()
-  }, [searchTerm, filter, events])
+  }, [searchTerm, filter, events, clubFilter]) // Add clubFilter to dependency array
 
   const fetchEvents = async () => {
     try {
-      // Ensure we always get the latest events and don't use a cached list
       const response = await fetch('/api/events', { cache: 'no-store' })
       const data = await response.json()
       if (data.success) {
@@ -43,6 +65,14 @@ export default function EventsPage() {
     let filtered = events
     const now = new Date();
 
+    // --- START OF MODIFICATION: Filter by club ---
+    if (clubFilter) {
+      filtered = filtered.filter(event => 
+        event.club && event.club.club_name === clubFilter
+      )
+    }
+    // --- END OF MODIFICATION ---
+
     // Filter by search term
     if (searchTerm) {
       filtered = filtered.filter(event =>
@@ -57,7 +87,6 @@ export default function EventsPage() {
         const eventEndDate = event.event_end_date ? parseISO(event.event_end_date) : null;
         const isCompleted = eventEndDate && now > eventEndDate;
         
-        // Active = NOT completed AND admin has set is_active to true
         return !isCompleted && event.is_active;
       })
     } else if (filter === 'open') {
@@ -67,17 +96,21 @@ export default function EventsPage() {
         const eventEndDate = event.event_end_date ? parseISO(event.event_end_date) : null;
 
         const isCompleted = eventEndDate && now > eventEndDate;
-        
-        // Check if registration is *actually* open based on dates
         const isWithinDateRange = regStartDate && regEndDate && now >= regStartDate && now < regEndDate;
 
-        // "Registration Open" = admin toggle is on, it's within the date range, AND the event is not completed
         return event.registration_open && isWithinDateRange && !isCompleted;
       })
     }
 
     setFilteredEvents(filtered)
   }
+
+  // --- START OF MODIFICATION: Handle clearing the club filter ---
+  const clearClubFilter = () => {
+    setClubFilter(null)
+    router.push('/events') // Update URL to remove query param
+  }
+  // --- END OF MODIFICATION ---
 
   return (
     <div className="container mx-auto px-4 py-12">
@@ -87,7 +120,7 @@ export default function EventsPage() {
       </div>
 
       {/* Filters */}
-      <div className="mb-8 flex flex-col md:flex-row gap-4">
+      <div className="mb-4 flex flex-col md:flex-row gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-3 text-gray-400" size={20} />
           <Input
@@ -109,11 +142,21 @@ export default function EventsPage() {
         </Select>
       </div>
 
+      {/* --- START OF MODIFICATION: Show clear filter button --- */}
+      {clubFilter && (
+        <div className="mb-6 flex justify-start">
+          <Button variant="outline" onClick={clearClubFilter} className="bg-blue-50 border-blue-200 text-blue-800 hover:bg-blue-100">
+            Filtering by: <strong>{clubFilter}</strong>
+            <X size={16} className="ml-2" />
+          </Button>
+        </div>
+      )}
+      {/* --- END OF MODIFICATION --- */}
+
+
       {/* Events Grid */}
       {loading ? (
-        <div className="text-center py-12">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-[#00629B]"></div>
-        </div>
+        <LoadingSpinner />
       ) : filteredEvents.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredEvents.map((event) => (
@@ -124,7 +167,7 @@ export default function EventsPage() {
         <Card>
           <CardContent className="py-12 text-center text-gray-500">
             <p>
-              {searchTerm || filter !== 'all'
+              {searchTerm || filter !== 'all' || clubFilter
                 ? 'No events match your search criteria'
                 : 'No events available at the moment'}
             </p>
@@ -134,3 +177,13 @@ export default function EventsPage() {
     </div>
   )
 }
+
+// --- START OF MODIFICATION: Added LoadingSpinner component ---
+function LoadingSpinner() {
+  return (
+    <div className="text-center py-12">
+      <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-[#00629B]"></div>
+    </div>
+  );
+}
+// --- END OF MODIFICATION ---
