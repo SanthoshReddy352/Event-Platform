@@ -13,8 +13,12 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider value={auth}>
-      {/* We don't show children until the initial auth check is complete */}
-      {!auth.loading && children}
+      {/* FIX: We now ALWAYS render children.
+        The child components (like ProtectedRoute) will 
+        use the 'auth.loading' value to show their
+        own loading spinners, without unmounting the whole layout.
+      */}
+      {children}
     </AuthContext.Provider>
   )
 }
