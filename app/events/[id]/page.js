@@ -55,10 +55,11 @@ export default function EventDetailPage() {
   const [registrationStatus, setRegistrationStatus] = useState(null) // 'pending', 'approved', 'rejected'
   const [regCheckLoading, setRegCheckLoading] = useState(true) 
   
-  // --- Use sessionStorage for form data persistence ---
+  // --- START OF FIX: Use sessionStorage for form data ---
   const storageKey = `formData-${params.id}`;
   
   const [formData, setFormData] = useState(() => {
+    // Initialize state from sessionStorage on component mount
     if (typeof window !== 'undefined') {
       const savedData = sessionStorage.getItem(storageKey);
       return savedData ? JSON.parse(savedData) : {};
@@ -66,7 +67,7 @@ export default function EventDetailPage() {
     return {};
   });
 
-  // Combined setter that updates state AND sessionStorage
+  // Create a combined setter function that updates state AND sessionStorage
   const setAndStoreFormData = (newData) => {
     if (typeof newData === 'function') {
       setFormData(prevData => {
@@ -83,6 +84,7 @@ export default function EventDetailPage() {
       }
     }
   };
+  // --- END OF FIX ---
 
   const checkRegistrationStatus = useCallback(async (userId, eventId) => {
       if (!userId || !eventId) {
@@ -193,11 +195,12 @@ export default function EventDetailPage() {
         setSubmitted(true)
         setIsRegistered(true)
         setRegistrationStatus('pending')
-        // Clear form data from state AND sessionStorage
+        // --- START OF FIX: Clear form data from state AND sessionStorage ---
         setAndStoreFormData({}); 
         if (typeof window !== 'undefined') {
             sessionStorage.removeItem(storageKey); // Explicitly remove
         }
+        // --- END OF FIX ---
       } else if (response.status === 409) {
         alert("Registration failed: You are already registered for this event.")
         setIsRegistered(true)
@@ -221,18 +224,21 @@ export default function EventDetailPage() {
      )
   }
 
-  // (All date/status logic remains unchanged)
   const TIME_ZONE = 'Asia/Kolkata';
   const now = new Date();
+  
   const eventStartDate = event.event_date ? parseISO(event.event_date) : null;
   const eventEndDate = event.event_end_date ? parseISO(event.event_end_date) : null;
   const regStartDate = event.registration_start ? parseISO(event.registration_start) : null;
   const regEndDate = event.registration_end ? parseISO(event.registration_end) : null;
+
   const { date: formattedDate, time: formattedTime } = formatEventDate(eventStartDate, eventEndDate, TIME_ZONE);
   const formattedRegStart = formatRegDate(regStartDate, TIME_ZONE);
   const formattedRegEnd = formatRegDate(regEndDate, TIME_ZONE);
+  
   const isCompleted = eventEndDate && now > eventEndDate;
   const isRegNotYetOpen = regStartDate && now < regStartDate;
+  
   const isRegistrationAvailable = 
     event.is_active &&
     event.registration_open &&
@@ -240,6 +246,7 @@ export default function EventDetailPage() {
     regEndDate &&
     now >= regStartDate &&
     now < regEndDate;
+
   let statusBadge;
   if (isCompleted) {
     statusBadge = <span className="bg-gray-500 text-white text-sm px-4 py-1 rounded-full">Completed</span>;
@@ -250,8 +257,9 @@ export default function EventDetailPage() {
   }
   
   const registrationContent = () => {
-      // Show loader only on *initial* auth check
+      // --- START OF FIX: Show loader only on *initial* auth check ---
       if (authLoading) {
+      // --- END OF FIX ---
           return (
               <Card>
                   <CardContent className="py-12 text-center">
@@ -452,28 +460,25 @@ export default function EventDetailPage() {
           <Card>
               <CardHeader>
                   <CardTitle>Registration Form</CardTitle>
-                  {/* --- START OF FIX: Add optional chaining to prevent crash --- */}
+                  {/* --- START OF PERMANENT FIX: Add optional chaining --- */}
                   <CardDescription>Logged in as: {user?.email || 'Loading...'}</CardDescription>
-                  {/* --- END OF FIX --- */}
+                  {/* --- END OF PERMANENT FIX --- */}
               </CardHeader>
-              <CardContent>
-                  {/* --- START OF FIX: Show loader *above* the form, but DO NOT unmount the form --- */}
+              {/* --- START OF PERMANENT FIX: Overlay loader, don't unmount form --- */}
+              <CardContent className="relative">
                   {regCheckLoading && (
-                      <div className="py-12 text-center">
+                      <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm">
                           <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#00629B]" />
                           <p className="mt-4 text-gray-600">Checking registration status...</p>
                       </div>
                   )}
                   
-                  {/* The fieldset is now ALWAYS rendered.
-                    It is DISABLED and FADED while checking.
-                    It is ENABLED and VISIBLE when not checking.
+                  {/* This fieldset is now ALWAYS rendered.
+                    It is DISABLED while checking, which prevents clicks.
+                    The loader above will cover it visually.
                     This preserves the form's state.
                   */}
-                  <fieldset 
-                    disabled={regCheckLoading} 
-                    className={regCheckLoading ? 'opacity-50' : 'opacity-100 transition-opacity'}
-                  >
+                  <fieldset disabled={regCheckLoading}>
                       <DynamicForm
                           fields={event.form_fields || []}
                           onSubmit={handleSubmit}
@@ -482,7 +487,7 @@ export default function EventDetailPage() {
                           onFormChange={setAndStoreFormData} // Pass the setter
                       />
                   </fieldset>
-                  {/* --- END OF FIX --- */}
+              {/* --- END OF PERMANENT FIX --- */}
               </CardContent>
           </Card>
       )
