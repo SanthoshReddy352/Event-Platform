@@ -9,33 +9,30 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox'
 import { Card, CardContent } from '@/components/ui/card'
 
-export default function DynamicForm({ fields = [], onSubmit, eventId }) {
-  const [formData, setFormData] = useState({})
+// --- START OF FIX: Accept formData and onFormChange as props ---
+export default function DynamicForm({ fields = [], onSubmit, eventId, formData, onFormChange }) {
+  // --- REMOVED: const [formData, setFormData] = useState({}) ---
   const [errors, setErrors] = useState({})
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const handleInputChange = (fieldId, value) => {
-    // --- START OF FIX ---
-    // Use fieldId (UUID) as the key
-    setFormData({ ...formData, [fieldId]: value })
+    // --- MODIFIED: Call parent's state updater ---
+    onFormChange({ ...formData, [fieldId]: value })
+    
     // Clear error when user starts typing
     if (errors[fieldId]) {
       setErrors({ ...errors, [fieldId]: null })
     }
-    // --- END OF FIX ---
   }
 
   const validateForm = () => {
     const newErrors = {}
     fields.forEach((field) => {
-      // --- START OF FIX ---
-      // Use field.id consistently for error tracking
       const fieldKey = field.id; 
+      // --- MODIFIED: formData now comes from props ---
       if (field.required && !formData[fieldKey]) {
-        // Use field.label for the error message
         newErrors[fieldKey] = `${field.label} is required`
       }
-      // --- END OF FIX ---
     })
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
@@ -44,12 +41,13 @@ export default function DynamicForm({ fields = [], onSubmit, eventId }) {
   const handleSubmit = async (e) => {
     e.preventDefault()
     
-    if (!validateForm()) {
+    if (!validateForm()) { // This now correctly uses formData from props
       return
     }
 
     setIsSubmitting(true)
     try {
+      // --- MODIFIED: formData now comes from props ---
       await onSubmit(formData)
     } catch (error) {
       console.error('Form submission error:', error)
@@ -59,11 +57,9 @@ export default function DynamicForm({ fields = [], onSubmit, eventId }) {
   }
 
   const renderField = (field) => {
-    // --- START OF FIX ---
-    // Use field.id as the unique identifier
     const fieldId = field.id 
-    const value = formData[fieldId] || ''
-    // --- END OF FIX ---
+    // --- MODIFIED: formData now comes from props ---
+    const value = formData[fieldId] || '' 
 
     switch (field.type) {
       case 'text':
@@ -79,8 +75,9 @@ export default function DynamicForm({ fields = [], onSubmit, eventId }) {
             <Input
               id={fieldId}
               type={field.type}
-              value={value}
-              onChange={(e) => handleInputChange(field.id, e.target.value)} // Pass field.id
+              value={value} // Comes from prop formData
+              // --- MODIFIED: Call handleInputChange (which calls parent) ---
+              onChange={(e) => handleInputChange(field.id, e.target.value)} 
               placeholder={field.placeholder || `Enter ${field.label.toLowerCase()}`}
               required={field.required}
             />
@@ -99,8 +96,9 @@ export default function DynamicForm({ fields = [], onSubmit, eventId }) {
             </Label>
             <Textarea
               id={fieldId}
-              value={value}
-              onChange={(e) => handleInputChange(field.id, e.target.value)} // Pass field.id
+              value={value} // Comes from prop formData
+              // --- MODIFIED: Call handleInputChange (which calls parent) ---
+              onChange={(e) => handleInputChange(field.id, e.target.value)}
               placeholder={field.placeholder || `Enter ${field.label.toLowerCase()}`}
               required={field.required}
               rows={4}
@@ -119,8 +117,9 @@ export default function DynamicForm({ fields = [], onSubmit, eventId }) {
               {field.required && <span className="text-red-500 ml-1">*</span>}
             </Label>
             <Select
-              value={value}
-              onValueChange={(val) => handleInputChange(field.id, val)} // Pass field.id
+              value={value} // Comes from prop formData
+              // --- MODIFIED: Call handleInputChange (which calls parent) ---
+              onValueChange={(val) => handleInputChange(field.id, val)} 
             >
               <SelectTrigger>
                 <SelectValue placeholder={`Select ${field.label.toLowerCase()}`} />
@@ -144,8 +143,9 @@ export default function DynamicForm({ fields = [], onSubmit, eventId }) {
           <div key={fieldId} className="flex items-center space-x-2">
             <Checkbox
               id={fieldId}
-              checked={value === true}
-              onCheckedChange={(checked) => handleInputChange(field.id, checked)} // Pass field.id
+              checked={value === true} // Comes from prop formData
+              // --- MODIFIED: Call handleInputChange (which calls parent) ---
+              onCheckedChange={(checked) => handleInputChange(field.id, checked)}
             />
             <Label htmlFor={fieldId} className="font-normal">
               {field.label}
@@ -164,8 +164,9 @@ export default function DynamicForm({ fields = [], onSubmit, eventId }) {
             <Input
               id={fieldId}
               type="date"
-              value={value}
-              onChange={(e) => handleInputChange(field.id, e.target.value)} // Pass field.id
+              value={value} // Comes from prop formData
+              // --- MODIFIED: Call handleInputChange (which calls parent) ---
+              onChange={(e) => handleInputChange(field.id, e.target.value)}
               required={field.required}
             />
             {errors[fieldId] && (
