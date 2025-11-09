@@ -55,11 +55,10 @@ export default function EventDetailPage() {
   const [registrationStatus, setRegistrationStatus] = useState(null) // 'pending', 'approved', 'rejected'
   const [regCheckLoading, setRegCheckLoading] = useState(true) 
   
-  // --- START OF FIX: Use sessionStorage for form data ---
+  // --- Use sessionStorage for form data persistence ---
   const storageKey = `formData-${params.id}`;
   
   const [formData, setFormData] = useState(() => {
-    // Initialize state from sessionStorage on component mount
     if (typeof window !== 'undefined') {
       const savedData = sessionStorage.getItem(storageKey);
       return savedData ? JSON.parse(savedData) : {};
@@ -67,7 +66,7 @@ export default function EventDetailPage() {
     return {};
   });
 
-  // Create a combined setter function that updates state AND sessionStorage
+  // Combined setter that updates state AND sessionStorage
   const setAndStoreFormData = (newData) => {
     if (typeof newData === 'function') {
       setFormData(prevData => {
@@ -84,7 +83,6 @@ export default function EventDetailPage() {
       }
     }
   };
-  // --- END OF FIX ---
 
   const checkRegistrationStatus = useCallback(async (userId, eventId) => {
       if (!userId || !eventId) {
@@ -195,12 +193,11 @@ export default function EventDetailPage() {
         setSubmitted(true)
         setIsRegistered(true)
         setRegistrationStatus('pending')
-        // --- START OF FIX: Clear form data from state AND sessionStorage ---
+        // Clear form data from state AND sessionStorage
         setAndStoreFormData({}); 
         if (typeof window !== 'undefined') {
             sessionStorage.removeItem(storageKey); // Explicitly remove
         }
-        // --- END OF FIX ---
       } else if (response.status === 409) {
         alert("Registration failed: You are already registered for this event.")
         setIsRegistered(true)
@@ -224,21 +221,18 @@ export default function EventDetailPage() {
      )
   }
 
+  // (All date/status logic remains unchanged)
   const TIME_ZONE = 'Asia/Kolkata';
   const now = new Date();
-  
   const eventStartDate = event.event_date ? parseISO(event.event_date) : null;
   const eventEndDate = event.event_end_date ? parseISO(event.event_end_date) : null;
   const regStartDate = event.registration_start ? parseISO(event.registration_start) : null;
   const regEndDate = event.registration_end ? parseISO(event.registration_end) : null;
-
   const { date: formattedDate, time: formattedTime } = formatEventDate(eventStartDate, eventEndDate, TIME_ZONE);
   const formattedRegStart = formatRegDate(regStartDate, TIME_ZONE);
   const formattedRegEnd = formatRegDate(regEndDate, TIME_ZONE);
-  
   const isCompleted = eventEndDate && now > eventEndDate;
   const isRegNotYetOpen = regStartDate && now < regStartDate;
-  
   const isRegistrationAvailable = 
     event.is_active &&
     event.registration_open &&
@@ -246,7 +240,6 @@ export default function EventDetailPage() {
     regEndDate &&
     now >= regStartDate &&
     now < regEndDate;
-
   let statusBadge;
   if (isCompleted) {
     statusBadge = <span className="bg-gray-500 text-white text-sm px-4 py-1 rounded-full">Completed</span>;
@@ -257,9 +250,8 @@ export default function EventDetailPage() {
   }
   
   const registrationContent = () => {
-      // --- START OF FIX: Show loader only on *initial* auth check ---
+      // Show loader only on *initial* auth check
       if (authLoading) {
-      // --- END OF FIX ---
           return (
               <Card>
                   <CardContent className="py-12 text-center">
@@ -270,8 +262,8 @@ export default function EventDetailPage() {
           )
       }
       
-      // All other status checks (Completed, Registered, Not Open, Not Logged In)
-      // remain the same as the previous version...
+      // (All other status checks: Completed, Registered, Not Open, Not Logged In...
+      // ...remain unchanged)
       if (isCompleted) {
            return (
               <Card>
@@ -283,7 +275,6 @@ export default function EventDetailPage() {
               </Card>
           )
       }
-
       if (isRegistered) {
           if (registrationStatus === 'pending') {
             return (
@@ -387,7 +378,6 @@ export default function EventDetailPage() {
               </Card>
           )
       }
-
       if (!isRegistrationAvailable) {
           let message = 'Registration for this event is currently closed.';
           if (isRegNotYetOpen) {
@@ -414,7 +404,6 @@ export default function EventDetailPage() {
               </Card>
           )
       }
-
       if (!user) {
           return (
               <Card className="border-yellow-500">
@@ -432,7 +421,6 @@ export default function EventDetailPage() {
               </Card>
           )
       }
-      
       if (submitted) {
           return (
               <Card className="border-orange-500" data-testid="registration-success-card">
@@ -477,11 +465,15 @@ export default function EventDetailPage() {
                       </div>
                   )}
                   
-                  {/* The fieldset is now ALWAYS rendered, but DISABLED and HIDDEN.
-                    This preserves the form's state (which is held in `formData`).
-                    The `sessionStorage` logic provides a backup.
+                  {/* The fieldset is now ALWAYS rendered.
+                    It is DISABLED and FADED while checking.
+                    It is ENABLED and VISIBLE when not checking.
+                    This preserves the form's state.
                   */}
-                  <fieldset disabled={regCheckLoading} className={regCheckLoading ? 'hidden' : 'block'}>
+                  <fieldset 
+                    disabled={regCheckLoading} 
+                    className={regCheckLoading ? 'opacity-50' : 'opacity-100 transition-opacity'}
+                  >
                       <DynamicForm
                           fields={event.form_fields || []}
                           onSubmit={handleSubmit}
