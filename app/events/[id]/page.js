@@ -257,9 +257,8 @@ export default function EventDetailPage() {
   }
   
   const registrationContent = () => {
-      // --- START OF FIX: Show loader only on *initial* auth check ---
+      // Show loader only on *initial* auth check
       if (authLoading) {
-      // --- END OF FIX ---
           return (
               <Card>
                   <CardContent className="py-12 text-center">
@@ -270,6 +269,8 @@ export default function EventDetailPage() {
           )
       }
       
+      // All other status checks (Completed, Registered, Not Open, Not Logged In)
+      // remain the same as the previous version...
       if (isCompleted) {
            return (
               <Card>
@@ -467,7 +468,7 @@ export default function EventDetailPage() {
                   {/* --- END OF FIX --- */}
               </CardHeader>
               <CardContent>
-                  {/* --- START OF FIX: Show inline loader if re-checking --- */}
+                  {/* --- START OF FIX: Show loader, but DO NOT unmount form --- */}
                   {regCheckLoading && (
                       <div className="py-12 text-center">
                           <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#00629B]" />
@@ -475,10 +476,11 @@ export default function EventDetailPage() {
                       </div>
                   )}
                   
-                  {/* Show form when not re-checking */
-                  /* formData will be preserved from sessionStorage */
-                  }
-                  {!regCheckLoading && (
+                  {/* This fieldset will be disabled while regCheckLoading is true,
+                    preventing submission but keeping the form (and its state) mounted.
+                    When regCheckLoading becomes false, the fieldset is enabled.
+                  */}
+                  <fieldset disabled={regCheckLoading} className={regCheckLoading ? 'opacity-50' : ''}>
                       <DynamicForm
                           fields={event.form_fields || []}
                           onSubmit={handleSubmit}
@@ -486,7 +488,7 @@ export default function EventDetailPage() {
                           formData={formData} // Pass the state from sessionStorage
                           onFormChange={setAndStoreFormData} // Pass the setter
                       />
-                  )}
+                  </fieldset>
                   {/* --- END OF FIX --- */}
               </CardContent>
           </Card>
