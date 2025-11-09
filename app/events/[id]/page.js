@@ -12,7 +12,7 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client' 
 import { useAuth } from '@/context/AuthContext' 
 
-// Helper function to format date ranges (unchanged)
+// (Helper functions formatEventDate and formatRegDate remain unchanged)
 const formatEventDate = (start, end, timeZone) => {
   if (!start) return { date: 'Date TBA', time: null };
   
@@ -36,11 +36,11 @@ const formatEventDate = (start, end, timeZone) => {
   };
 }
 
-// Helper function to format registration dates (unchanged)
 const formatRegDate = (date, timeZone) => {
   if (!date) return 'Not specified';
   return formatInTimeZone(date, timeZone, 'MMM dd, yyyy · hh:mm a zzz'); 
 }
+
 
 export default function EventDetailPage() {
   const params = useParams()
@@ -54,9 +54,36 @@ export default function EventDetailPage() {
   const [isRegistered, setIsRegistered] = useState(false) 
   const [registrationStatus, setRegistrationStatus] = useState(null) // 'pending', 'approved', 'rejected'
   const [regCheckLoading, setRegCheckLoading] = useState(true) 
+  
+  // --- START OF FIX: Use sessionStorage for form data ---
+  const storageKey = `formData-${params.id}`;
+  
+  const [formData, setFormData] = useState(() => {
+    // Initialize state from sessionStorage on component mount
+    if (typeof window !== 'undefined') {
+      const savedData = sessionStorage.getItem(storageKey);
+      return savedData ? JSON.parse(savedData) : {};
+    }
+    return {};
+  });
 
-  // --- START OF FIX: Hold form data state in the parent ---
-  const [formData, setFormData] = useState({})
+  // Create a combined setter function that updates state AND sessionStorage
+  const setAndStoreFormData = (newData) => {
+    if (typeof newData === 'function') {
+      setFormData(prevData => {
+        const updatedData = newData(prevData);
+        if (typeof window !== 'undefined') {
+          sessionStorage.setItem(storageKey, JSON.stringify(updatedData));
+        }
+        return updatedData;
+      });
+    } else {
+      setFormData(newData);
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem(storageKey, JSON.stringify(newData));
+      }
+    }
+  };
   // --- END OF FIX ---
 
   const checkRegistrationStatus = useCallback(async (userId, eventId) => {
@@ -125,9 +152,7 @@ export default function EventDetailPage() {
     }
   }, [user, event, loading, authLoading, checkRegistrationStatus]); 
 
-  // --- START OF FIX: Renamed argument to avoid state collision ---
   const handleSubmit = async (submitData) => {
-  // --- END OF FIX ---
     if (!user) {
         alert("Authentication failed. Please log in again.")
         router.push(`/auth?redirect=${params.id}`) 
@@ -156,14 +181,12 @@ export default function EventDetailPage() {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}` // Pass token
+          'Authorization': `Bearer ${session.access_token}`
         },
         body: JSON.stringify({
           event_id: params.id,
           user_id: user.id, 
-          // --- START OF FIX: Use data from argument ---
-          responses: submitData,
-          // --- END OF FIX ---
+          responses: submitData, 
         }),
       })
 
@@ -171,9 +194,12 @@ export default function EventDetailPage() {
       if (data.success) {
         setSubmitted(true)
         setIsRegistered(true)
-        setRegistrationStatus('pending') // New registrations are pending by default
-        // --- START OF FIX: Clear the form data on success ---
-        setFormData({})
+        setRegistrationStatus('pending')
+        // --- START OF FIX: Clear form data from state AND sessionStorage ---
+        setAndStoreFormData({}); 
+        if (typeof window !== 'undefined') {
+            sessionStorage.removeItem(storageKey); // Explicitly remove
+        }
         // --- END OF FIX ---
       } else if (response.status === 409) {
         alert("Registration failed: You are already registered for this event.")
@@ -187,7 +213,6 @@ export default function EventDetailPage() {
     }
   }
 
-  // (All loading/status logic remains unchanged)
   if (loading || !event) {
      return (
         <div className="min-h-screen flex items-center justify-center">
@@ -232,40 +257,236 @@ export default function EventDetailPage() {
   }
   
   const registrationContent = () => {
-      // (All loading/status checks remain unchanged)
-      if (authLoading || regCheckLoading) {
+      // --- START OF FIX: Show loader only on *initial* auth check ---
+      if (authLoading) {
+      // --- END OF FIX ---
           return (
               <Card>
                   <CardContent className="py-12 text-center">
                       <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#00629B]" />
-                      <p className="mt-4 text-gray-600">Checking registration status...</p>
+                      <p className="mt-4 text-gray-600">Checking session...</p>
                   </CardContent>
               </Card>
           )
       }
       
-      if (isCompleted) { /* ... (unchanged) ... */ }
-      if (isRegistered) { /* ... (unchanged) ... */ }
-      if (!isRegistrationAvailable) { /* ... (unchanged) ... */ }
-      if (!user) { /* ... (unchanged) ... */ }
-      if (submitted) { /* ... (unchanged) ... */ }
+      if (isCompleted) {
+           return (
+              <Card>
+                  <CardContent className="py-12 text-center text-gray-500">
+                      <CheckCircle size={48} className="mx-auto mb-4 text-gray-400" />
+                      <p className="text-lg font-semibold mb-2">Event Completed</p>
+                      <p>This event has already finished.</p>
+                  </CardContent>
+              </Card>
+          )
+      }
+
+      if (isRegistered) {
+          if (registrationStatus === 'pending') {
+            return (
+                <Card className="border-orange-500" data-testid="registration-pending-card">
+                    <CardContent className="py-12 text-center">
+                        <div className="w-16 h-16 bg-orange-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                          <FileClock className="w-8 h-8 text-white" />
+                        </div>
+                        <h2 className="text-2xl font-bold mb-2 text-orange-600">
+                          Registration Under Review
+                        </h2>
+                        <p className="text-gray-600 mb-2">
+                          Your registration for <strong>{event.title}</strong> has been submitted successfully.
+                        </p>
+                        <p className="text-gray-600 mb-6">
+                          The event organizers are reviewing your application. You'll be notified via email once it's reviewed.
+                        </p>
+                        <div className="flex justify-center space-x-4">
+                          <Link href="/events">
+                            <Button variant="outline" data-testid="browse-more-events-button">Browse More Events</Button>
+                          </Link>
+                        </div>
+                    </CardContent>
+                </Card>
+            )
+          } else if (registrationStatus === 'approved') {
+            return (
+                <Card className="border-green-500" data-testid="registration-approved-card">
+                    <CardContent className="py-12 text-center">
+                        <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                          <CheckCircle className="w-8 h-8 text-white" />
+                        </div>
+                        <h2 className="text-2xl font-bold mb-2 text-green-600">
+                          Registration Approved! 🎉
+                        </h2>
+                        <p className="text-gray-600 mb-6">
+                          Your registration for <strong>{event.title}</strong> has been approved. We're excited to have you join us!
+                        </p>
+                        <div className="flex justify-center space-x-4">
+                          <Link href="/events">
+                            <Button variant="outline" data-testid="browse-more-events-button">Browse More Events</Button>
+                          </Link>
+                        </div>
+                    </CardContent>
+                </Card>
+            )
+          } else if (registrationStatus === 'rejected') {
+            return (
+                <Card className="border-red-500" data-testid="registration-rejected-card">
+                    <CardContent className="py-12 text-center">
+                        <div className="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                          <XCircle className="w-8 h-8 text-white" />
+                        </div>
+                        <h2 className="text-2xl font-bold mb-2 text-red-600">
+                          Registration Not Approved
+                        </h2>
+                        <p className="text-gray-600 mb-2">
+                          Unfortunately, your registration for <strong>{event.title}</strong> was not approved.
+                        </p>
+                        <p className="text-gray-600 mb-6">
+                          You are welcome to register again or browse other events.
+                        </p>
+                        <div className="flex justify-center space-x-4">
+                          <Button 
+                            onClick={() => {
+                              setIsRegistered(false)
+                              setRegistrationStatus(null)
+                            }}
+                            className="bg-[#00629B] hover:bg-[#004d7a]"
+                            data-testid="register-again-button"
+                          >
+                            Register Again
+                          </Button>
+                          <Link href="/events">
+                            <Button variant="outline" data-testid="browse-more-events-button">Browse More Events</Button>
+                          </Link>
+                        </div>
+                    </CardContent>
+                </Card>
+            )
+          }
+          
+          return (
+              <Card className="border-green-500">
+                  <CardContent className="py-12 text-center">
+                      <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <CheckCircle className="w-8 h-8 text-white" />
+                      </div>
+                      <h2 className="text-2xl font-bold mb-2 text-green-600">
+                        Already Registered!
+                      </h2>
+                      <p className="text-gray-600 mb-6">
+                        You have successfully registered for {event.title}.
+                      </p>
+                      <div className="flex justify-center space-x-4">
+                        <Link href="/events">
+                          <Button variant="outline">Browse More Events</Button>
+                        </Link>
+                      </div>
+                  </CardContent>
+              </Card>
+          )
+      }
+
+      if (!isRegistrationAvailable) {
+          let message = 'Registration for this event is currently closed.';
+          if (isRegNotYetOpen) {
+            message = `Registration opens on ${formattedRegStart}.`;
+          } else if (!event.registration_open) {
+            message = 'Registration has been manually closed by the admin.';
+          } else if (regEndDate && now > regEndDate) {
+            message = 'The registration deadline has passed.';
+          } else if (!regStartDate || !regEndDate) {
+            message = 'Registration dates have not been set by the admin.'
+          }
+          
+          return (
+              <Card>
+                  <CardContent className="py-12 text-center text-gray-500">
+                      {isRegNotYetOpen ? (
+                         <FileClock size={48} className="mx-auto mb-4 text-blue-500" />
+                      ) : (
+                         <XCircle size={48} className="mx-auto mb-4 text-red-500" />
+                      )}
+                      <p className="text-lg font-semibold mb-2">Registration Closed</p>
+                      <p>{message}</p>
+                  </CardContent>
+              </Card>
+          )
+      }
+
+      if (!user) {
+          return (
+              <Card className="border-yellow-500">
+                  <CardHeader>
+                    <CardTitle>Sign in to Register</CardTitle>
+                    <CardDescription>You must be logged in to access the registration form for this event.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                      <Link href={`/auth?redirect=${params.id}`}>
+                        <Button className="w-full bg-[#00629B] hover:bg-[#004d7a]">
+                          Login or Register
+                        </Button>
+                      </Link>
+                  </CardContent>
+              </Card>
+          )
+      }
       
+      if (submitted) {
+          return (
+              <Card className="border-orange-500" data-testid="registration-success-card">
+                  <CardContent className="py-12 text-center">
+                      <div className="w-16 h-16 bg-orange-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <FileClock className="w-8 h-8 text-white" />
+                      </div>
+                      <h2 className="text-2xl font-bold mb-2 text-orange-600">
+                        Registration Submitted Successfully!
+                      </h2>
+                      <p className="text-gray-600 mb-2">
+                        Thank you for registering for <strong>{event.title}</strong>.
+                      </p>
+                      <p className="text-gray-600 mb-6">
+                        Your registration is now pending approval from the event organizers. You'll receive an email notification once it's reviewed.
+                      </p>
+                      <div className="flex justify-center space-x-4">
+                        <Link href="/events">
+                          <Button variant="outline" data-testid="browse-more-events-button">Browse More Events</Button>
+                        </Link>
+                      </div>
+                  </CardContent>
+              </Card>
+          )
+      }
+
       // 6. Show Form (User logged in, registration open, not yet registered)
       return (
           <Card>
               <CardHeader>
                   <CardTitle>Registration Form</CardTitle>
-                  <CardDescription>Logged in as: {user.email}</CardDescription>
+                  {/* --- START OF FIX: Add optional chaining to prevent crash --- */}
+                  <CardDescription>Logged in as: {user?.email || 'Loading...'}</CardDescription>
+                  {/* --- END OF FIX --- */}
               </CardHeader>
               <CardContent>
-                  {/* --- START OF FIX: Pass state and handler down --- */}
-                  <DynamicForm
-                      fields={event.form_fields || []}
-                      onSubmit={handleSubmit}
-                      eventId={params.id}
-                      formData={formData}
-                      onFormChange={setFormData}
-                  />
+                  {/* --- START OF FIX: Show inline loader if re-checking --- */}
+                  {regCheckLoading && (
+                      <div className="py-12 text-center">
+                          <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#00629B]" />
+                          <p className="mt-4 text-gray-600">Checking registration status...</p>
+                      </div>
+                  )}
+                  
+                  {/* Show form when not re-checking */
+                  /* formData will be preserved from sessionStorage */
+                  }
+                  {!regCheckLoading && (
+                      <DynamicForm
+                          fields={event.form_fields || []}
+                          onSubmit={handleSubmit}
+                          eventId={params.id}
+                          formData={formData} // Pass the state from sessionStorage
+                          onFormChange={setAndStoreFormData} // Pass the setter
+                      />
+                  )}
                   {/* --- END OF FIX --- */}
               </CardContent>
           </Card>
@@ -273,9 +494,7 @@ export default function EventDetailPage() {
   }
 
   return (
-    // (The JSX return remains unchanged)
     <div className="min-h-screen bg-gray-50">
-      {/* Event Banner */}
       <div className="w-full h-64 bg-gradient-to-br from-[#00629B] to-[#004d7a] relative">
         {event.banner_url && (
           <img
@@ -289,7 +508,6 @@ export default function EventDetailPage() {
 
       <div className="container mx-auto px-4 -mt-16 relative z-10 pb-12">
         <div className="max-w-4xl mx-auto">
-          {/* Back Button */}
           <Link href="/events">
             <Button 
                 variant="ghost" 
@@ -300,7 +518,6 @@ export default function EventDetailPage() {
             </Button>
           </Link>
 
-          {/* Event Info Card */}
           <Card className="mb-8">
             <CardHeader>
               <div className="flex justify-between items-start">
@@ -323,7 +540,6 @@ export default function EventDetailPage() {
               </div>
             </CardHeader>
             <CardContent>
-              {/* Registration Timeline Card */}
               <Card className="mb-6 bg-gray-50">
                 <CardHeader>
                   <CardTitle className="text-lg">Registration Timeline</CardTitle>
@@ -347,7 +563,6 @@ export default function EventDetailPage() {
             </CardContent>
           </Card>
 
-          {/* Registration Form / Login Prompt */}
           {registrationContent()}
         </div>
       </div>

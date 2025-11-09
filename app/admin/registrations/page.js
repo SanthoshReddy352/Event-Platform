@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useState, Suspense } from 'react' // Import Suspense
+import { useRouter, useSearchParams } from 'next/navigation' // Import useSearchParams
 import Link from 'next/link'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { supabase } from '@/lib/supabase/client'
@@ -29,12 +29,42 @@ import {
   DialogDescription 
 } from '@/components/ui/dialog'
 
+// --- START OF FIX: Add Suspense wrapper for useSearchParams ---
+export default function AdminRegistrationsPageWrapper() {
+  return (
+    <ProtectedRoute>
+      <Suspense fallback={<PageLoadingSpinner />}>
+        <AdminRegistrationsContent />
+      </Suspense>
+    </ProtectedRoute>
+  )
+}
+
+function PageLoadingSpinner() {
+  return (
+    <div className="container mx-auto px-4 py-12">
+      <div className="text-center">
+        <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-[#00629B]"></div>
+        <p className="mt-4 text-gray-600">Loading registrations...</p>
+      </div>
+    </div>
+  );
+}
+// --- END OF FIX ---
+
+
 function AdminRegistrationsContent() {
   const router = useRouter()
+  const searchParams = useSearchParams() // Get URL params
   const { user, isSuperAdmin } = useAuth()
+  
   const [registrations, setRegistrations] = useState([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState('pending') // pending, approved, rejected, all
+  
+  // --- START OF FIX: Read filter from URL, default to 'pending' ---
+  const [filter, setFilter] = useState(searchParams.get('filter') || 'pending')
+  // --- END OF FIX ---
+
   const [processingId, setProcessingId] = useState(null)
   const [selectedRegistration, setSelectedRegistration] = useState(null)
 
@@ -43,10 +73,19 @@ function AdminRegistrationsContent() {
       fetchRegistrations()
     }
   }, [user, isSuperAdmin])
+  
+  // --- START OF FIX: Update URL when filter changes ---
+  const handleSetFilter = (newFilter) => {
+    setFilter(newFilter);
+    // Update the URL query parameter without a full page reload
+    router.push(`/admin/registrations?filter=${newFilter}`, { scroll: false });
+  }
+  // --- END OF FIX ---
 
   const fetchRegistrations = async () => {
     setLoading(true)
     try {
+      // (The entire data fetching logic, including cleanup, remains unchanged)
       const { data: { session }, error: sessionError } = await supabase.auth.getSession()
       if (sessionError || !session) {
         throw new Error("User not authenticated");
@@ -80,8 +119,6 @@ function AdminRegistrationsContent() {
         console.error('Exception during registration cleanup:', cleanupErr.message);
       }
       
-      
-      // Fetch events to get event titles AND FORM FIELDS
       const eventsRes = await fetch('/api/events')
       const eventsData = await eventsRes.json()
       
@@ -136,9 +173,6 @@ function AdminRegistrationsContent() {
       setLoading(false)
     }
   }
-  
-  // This helper is no longer needed as we iterate the form_fields array
-  // const getLabelForFieldId = (fieldId, formFields) => { ... }
 
   const handleApprove = async (participantId) => {
     if (!confirm('Approve this registration?')) return
@@ -163,7 +197,7 @@ function AdminRegistrationsContent() {
       const data = await response.json()
       
       if (data.success) {
-        fetchRegistrations()
+        fetchRegistrations() // Refetch data
       } else {
         alert(`Failed to approve: ${data.error}`)
       }
@@ -198,7 +232,7 @@ function AdminRegistrationsContent() {
       const data = await response.json()
       
       if (data.success) {
-        fetchRegistrations()
+        fetchRegistrations() // Refetch data
       } else {
         alert(`Failed to reject: ${data.error}`)
       }
@@ -217,16 +251,12 @@ function AdminRegistrationsContent() {
 
   const filteredRegistrations = getFilteredRegistrations()
 
-  if (loading) {
-    return (
-      <div className="container mx-auto px-4 py-12">
-        <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-[#00629B]"></div>
-          <p className="mt-4 text-gray-600">Loading registrations...</p>
-        </div>
-      </div>
-    )
+  // --- START OF FIX: Modified loading logic ---
+  // Only show full-page loader if we have NO data yet.
+  if (loading && registrations.length === 0) {
+    return <PageLoadingSpinner />;
   }
+  // --- END OF FIX ---
 
   return (
     <div className="container mx-auto px-4 py-12">
@@ -239,7 +269,9 @@ function AdminRegistrationsContent() {
       <div className="flex flex-wrap gap-2 mb-6" data-testid="filter-buttons">
         <Button
           variant={filter === 'pending' ? 'default' : 'outline'}
-          onClick={() => setFilter('pending')}
+          // --- START OF FIX: Use new handler ---
+          onClick={() => handleSetFilter('pending')}
+          // --- END OF FIX ---
           className={filter === 'pending' ? 'bg-[#00629B] hover:bg-[#004d7a]' : ''}
           data-testid="filter-pending"
         >
@@ -248,7 +280,9 @@ function AdminRegistrationsContent() {
         </Button>
         <Button
           variant={filter === 'approved' ? 'default' : 'outline'}
-          onClick={() => setFilter('approved')}
+          // --- START OF FIX: Use new handler ---
+          onClick={() => handleSetFilter('approved')}
+          // --- END OF FIX ---
           className={filter === 'approved' ? 'bg-[#00629B] hover:bg-[#004d7a]' : ''}
           data-testid="filter-approved"
         >
@@ -257,7 +291,9 @@ function AdminRegistrationsContent() {
         </Button>
         <Button
           variant={filter === 'rejected' ? 'default' : 'outline'}
-          onClick={() => setFilter('rejected')}
+          // --- START OF FIX: Use new handler ---
+          onClick={() => handleSetFilter('rejected')}
+          // --- END OF FIX ---
           className={filter === 'rejected' ? 'bg-[#00629B] hover:bg-[#004d7a]' : ''}
           data-testid="filter-rejected"
         >
@@ -266,7 +302,9 @@ function AdminRegistrationsContent() {
         </Button>
         <Button
           variant={filter === 'all' ? 'default' : 'outline'}
-          onClick={() => setFilter('all')}
+          // --- START OF FIX: Use new handler ---
+          onClick={() => handleSetFilter('all')}
+          // --- END OF FIX ---
           className={filter === 'all' ? 'bg-[#00629B] hover:bg-[#004d7a]' : ''}
           data-testid="filter-all"
         >
@@ -276,7 +314,15 @@ function AdminRegistrationsContent() {
       </div>
 
       {/* Registrations List */}
-      {filteredRegistrations.length === 0 ? (
+      {/* --- START OF FIX: Show inline loader --- */}
+      {loading && (
+        <div className="text-center py-4">
+          <Loader2 className="mx-auto h-6 w-6 animate-spin text-gray-400" />
+        </div>
+      )}
+      {/* --- END OF FIX --- */}
+      
+      {filteredRegistrations.length === 0 && !loading ? (
         <Card>
           <CardContent className="py-12 text-center">
             <p className="text-gray-500">No {filter !== 'all' ? filter : ''} registrations found</p>
@@ -284,7 +330,9 @@ function AdminRegistrationsContent() {
               <Button
                 variant="outline"
                 className="mt-4"
-                onClick={() => setFilter('all')}
+                // --- START OF FIX: Use new handler ---
+                onClick={() => handleSetFilter('all')}
+                // --- END OF FIX ---
                 data-testid="show-all-button"
               >
                 Show All Registrations
@@ -293,7 +341,9 @@ function AdminRegistrationsContent() {
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-4">
+        // --- START OF FIX: Add opacity rule ---
+        <div className={`space-y-4 ${loading ? 'opacity-50' : ''}`}>
+        {/* --- END OF FIX --- */}
           {filteredRegistrations.map((registration) => (
             <Card key={registration.id} className="transition-shadow" data-testid={`registration-card-${registration.id}`}>
               <CardHeader>
@@ -333,6 +383,7 @@ function AdminRegistrationsContent() {
                     size="sm"
                     onClick={() => setSelectedRegistration(registration)}
                     data-testid={`view-details-button-${registration.id}`}
+                    disabled={loading} // Disable while re-fetching
                   >
                     View Details
                   </Button>
@@ -344,7 +395,7 @@ function AdminRegistrationsContent() {
                     <Button
                       className="bg-green-600 hover:bg-green-700"
                       onClick={() => handleApprove(registration.id)}
-                      disabled={processingId === registration.id}
+                      disabled={processingId === registration.id || loading}
                       data-testid={`approve-button-${registration.id}`}
                     >
                       {processingId === registration.id ? (
@@ -357,7 +408,7 @@ function AdminRegistrationsContent() {
                     <Button
                       variant="destructive"
                       onClick={() => handleReject(registration.id)}
-                      disabled={processingId === registration.id}
+                      disabled={processingId === registration.id || loading}
                       data-testid={`reject-button-${registration.id}`}
                     >
                       {processingId === registration.id ? (
@@ -386,7 +437,7 @@ function AdminRegistrationsContent() {
         </div>
       )}
 
-      {/* --- START OF FIX: Modified Registration Details Modal --- */}
+      {/* (The Registration Details Modal remains unchanged) */}
       <Dialog 
         open={!!selectedRegistration} 
         onOpenChange={(isOpen) => {
@@ -404,10 +455,8 @@ function AdminRegistrationsContent() {
           </DialogHeader>
           <div className="py-4 space-y-4 max-h-[60vh] overflow-y-auto">
             {selectedRegistration && selectedRegistration.form_fields && selectedRegistration.form_fields.length > 0 ? (
-              // Iterate over the form_fields array to maintain order
               selectedRegistration.form_fields.map((field) => {
                 const value = selectedRegistration.responses[field.id];
-                // Check if the field type is 'url' or if the value string starts with http
                 const isUrl = field.type === 'url' || (typeof value === 'string' && (value.startsWith('http://') || value.startsWith('https://')));
 
                 return (
@@ -426,7 +475,6 @@ function AdminRegistrationsContent() {
                       </a>
                     ) : (
                       <p className="text-sm text-gray-600 whitespace-pre-wrap">
-                        {/* Handle boolean values, empty strings, null, and undefined gracefully */}
                         {typeof value === 'boolean' ? (value ? 'Yes' : 'No') : (value !== null && value !== undefined && value !== '' ? String(value) : 'N/A')}
                       </p>
                     )}
@@ -434,7 +482,6 @@ function AdminRegistrationsContent() {
                 );
               })
             ) : (
-              // Fallback for registrations with no form_fields (e.g., old data)
               selectedRegistration && Object.entries(selectedRegistration.responses || {}).map(([key, value]) => (
                 <div key={key} className="border-l-2 border-[#00629B] pl-3">
                   <p className="text-sm font-medium text-gray-800">{key}</p>
@@ -443,23 +490,13 @@ function AdminRegistrationsContent() {
               ))
             )}
             
-            {/* Show message if no responses are found at all */}
             {selectedRegistration && (!selectedRegistration.form_fields || selectedRegistration.form_fields.length === 0) && (!selectedRegistration.responses || Object.keys(selectedRegistration.responses).length === 0) && (
                <p className="text-gray-500">No responses found for this registration.</p>
             )}
           </div>
         </DialogContent>
       </Dialog>
-      {/* --- END OF FIX --- */}
       
     </div>
-  )
-}
-
-export default function AdminRegistrationsPage() {
-  return (
-    <ProtectedRoute>
-      <AdminRegistrationsContent />
-    </ProtectedRoute>
   )
 }

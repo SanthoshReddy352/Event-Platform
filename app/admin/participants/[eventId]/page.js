@@ -6,7 +6,9 @@ import ProtectedRoute from '@/components/ProtectedRoute'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card' 
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { ArrowLeft, Download, ShieldAlert } from 'lucide-react' 
+// --- START OF FIX: Import Loader2 ---
+import { ArrowLeft, Download, ShieldAlert, Loader2 } from 'lucide-react' 
+// --- END OF FIX ---
 import { format } from 'date-fns'
 import { useAuth } from '@/context/AuthContext' 
 import { supabase } from '@/lib/supabase/client' 
@@ -59,12 +61,10 @@ function ParticipantsContent() {
       }
 
       if (participantsData.success && participantsData.participants) {
-          // --- START OF FIX: Filter for approved participants only ---
           const approvedParticipants = participantsData.participants.filter(
             (p) => p.status === 'approved'
           );
           setParticipants(approvedParticipants);
-          // --- END OF FIX ---
       }
       
       setDynamicFields(fields.map(f => ({ label: f.label, id: f.id })));
@@ -91,7 +91,6 @@ function ParticipantsContent() {
   };
 
   const exportToCSV = () => {
-    // --- MODIFICATION: The 'participants' state now only contains 'approved' users, so this exports correctly ---
     if (participants.length === 0) {
       alert('No approved participants to export')
       return
@@ -132,7 +131,11 @@ function ParticipantsContent() {
     window.URL.revokeObjectURL(url)
   }
 
-  if (loading || authLoading) {
+  // --- START OF FIX: Modified loading logic ---
+  // Only show full-page loader if BOTH auth is loading OR
+  // we are data-loading AND have no participants yet.
+  if ((authLoading || loading) && participants.length === 0) {
+  // --- END OF FIX ---
     return (
       <div className="text-center py-12">
         <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-[#00629B]"></div>
@@ -193,30 +196,40 @@ function ParticipantsContent() {
           <Button
             onClick={exportToCSV}
             className="bg-[#00629B] hover:bg-[#004d7a]"
+            // --- START OF FIX: Disable button while re-loading ---
+            disabled={loading}
+            // --- END OF FIX ---
           >
-            <Download size={20} className="mr-2" />
-            Export CSV
+            {/* --- START OF FIX: Show inline loader --- */}
+            {loading ? (
+              <Loader2 size={20} className="mr-2 animate-spin" />
+            ) : (
+              <Download size={20} className="mr-2" />
+            )}
+            {loading ? 'Refreshing...' : 'Export CSV'}
+            {/* --- END OF FIX --- */}
           </Button>
         )}
       </div>
 
-      {participants.length === 0 ? (
+      {/* This part is now safe. If `loading` is true but `participants.length > 0`,
+        the list will remain on-screen, and only the "Export" button will show a spinner.
+      */}
+      {participants.length === 0 && !loading ? (
         <Card>
           <CardContent className="py-12 text-center text-gray-500">
-            {/* --- START OF FIX: Updated empty state message --- */}
             <p>No approved participants yet</p>
-            {/* --- END OF FIX --- */}
           </CardContent>
         </Card>
       ) : (
         <Card>
           <CardHeader>
-            {/* --- START OF FIX: Updated title --- */}
             <CardTitle>Total Approved Registrations: {participants.length}</CardTitle>
-            {/* --- END OF FIX --- */}
           </CardHeader>
           <CardContent className="p-0">
-            <div className="overflow-x-auto">
+            {/* --- START OF FIX: Show opacity if loading --- */}
+            <div className={`overflow-x-auto ${loading ? 'opacity-50' : ''}`}>
+            {/* --- END OF FIX --- */}
               <Table>
                 <TableHeader>
                   <TableRow>
