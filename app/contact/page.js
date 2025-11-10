@@ -1,264 +1,171 @@
-// app/auth/page.js
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation' 
-import { supabase } from '@/lib/supabase/client'
 import GradientText from '@/components/GradientText'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog' 
-import { useAuth } from '@/context/AuthContext' 
+import { useAuth } from '@/context/AuthContext'
+import { supabase } from '@/lib/supabase/client'
+import { Loader2 } from 'lucide-react'
 
-export default function ParticipantAuthPage() {
-  const router = useRouter()
-  const searchParams = useSearchParams() 
-  const redirectEventId = searchParams.get('redirect')
-  const finalRedirect = redirectEventId ? `/events/${redirectEventId}` : '/events'; 
-
-  const { user, loading: authLoading } = useAuth() 
-
+export default function ContactPage() {
+  const { user, isAdmin, loading: authLoading } = useAuth()
+  const [formData, setFormData] = useState({ name: '', email: '', message: '' })
   const [loading, setLoading] = useState(false)
-  const [sessionLoading, setSessionLoading] = useState(true) 
-  
-  const [loginData, setLoginData] = useState({ email: '', password: '' })
-  const [signupData, setSignupData] = useState({ email: '', password: '', confirmPassword: '' })
   const [error, setError] = useState('')
-  const [currentTab, setCurrentTab] = useState('login')
-  
-  const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState(false)
-  const [resetEmail, setResetEmail] = useState('')
-  const [resetMessage, setResetMessage] = useState('')
-  const [isResetting, setIsResetting] = useState(false)
+  const [success, setSuccess] = useState('')
 
   useEffect(() => {
-    if (!authLoading) {
-      if (user) {
-          router.replace(finalRedirect)
-      } else {
-          setSessionLoading(false)
+    // Pre-fill form if user is logged in and is a participant
+    if (user && !isAdmin) {
+      const fetchProfile = async () => {
+        const { data: profile, error } = await supabase
+          .from('profiles')
+          .select('name')
+          .eq('id', user.id)
+          .maybeSingle()
+        
+        setFormData((prev) => ({
+          ...prev,
+          email: user.email || '',
+          name: profile?.name || '',
+        }))
       }
+      fetchProfile()
     }
-  }, [user?.id, authLoading, router, finalRedirect])
+  }, [user, isAdmin])
 
-  const handleLogin = async (e) => {
-    // (Unchanged)
-  }
-
-  const handleSignup = async (e) => {
-    // (Unchanged)
-  }
-  
-  const handleForgotPassword = async (e) => {
-    // (Unchanged)
+  const handleChange = (e) => {
+    const { id, value } = e.target
+    setFormData((prev) => ({ ...prev, [id]: value }))
   }
 
-  
-  if (sessionLoading || authLoading) {
-    return (
-        <div className="min-h-screen flex items-center justify-center">
-            <div className="text-center">
-              <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-brand-red"></div> {/* CHANGED */}
-              <p className="mt-4 text-gray-400">Checking session...</p> {/* CHANGED */}
-            </div>
-        </div>
-    )
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setLoading(true)
+    setError('')
+    setSuccess('')
+
+    try {
+      const response = await fetch('/api/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        setSuccess('Your message has been sent successfully! We will get back to you soon.')
+        // Reset message field, but keep pre-filled data
+        setFormData((prev) => ({
+          ...prev,
+          message: '',
+        }))
+      } else {
+        throw new Error(data.error || 'Failed to send message.')
+      }
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
   }
+
+  // Determine if fields should be disabled
+  const isUserParticipant = !authLoading && user && !isAdmin
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background py-12 px-4"> {/* CHANGED */}
-      <div className="w-full max-w-md">
+    <div className="container mx-auto px-4 py-12">
+      <div className="max-w-xl mx-auto">
         <div className="text-center mb-8">
-          {/* --- START OF THEME CHANGE --- */}
-          <img src="/logo.jpg" alt="EventX Logo" className="w-48 mx-auto mb-4" /> {/* CHANGED */}
-          <h1 className="text-3xl font-bold">
-            <GradientText>Participant Portal</GradientText>
+          <h1 className="text-4xl font-bold mb-4">
+            <GradientText>Contact Us</GradientText>
           </h1>
-          <p className="text-gray-400 mt-2">Login or create an account to register for events</p> {/* CHANGED */}
-          {/* --- END OF THEME CHANGE --- */}
+          <p className="text-gray-400">
+            Have questions? Fill out the form below to get in touch with our team.
+          </p>
         </div>
 
-        <Tabs defaultValue="login" className="w-full" value={currentTab} onValueChange={setCurrentTab}>
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="login">Login</TabsTrigger>
-            <TabsTrigger value="signup">Sign Up</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="login">
-            <Card>
-              <CardHeader>
-                <CardTitle>Login</CardTitle>
-                <CardDescription>Sign in to access event registration</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handleLogin} className="space-y-4">
-                  {error && (
-                    <div className="bg-red-900/50 border border-red-700 text-red-300 px-4 py-3 rounded"> {/* CHANGED */}
-                      {error}
-                    </div>
-                  )}
-                  <div className="space-y-2">
-                    <Label htmlFor="login-email">Email</Label>
-                    <Input
-                      id="login-email"
-                      type="email"
-                      value={loginData.email}
-                      onChange={(e) => setLoginData({ ...loginData, email: e.target.value })}
-                      placeholder="participant@example.com"
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="login-password">Password</Label>
-                    <Input
-                      id="login-password"
-                      type="password"
-                      value={loginData.password}
-                      onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
-                      required
-                    />
-                  </div>
-                  
-                  <div className="text-right">
-                    <Button 
-                        type="button" 
-                        variant="link" 
-                        className="h-auto p-0 text-sm"
-                        onClick={() => {
-                            setError('')
-                            setIsForgotPasswordOpen(true)
-                        }}
-                    >
-                        Forgot Password?
-                    </Button>
-                  </div>
-
-                  {/* --- START OF THEME CHANGE --- */}
-                  <Button
-                    type="submit"
-                    className="w-full bg-brand-gradient text-white font-semibold hover:opacity-90 transition-opacity" // CHANGED
-                    disabled={loading}
-                  >
-                    {loading ? 'Logging in...' : 'Login'}
-                  </Button>
-                  {/* --- END OF THEME CHANGE --- */}
-                </form>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="signup">
-            <Card>
-              <CardHeader>
-                <CardTitle>Create Account</CardTitle>
-                <CardDescription>Create a new participant account</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handleSignup} className="space-y-4">
-                  {error && (
-                    <div className="bg-red-900/50 border border-red-700 text-red-300 px-4 py-3 rounded"> {/* CHANGED */}
-                      {error}
-                    </div>
-                  )}
-                  {/* (Fields unchanged) */}
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-email">Email</Label>
-                    <Input
-                      id="signup-email"
-                      type="email"
-                      value={signupData.email}
-                      onChange={(e) => setSignupData({ ...signupData, email: e.target.value })}
-                      placeholder="participant@example.com"
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-password">Password</Label>
-                    <Input
-                      id="signup-password"
-                      type="password"
-                      value={signupData.password}
-                      onChange={(e) => setSignupData({ ...signupData, password: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="confirm-password">Confirm Password</Label>
-                    <Input
-                      id="confirm-password"
-                      type="password"
-                      value={signupData.confirmPassword}
-                      onChange={(e) => setSignupData({ ...signupData, confirmPassword: e.target.value })}
-                      required
-                    />
-                  </div>
-                  {/* --- START OF THEME CHANGE --- */}
-                  <Button
-                    type="submit"
-                    className="w-full bg-brand-gradient text-white font-semibold hover:opacity-90 transition-opacity" // CHANGED
-                    disabled={loading}
-                  >
-                    {loading ? 'Creating Account...' : 'Sign Up'}
-                  </Button>
-                  {/* --- END OF THEME CHANGE --- */}
-                </form>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
-      </div>
-
-      <Dialog open={isForgotPasswordOpen} onOpenChange={setIsForgotPasswordOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Reset Password</DialogTitle>
-            <DialogDescription>
-              Enter the email address associated with your account. We will send a password reset link to that email.
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleForgotPassword} className="space-y-4">
-            {resetMessage && (
-                <div className={`px-4 py-3 rounded text-sm ${resetMessage.includes('Error') ? 'bg-red-900/50 text-red-300' : 'bg-green-900/50 text-green-300'}`}> {/* CHANGED */}
-                    {resetMessage}
+        <Card>
+          <CardHeader>
+            <CardTitle>Send Us a Message</CardTitle>
+            <CardDescription>We'll do our best to respond within 24 hours.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {success && (
+                <div className="bg-green-900/50 border border-green-700 text-green-300 px-4 py-3 rounded">
+                  {success}
                 </div>
-            )}
-            <div className="grid gap-2">
-              <Label htmlFor="reset-email">Email</Label>
-              <Input
-                id="reset-email"
-                type="email"
-                value={resetEmail}
-                onChange={(e) => setResetEmail(e.target.value)}
-                placeholder="participant@example.com"
-                required
-                disabled={isResetting || resetMessage.includes('Password reset link sent')}
-              />
-            </div>
-            <DialogFooter>
-              <Button 
-                type="button" 
-                variant="outline" 
-                onClick={() => setIsForgotPasswordOpen(false)}
-                disabled={isResetting}
+              )}
+              {error && (
+                <div className="bg-red-900/50 border border-red-700 text-red-300 px-4 py-3 rounded">
+                  {error}
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Name</Label>
+                  <Input
+                    id="name"
+                    value={formData.name}
+                    onChange={handleChange}
+                    placeholder="Your Name"
+                    required
+                    disabled={isUserParticipant}
+                    className={isUserParticipant ? 'cursor-not-allowed bg-gray-800/50' : ''}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={formData.email}
+                    onChange={handleChange}
+                    placeholder="your.email@example.com"
+                    required
+                    disabled={isUserParticipant}
+                    className={isUserParticipant ? 'cursor-not-allowed bg-gray-800/50' : ''}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="message">Message</Label>
+                <Textarea
+                  id="message"
+                  value={formData.message}
+                  onChange={handleChange}
+                  placeholder="Your message or question..."
+                  required
+                  rows={6}
+                />
+              </div>
+
+              <Button
+                type="submit"
+                className="w-full bg-brand-gradient text-white font-semibold hover:opacity-90 transition-opacity"
+                disabled={loading}
               >
-                Cancel
+                {loading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Sending...
+                  </>
+                ) : (
+                  'Send Message'
+                )}
               </Button>
-              {/* --- START OF THEME CHANGE --- */}
-              <Button 
-                type="submit" 
-                className="bg-brand-gradient text-white font-semibold hover:opacity-90 transition-opacity" // CHANGED
-                disabled={isResetting || resetMessage.includes('Password reset link sent')}
-              >
-                {isResetting ? 'Sending...' : 'Send Reset Link'}
-              </Button>
-              {/* --- END OF THEME CHANGE --- */}
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   )
 }
