@@ -53,7 +53,12 @@ export default function EventDetailPage() {
   
   const [isRegistered, setIsRegistered] = useState(false) 
   const [registrationStatus, setRegistrationStatus] = useState(null) // 'pending', 'approved', 'rejected'
-  const [regCheckLoading, setRegCheckLoading] = useState(true) 
+  
+  // --- START OF FIX: Initialize regCheckLoading to false ---
+  // This prevents the loader from showing on mount/tab-back by default.
+  // It will only be set to true when the check is *actively* running.
+  const [regCheckLoading, setRegCheckLoading] = useState(false) 
+  // --- END OF FIX ---
   
   // --- Use sessionStorage for form data persistence ---
   const storageKey = `formData-${params.id}`;
@@ -88,10 +93,10 @@ export default function EventDetailPage() {
       if (!userId || !eventId) {
           setIsRegistered(false)
           setRegistrationStatus(null)
-          setRegCheckLoading(false)
+          // setRegCheckLoading(false) // Not needed here, will be set in effect
           return
       }
-      setRegCheckLoading(true)
+      setRegCheckLoading(true) // Loader ON
       try {
           const { data: { session }, error: sessionError } = await supabase.auth.getSession()
           if (sessionError) throw sessionError;
@@ -113,9 +118,9 @@ export default function EventDetailPage() {
           setIsRegistered(false)
           setRegistrationStatus(null)
       } finally {
-          setRegCheckLoading(false)
+          setRegCheckLoading(false) // Loader OFF
       }
-  }, [])
+  }, []) // Empty dependency array is okay here as setters are stable
 
   useEffect(() => {
     const fetchEventData = async () => {
@@ -140,13 +145,17 @@ export default function EventDetailPage() {
   }, [params.id]);
 
   useEffect(() => {
+    // This guard ensures we don't run until auth and event data are loaded
     if (loading || authLoading || !event) return; 
 
     if (user) {
         checkRegistrationStatus(user.id, event.id);
     } else {
+        // If user is not logged in, we know they aren't registered
         setIsRegistered(false);
-        setRegCheckLoading(false);
+        setRegistrationStatus(null);
+        // We also know we don't need to check, so loading is false.
+        setRegCheckLoading(false); 
     }
   }, [user, event, loading, authLoading, checkRegistrationStatus]); 
 
@@ -210,7 +219,10 @@ export default function EventDetailPage() {
     }
   }
 
-  if (loading || !event) {
+  // --- START OF FIX: Show main event loader if auth is done but event isn't ---
+  // This handles the initial load gracefully.
+  if (loading && !authLoading) {
+  // --- END OF FIX ---
      return (
         <div className="min-h-screen flex items-center justify-center">
             <div className="text-center">
@@ -224,18 +236,18 @@ export default function EventDetailPage() {
   // (All date/status logic remains unchanged)
   const TIME_ZONE = 'Asia/Kolkata';
   const now = new Date();
-  const eventStartDate = event.event_date ? parseISO(event.event_date) : null;
-  const eventEndDate = event.event_end_date ? parseISO(event.event_end_date) : null;
-  const regStartDate = event.registration_start ? parseISO(event.registration_start) : null;
-  const regEndDate = event.registration_end ? parseISO(event.registration_end) : null;
+  const eventStartDate = event?.event_date ? parseISO(event.event_date) : null;
+  const eventEndDate = event?.event_end_date ? parseISO(event.event_end_date) : null;
+  const regStartDate = event?.registration_start ? parseISO(event.registration_start) : null;
+  const regEndDate = event?.registration_end ? parseISO(event.registration_end) : null;
   const { date: formattedDate, time: formattedTime } = formatEventDate(eventStartDate, eventEndDate, TIME_ZONE);
   const formattedRegStart = formatRegDate(regStartDate, TIME_ZONE);
   const formattedRegEnd = formatRegDate(regEndDate, TIME_ZONE);
   const isCompleted = eventEndDate && now > eventEndDate;
   const isRegNotYetOpen = regStartDate && now < regStartDate;
   const isRegistrationAvailable = 
-    event.is_active &&
-    event.registration_open &&
+    event?.is_active &&
+    event?.registration_open &&
     regStartDate && 
     regEndDate &&
     now >= regStartDate &&
@@ -452,12 +464,10 @@ export default function EventDetailPage() {
           <Card>
               <CardHeader>
                   <CardTitle>Registration Form</CardTitle>
-                  {/* --- START OF PERMANENT FIX: Add optional chaining --- */}
                   <CardDescription>Logged in as: {user?.email || 'Loading...'}</CardDescription>
-                  {/* --- END OF PERMANENT FIX --- */}
               </CardHeader>
-              {/* --- START OF PERMANENT FIX: Overlay loader, don't unmount form --- */}
               <CardContent className="relative">
+                  {/* This loader is now controlled correctly and won't show on mount */}
                   {regCheckLoading && (
                       <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm">
                           <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#00629B]" />
@@ -465,11 +475,6 @@ export default function EventDetailPage() {
                       </div>
                   )}
                   
-                  {/* This fieldset is now ALWAYS rendered.
-                    It is DISABLED while checking, which prevents clicks.
-                    The loader above will cover it visually.
-                    This preserves the form's state.
-                  */}
                   <fieldset disabled={regCheckLoading}>
                       <DynamicForm
                           fields={event.form_fields || []}
@@ -479,16 +484,36 @@ export default function EventDetailPage() {
                           onFormChange={setAndStoreFormData} // Pass the setter
                       />
                   </fieldset>
-              {/* --- END OF PERMANENT FIX --- */}
               </CardContent>
           </Card>
       )
   }
 
+  // Handle case where event data failed to load
+  if (!loading && !authLoading && !event) {
+    return (
+       <div className="min-h-screen flex items-center justify-center">
+           <div className="text-center">
+             <XCircle size={48} className="mx-auto mb-4 text-red-500" />
+             <h1 className="text-2xl font-bold mb-4">Event Not Found</h1>
+             <p className="text-gray-600 mb-6">Sorry, we couldn't find the event you're looking for.</p>
+             <Link href="/events">
+               <Button 
+                   variant="outline"
+               >
+                 <ArrowLeft size={20} className="mr-2" />
+                 Back to Events
+               </Button>
+             </Link>
+           </div>
+       </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="w-full h-64 bg-gradient-to-br from-[#00629B] to-[#004d7a] relative">
-        {event.banner_url && (
+        {event?.banner_url && (
           <img
             src={event.banner_url}
             alt={event.title}
@@ -510,52 +535,57 @@ export default function EventDetailPage() {
             </Button>
           </Link>
 
-          <Card className="mb-8">
-            <CardHeader>
-              <div className="flex justify-between items-start">
-                <div>
-                  <CardTitle className="text-3xl mb-2">{event.title}</CardTitle>
-                  <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-gray-600">
-                    <div className="flex items-center">
-                      <Calendar size={16} className="mr-2 text-[#00629B]" />
-                      <span>{formattedDate}</span>
-                    </div>
-                    {formattedTime && (
-                      <div className="flex items-center">
-                        <Clock size={16} className="mr-2 text-[#00629B]" />
-                        <span>{formattedTime}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                {statusBadge}
-              </div>
-            </CardHeader>
-            <CardContent>
-              <Card className="mb-6 bg-gray-50">
+          {/* This part will now wait until the event is loaded */}
+          {event && (
+            <>
+              <Card className="mb-8">
                 <CardHeader>
-                  <CardTitle className="text-lg">Registration Timeline</CardTitle>
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <CardTitle className="text-3xl mb-2">{event.title}</CardTitle>
+                      <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-gray-600">
+                        <div className="flex items-center">
+                          <Calendar size={16} className="mr-2 text-[#00629B]" />
+                          <span>{formattedDate}</span>
+                        </div>
+                        {formattedTime && (
+                          <div className="flex items-center">
+                            <Clock size={16} className="mr-2 text-[#00629B]" />
+                            <span>{formattedTime}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    {statusBadge}
+                  </div>
                 </CardHeader>
-                <CardContent className="space-y-2 text-sm">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium w-20">Starts:</span>
-                    <span className="text-gray-700">{formattedRegStart}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium w-20">Ends:</span>
-                    <span className="text-gray-700">{formattedRegEnd}</span>
-                  </div>
+                <CardContent>
+                  <Card className="mb-6 bg-gray-50">
+                    <CardHeader>
+                      <CardTitle className="text-lg">Registration Timeline</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-2 text-sm">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium w-20">Starts:</span>
+                        <span className="text-gray-700">{formattedRegStart}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium w-20">Ends:</span>
+                        <span className="text-gray-700">{formattedRegEnd}</span>
+                      </div>
+                    </CardContent>
+                  </Card>
+                
+                  <h3 className="font-bold text-xl mb-2">Description</h3>
+                  <p className="text-gray-700 whitespace-pre-wrap">
+                    {event.description || 'No description available'}
+                  </p>
                 </CardContent>
               </Card>
-            
-              <h3 className="font-bold text-xl mb-2">Description</h3>
-              <p className="text-gray-700 whitespace-pre-wrap">
-                {event.description || 'No description available'}
-              </p>
-            </CardContent>
-          </Card>
 
-          {registrationContent()}
+              {registrationContent()}
+            </>
+          )}
         </div>
       </div>
     </div>
