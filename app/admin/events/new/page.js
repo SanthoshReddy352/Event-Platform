@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -9,36 +9,30 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Upload, Link as LinkIcon, ShieldAlert } from 'lucide-react'
+import { Upload, Link as LinkIcon, ArrowLeft } from 'lucide-react' // Added ArrowLeft
 import { useDropzone } from 'react-dropzone'
 import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/context/AuthContext' 
 
-// (Helper functions remain unchanged)
-// Helper to convert ISO string (from DB) to local datetime-local format
-const toDateTimeLocal = (isoString) => {
-  if (!isoString) return '';
+// Helper to convert datetime-local string (from input) to ISO format (UTC)
+const toISOString = (dateTimeLocalString) => {
+    if (!dateTimeLocalString) return null;
+    return new Date(dateTimeLocalString).toISOString();
+}
+
+// Helper to get current datetime-local string
+const getCurrentDateTimeLocal = () => {
   try {
-    const date = new Date(isoString);
+    const date = new Date();
     const localDate = new Date(date.getTime() - (date.getTimezoneOffset() * 60000));
     return localDate.toISOString().slice(0, 16);
   } catch {
     return '';
   }
 }
-// Helper to convert datetime-local string (from input) back to ISO format (UTC)
-const toISOString = (dateTimeLocalString) => {
-    if (!dateTimeLocalString) return null;
-    return new Date(dateTimeLocalString).toISOString();
-}
 
-
-function EditEventContent() {
-  const params = useParams()
+function NewEventContent() {
   const router = useRouter()
-  const [event, setEvent] = useState(null) 
-  const [loading, setLoading] = useState(true)
-  const [found, setFound] = useState(false) 
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -46,7 +40,7 @@ function EditEventContent() {
     event_end_date: '',
     is_active: true,
     registration_open: true,
-    registration_start: '',
+    registration_start: getCurrentDateTimeLocal(), // Default to now
     registration_end: '',
     banner_url: '',
   })
@@ -55,46 +49,7 @@ function EditEventContent() {
   const [bannerFile, setBannerFile] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   
-  const { user, isSuperAdmin, loading: authLoading } = useAuth()
-
-  const fetchEvent = useCallback(async () => {
-    if (!params.id) return;
-    try {
-      const response = await fetch(`/api/events/${params.id}`)
-      const data = await response.json()
-      if (data.success) {
-        const event = data.event
-        setEvent(event) 
-        
-        setFormData({
-          title: event.title,
-          description: event.description || '',
-          event_date: toDateTimeLocal(event.event_date),
-          event_end_date: toDateTimeLocal(event.event_end_date),
-          is_active: event.is_active,
-          registration_open: event.registration_open,
-          registration_start: toDateTimeLocal(event.registration_start), 
-          registration_end: toDateTimeLocal(event.registration_end),     
-          banner_url: event.banner_url || '',
-        })
-        setBannerUrl(event.banner_url || '')
-        setFound(true)
-      } else {
-        setFound(false)
-      }
-    } catch (error) {
-      console.error('Error fetching event:', error)
-      setFound(false)
-    } finally {
-      setLoading(false)
-    }
-  }, [params.id])
-
-  useEffect(() => {
-    if (params.id) {
-      fetchEvent()
-    }
-  }, [params.id, fetchEvent])
+  const { loading: authLoading } = useAuth()
 
   const onDrop = useCallback((acceptedFiles) => {
     if (acceptedFiles.length > 0) {
@@ -134,7 +89,7 @@ function EditEventContent() {
   const handleSubmit = async (e) => {
     e.preventDefault()
 
-    // --- (Validation remains unchanged) ---
+    // --- Validation ---
     if (formData.event_end_date && formData.event_date && new Date(formData.event_end_date) < new Date(formData.event_date)) {
         alert('Event end date cannot be before the event start date.');
         return;
@@ -148,7 +103,7 @@ function EditEventContent() {
     setIsSubmitting(true)
 
     try {
-      let finalBannerUrl = formData.banner_url
+      let finalBannerUrl = ''
 
       if (bannerMode === 'upload' && bannerFile) {
         finalBannerUrl = await uploadBanner()
@@ -163,11 +118,14 @@ function EditEventContent() {
         event_end_date: toISOString(formData.event_end_date),
         registration_start: toISOString(formData.registration_start),
         registration_end: toISOString(formData.registration_end),
+        form_fields: [], // Initialize with empty form
       }
       
       const { data: { session } } = await supabase.auth.getSession();
-      const response = await fetch(`/api/events/${params.id}`, {
-        method: 'PUT',
+      
+      // --- CHANGED to POST and /api/events ---
+      const response = await fetch(`/api/events`, {
+        method: 'POST',
         headers: { 
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${session.access_token}`
@@ -177,41 +135,40 @@ function EditEventContent() {
 
       const data = await response.json()
       if (data.success) {
-        alert('Event updated successfully!')
+        alert('Event created successfully!')
         router.push('/admin/events')
       } else {
-        alert(`Failed to update event: ${data.error}`) 
+        alert(`Failed to create event: ${data.error}`) 
         console.error('API Error:', data.error);
       }
     } catch (error) {
-      console.error('Error updating event:', error)
+      console.error('Error creating event:', error)
       alert('An error occurred')
     } finally {
       setIsSubmitting(false)
     }
   }
 
-  if (loading || authLoading) {
+  if (authLoading) {
     return (
       <div className="text-center py-12">
-        <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-brand-red"></div> {/* CHANGED */}
+        <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-brand-red"></div>
       </div>
     )
   }
-  
-  if (!found) {
-    // (Unchanged)
-  }
 
-  const canManage = event && user && (isSuperAdmin || event.created_by === user.id);
-  if (!canManage) {
-    // (Unchanged)
-  }
-
-  // If we reach here, user has permission
   return (
     <div className="container mx-auto px-4 py-12 max-w-3xl">
-      <h1 className="text-4xl font-bold mb-8">Edit Event</h1>
+      <Button
+        variant="ghost"
+        onClick={() => router.push('/admin/events')}
+        className="mb-4"
+      >
+        <ArrowLeft size={20} className="mr-2" />
+        Back to Events
+      </Button>
+      
+      <h1 className="text-4xl font-bold mb-8">Create New Event</h1>
 
       <form onSubmit={handleSubmit}>
         <Card className="mb-6">
@@ -219,7 +176,6 @@ function EditEventContent() {
             <CardTitle>Event Details</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* (Form fields are unchanged) */}
             <div className="space-y-2">
               <Label htmlFor="title">Event Title *</Label>
               <Input
@@ -229,7 +185,7 @@ function EditEventContent() {
                 required
               />
             </div>
-            {/* ... other fields ... */}
+            
             <div className="space-y-2">
               <Label htmlFor="description">Description</Label>
               <Textarea
@@ -315,19 +271,7 @@ function EditEventContent() {
             <CardTitle>Event Banner</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {formData.banner_url && (
-              <div className="mb-4">
-                <Label className="mb-2 block">Current Banner</Label>
-                <img
-                  src={formData.banner_url}
-                  alt="Current banner"
-                  className="w-full h-48 object-cover rounded-lg"
-                />
-              </div>
-            )}
-
             <div className="flex space-x-4 mb-4">
-              {/* --- START OF THEME CHANGE --- */}
               <Button
                 type="button"
                 variant={bannerMode === 'url' ? 'default' : 'outline'}
@@ -362,7 +306,7 @@ function EditEventContent() {
               <div
                 {...getRootProps()}
                 className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer ${
-                  isDragActive ? 'border-brand-red bg-red-900/10' : 'border-gray-600' // CHANGED
+                  isDragActive ? 'border-brand-red bg-red-900/10' : 'border-gray-600'
                 }`}
               >
                 <input {...getInputProps()} />
@@ -370,13 +314,12 @@ function EditEventContent() {
                 {bannerFile ? (
                   <p className="text-sm">Selected: <strong>{bannerFile.name}</strong></p>
                 ) : (
-                  <p className="text-sm text-gray-400"> {/* CHANGED */}
+                  <p className="text-sm text-gray-400">
                     {isDragActive ? 'Drop here' : 'Drag & drop or click to select new image'}
                   </p>
                 )}
               </div>
             )}
-            {/* --- END OF THEME CHANGE --- */}
           </CardContent>
         </Card>
 
@@ -384,25 +327,23 @@ function EditEventContent() {
           <Button type="button" variant="outline" onClick={() => router.back()}>
             Cancel
           </Button>
-          {/* --- START OF THEME CHANGE --- */}
           <Button
             type="submit"
-            className="bg-brand-gradient text-white font-semibold hover:opacity-90 transition-opacity" // CHANGED
+            className="bg-brand-gradient text-white font-semibold hover:opacity-90 transition-opacity"
             disabled={isSubmitting}
           >
-            {isSubmitting ? 'Updating...' : 'Update Event'}
+            {isSubmitting ? 'Creating...' : 'Create Event'}
           </Button>
-          {/* --- END OF THEME CHANGE --- */}
         </div>
       </form>
     </div>
   )
 }
 
-export default function EditEventPage() {
+export default function NewEventPage() {
   return (
     <ProtectedRoute>
-      <EditEventContent />
+      <NewEventContent />
     </ProtectedRoute>
   )
 }

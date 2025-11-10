@@ -140,6 +140,22 @@ code {
   body {
     @apply bg-background text-foreground;
     }
+  
+  /* --- START OF CHANGE --- */
+  /* Style for datetime-local and date input icons in dark mode */
+  .dark .custom-date-icon::-webkit-calendar-picker-indicator {
+    /* This filter changes the white icon to the theme's red color */
+    filter: invert(30%) sepia(90%) saturate(5000%) hue-rotate(345deg) brightness(100%) contrast(100%);
+    cursor: pointer;
+  }
+  
+  /* Style for light mode (in case it's ever used) */
+  .custom-date-icon::-webkit-calendar-picker-indicator {
+     /* This filter changes the black icon to the theme's red color */
+    filter: invert(30%) sepia(90%) saturate(5000%) hue-rotate(345deg) brightness(100%) contrast(100%);
+    cursor: pointer;
+  }
+  /* --- END OF CHANGE --- */
 }
 
 /* Gradient text utilities */
