@@ -148,8 +148,8 @@ function EventsPage() {
       {/* --- START OF MODIFICATION: Show clear filter button --- */}
       {clubFilter && (
         <div className="mb-6 flex justify-start">
-          <Button variant="outline" onClick={clearClubFilter} className="bg-blue-50 border-blue-200 text-blue-800 hover:bg-blue-100">
-            Filtering by: <strong>{clubFilter}</strong>
+          <Button variant="outline" onClick={clearClubFilter} className="bg-brand-red/10 border-brand-red text-brand-orange hover:bg-brand-red/20">
+            Filtering by: <strong className="ml-1">{clubFilter}</strong>
             <X size={16} className="ml-2" />
           </Button>
         </div>
