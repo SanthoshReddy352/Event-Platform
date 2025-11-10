@@ -88,7 +88,9 @@ function AdminEventsContent() {
     <div className="container mx-auto px-4 py-12">
       <div className="flex justify-between items-center mb-8">
         <div>
-          <h1 className="text-4xl font-bold">Manage Events</h1>
+          <h1 className="text-4xl font-bold">
+            <GradientText>Manage Events</GradientText>
+          </h1>
           <p className="text-gray-400 mt-2">Create and manage hackathon events</p> {/* CHANGED */}
         </div>
         <Link href="/admin/events/new">
