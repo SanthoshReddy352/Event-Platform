@@ -74,7 +74,9 @@ export default function ParticipantAuthPage() {
         <div className="text-center mb-8">
           {/* --- START OF THEME CHANGE --- */}
           <img src="/logo.jpg" alt="EventX Logo" className="w-48 mx-auto mb-4" /> {/* CHANGED */}
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-brand-red to-brand-orange bg-clip-text text-transparent">Participant Portal</h1>
+          <h1 className="text-3xl font-bold">
+            <GradientText>Participant Portal</GradientText>
+          </h1>
           <p className="text-gray-400 mt-2">Login or create an account to register for events</p> {/* CHANGED */}
           {/* --- END OF THEME CHANGE --- */}
         </div>
