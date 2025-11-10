@@ -1,3 +1,5 @@
+// app/events/[id]/page.js
+
 'use client'
 
 import { useState, useEffect, useCallback, Suspense } from 'react'
@@ -12,6 +14,7 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client' 
 import { useAuth } from '@/context/AuthContext' 
 
+// (Helper functions formatEventDate and getEventStatus remain unchanged)
 // Helper function to format date ranges
 const formatEventDate = (start, end, timeZone) => {
   if (!start) return 'Date TBA';
@@ -98,7 +101,6 @@ function EventDetailContent() {
     window.sessionStorage.setItem(storageKey, JSON.stringify(newData));
   };
 
-  // --- START OF FIX: Added function logic ---
   const fetchEvent = useCallback(async () => {
     if (!params.id) return;
     
@@ -151,25 +153,26 @@ function EventDetailContent() {
       setRegCheckLoading(false);
     }
   }, []); // Removed setters from deps, they are stable
-  // --- END OF FIX ---
 
-  // --- START OF FIX: Updated useEffect ---
   useEffect(() => {
     fetchEvent();
   }, [fetchEvent]); 
-  // --- END OF FIX ---
 
+  // --- START OF FIX ---
+  // This useEffect now depends on primitive IDs and loading states.
   useEffect(() => {
-    if (loading || authLoading || !event) return; 
+    if (loading || authLoading || !event?.id) return; 
 
-    if (user) {
+    if (user?.id) {
         checkRegistrationStatus(user.id, event.id);
     } else {
         setIsRegistered(false);
         setRegistrationStatus(null);
         setRegCheckLoading(false); 
     }
-  }, [user, event, loading, authLoading, checkRegistrationStatus]); 
+  // Depend on user.id and event.id
+  }, [user?.id, event?.id, loading, authLoading, checkRegistrationStatus]); 
+  // --- END OF FIX ---
 
   const handleSubmit = async (submitData) => {
     if (!user) {

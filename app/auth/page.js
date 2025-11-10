@@ -1,3 +1,5 @@
+// app/auth/page.js
+
 'use client'
 
 import { useState, useEffect, Suspense } from 'react'
@@ -41,6 +43,7 @@ function ParticipantAuthPage({ finalRedirect }) {
   const [resetMessage, setResetMessage] = useState('')
   const [isResetting, setIsResetting] = useState(false)
 
+  // --- START OF FIX ---
   // This useEffect redirects the user if they are already logged in
   useEffect(() => {
     if (!authLoading) {
@@ -50,9 +53,10 @@ function ParticipantAuthPage({ finalRedirect }) {
         setSessionLoading(false)
       }
     }
-  }, [user, authLoading, router, finalRedirect])
+  // Depend on the primitive user?.id
+  }, [user?.id, authLoading, router, finalRedirect])
+  // --- END OF FIX ---
 
-  // --- FIX: Added e.preventDefault() ---
   const handleLogin = async (e) => {
     e.preventDefault() // This prevents the page from reloading
     setError('')
@@ -75,7 +79,6 @@ function ParticipantAuthPage({ finalRedirect }) {
     }
   }
 
-  // --- FIX: Added e.preventDefault() and success message ---
   const handleSignup = async (e) => {
     e.preventDefault() // This prevents the page from reloading
     setError('')
@@ -107,7 +110,6 @@ function ParticipantAuthPage({ finalRedirect }) {
     }
   }
 
-  // --- FIX: Added e.preventDefault() ---
   const handleForgotPassword = async (e) => {
     e.preventDefault() // This prevents the page from reloading
     setIsResetting(true)

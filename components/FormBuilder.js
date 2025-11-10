@@ -83,7 +83,9 @@ export default function FormBuilder({ initialFields = [], onSave }) {
           <CardContent className="py-12">
             <div className="text-center text-gray-500">
               <p className="mb-4">No fields added yet</p>
-              <Button onClick={addField} className="bg-[#00629B] hover:bg-[#004d7a]">
+              {/* --- START OF THEME CHANGE --- */}
+              <Button onClick={addField} className="bg-brand-gradient text-white font-semibold hover:opacity-90 transition-opacity">
+              {/* --- END OF THEME CHANGE --- */}
                 <Plus size={16} className="mr-2" />
                 Add First Field
               </Button>
@@ -192,11 +194,13 @@ export default function FormBuilder({ initialFields = [], onSave }) {
 
       {fields.length > 0 && (
         <div className="flex justify-end space-x-4 pt-4">
+          {/* --- START OF THEME CHANGE --- */}
           <Button
             onClick={handleSave}
-            className="bg-[#00629B] hover:bg-[#004d7a]"
+            className="bg-brand-gradient text-white font-semibold hover:opacity-90 transition-opacity"
             disabled={isSaving}
           >
+          {/* --- END OF THEME CHANGE --- */}
             {isSaving ? 'Saving...' : 'Save Form'}
           </Button>
         </div>

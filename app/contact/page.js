@@ -1,3 +1,5 @@
+// app/contact/page.js
+
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -18,6 +20,7 @@ export default function ContactPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
+  // --- START OF FIX ---
   useEffect(() => {
     // Pre-fill form if user is logged in and is a participant
     if (user && !isAdmin) {
@@ -36,7 +39,9 @@ export default function ContactPage() {
       }
       fetchProfile()
     }
-  }, [user, isAdmin])
+  // Depend on user.id and isAdmin status
+  }, [user?.id, isAdmin])
+  // --- END OF FIX ---
 
   const handleChange = (e) => {
     const { id, value } = e.target
