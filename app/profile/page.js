@@ -15,7 +15,7 @@ import { useAuth } from '@/context/AuthContext' // IMPORT useAuth
 function ProfileContent() {
   const router = useRouter()
   // Get user from the GLOBAL context
-  const { user } = useAuth() 
+  const { user, loading: authLoading } = useAuth() // MODIFIED: Get authLoading
 
   const [loading, setLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -30,6 +30,7 @@ function ProfileContent() {
   // This function now just fetches profile data, not auth
   const fetchProfile = useCallback(async (currentUser) => {
     if (!currentUser) {
+        setLoading(false); // No user, stop loading
         router.push('/auth');
         return;
     }
@@ -37,13 +38,12 @@ function ProfileContent() {
     setLoading(true)
     setError('')
     try {
-      // --- START OF FIX ---
       const { data: { session }, error: sessionError } = await supabase.auth.getSession()
       if (sessionError || !session) {
+          setLoading(false); // No session, stop loading
           router.push('/auth');
           return;
       }
-      // --- END OF FIX ---
 
       const response = await fetch('/api/profile', {
         method: 'GET',
@@ -74,17 +74,30 @@ function ProfileContent() {
     } finally {
       setLoading(false)
     }
-  }, [router])
+  }, [router]) // fetchProfile is stable
 
+  // --- START OF FIX ---
+  // This useEffect now depends on user?.id and authLoading
   useEffect(() => {
-    // When the user from the context is available, fetch their profile
+    // Wait for the auth context to finish loading
+    if (authLoading) {
+      setLoading(true); // Show loader while auth is initializing
+      return;
+    }
+
+    // Auth is loaded, now check if we have a user
     if (user) {
       fetchProfile(user)
     } else {
-      // If user becomes null (e.g., logged out from navbar), redirect
+      // If user is null (and auth isn't loading), redirect
+      setLoading(false);
       router.push('/auth')
     }
-  }, [user, fetchProfile, router])
+  // We depend on authLoading and the user's ID.
+  // This will run once auth is done, and won't re-run on tab-focus
+  // because user.id remains the same.
+  }, [user?.id, authLoading, fetchProfile, router])
+  // --- END OF FIX ---
 
   const handleUpdate = async (e) => {
     e.preventDefault()
@@ -92,7 +105,6 @@ function ProfileContent() {
     setError('')
     setSuccess('')
     
-    // This part was already correct!
     const { data: { session }, error: sessionError } = await supabase.auth.getSession()
     if (sessionError || !session) {
         setError("User session expired. Please log in again.")
@@ -133,6 +145,7 @@ function ProfileContent() {
     }
   }
 
+  // Use the loading state (which is now correctly synced with authLoading)
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -143,9 +156,15 @@ function ProfileContent() {
       </div>
     )
   }
+  
+  // If we are not loading AND the user is null, we are about to redirect
+  // This prevents the form from briefly flashing
+  if (!user) {
+    return null; 
+  }
 
   return (
-    // ... (The rest of the JSX for this file is unchanged, copy from your existing file)
+    // ... (The rest of the JSX for this file is unchanged)
     <div className="container mx-auto px-4 py-12">
       <div className="max-w-xl mx-auto">
         <div className="text-center mb-8">
