@@ -1,8 +1,8 @@
-// app/auth/page.js
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation' 
+import { useState, useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
 import GradientText from '@/components/GradientText'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -10,75 +10,143 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog' 
-import { useAuth } from '@/context/AuthContext' 
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
+import { useAuth } from '@/context/AuthContext'
 
-export default function ParticipantAuthPage() {
-  const router = useRouter()
-  const searchParams = useSearchParams() 
+// This component handles the ?redirect= search param
+function AuthPageWithSuspense() {
+  const searchParams = useSearchParams()
   const redirectEventId = searchParams.get('redirect')
-  const finalRedirect = redirectEventId ? `/events/${redirectEventId}` : '/events'; 
+  // If a redirect URL is provided, use it. Otherwise, default to /events.
+  const finalRedirect = redirectEventId ? `/events/${redirectEventId}` : '/events';
 
-  const { user, loading: authLoading } = useAuth() 
+  return <ParticipantAuthPage finalRedirect={finalRedirect} />
+}
+
+function ParticipantAuthPage({ finalRedirect }) {
+  const router = useRouter()
+  const { user, loading: authLoading } = useAuth()
 
   const [loading, setLoading] = useState(false)
-  const [sessionLoading, setSessionLoading] = useState(true) 
-  
+  const [sessionLoading, setSessionLoading] = useState(true)
+
   const [loginData, setLoginData] = useState({ email: '', password: '' })
   const [signupData, setSignupData] = useState({ email: '', password: '', confirmPassword: '' })
   const [error, setError] = useState('')
+  const [success, setSuccess] = useState('') // For success messages
   const [currentTab, setCurrentTab] = useState('login')
-  
+
   const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState(false)
   const [resetEmail, setResetEmail] = useState('')
   const [resetMessage, setResetMessage] = useState('')
   const [isResetting, setIsResetting] = useState(false)
 
+  // This useEffect redirects the user if they are already logged in
   useEffect(() => {
     if (!authLoading) {
       if (user) {
-          router.replace(finalRedirect)
+        router.replace(finalRedirect)
       } else {
-          setSessionLoading(false)
+        setSessionLoading(false)
       }
     }
-  }, [user?.id, authLoading, router, finalRedirect])
+  }, [user, authLoading, router, finalRedirect])
 
+  // --- FIX: Added e.preventDefault() ---
   const handleLogin = async (e) => {
-    // (Unchanged)
+    e.preventDefault() // This prevents the page from reloading
+    setError('')
+    setSuccess('')
+    setLoading(true)
+
+    try {
+      const { error: loginError } = await supabase.auth.signInWithPassword({
+        email: loginData.email,
+        password: loginData.password,
+      })
+
+      if (loginError) throw loginError
+
+      // On success, the useEffect above will detect the 'user' change and redirect
+    } catch (error) {
+      setError(error.message)
+    } finally {
+      setLoading(false)
+    }
   }
 
+  // --- FIX: Added e.preventDefault() and success message ---
   const handleSignup = async (e) => {
-    // (Unchanged)
-  }
-  
-  const handleForgotPassword = async (e) => {
-    // (Unchanged)
+    e.preventDefault() // This prevents the page from reloading
+    setError('')
+    setSuccess('')
+
+    if (signupData.password !== signupData.confirmPassword) {
+      setError('Passwords do not match.')
+      return
+    }
+
+    setLoading(true)
+    try {
+      const { error: signUpError } = await supabase.auth.signUp({
+        email: signupData.email,
+        password: signupData.password,
+      })
+
+      if (signUpError) throw signUpError
+
+      // Show success message and reset form
+      setSuccess('Sign up successful! Please check your email to confirm your account.')
+      setSignupData({ email: '', password: '', confirmPassword: '' })
+      setCurrentTab('login'); // Switch to login tab
+
+    } catch (error) {
+      setError(error.message)
+    } finally {
+      setLoading(false)
+    }
   }
 
-  
+  // --- FIX: Added e.preventDefault() ---
+  const handleForgotPassword = async (e) => {
+    e.preventDefault() // This prevents the page from reloading
+    setIsResetting(true)
+    setResetMessage('')
+    try {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(resetEmail, {
+        redirectTo: `${window.location.origin}/update_password`, // Full URL for the reset link
+      })
+
+      if (resetError) throw resetError
+
+      setResetMessage('Password reset link sent! Please check your email.')
+    } catch (error) {
+      setResetMessage(`Error: ${error.message}`)
+    } finally {
+      setIsResetting(false)
+    }
+  }
+
   if (sessionLoading || authLoading) {
     return (
-        <div className="min-h-screen flex items-center justify-center">
-            <div className="text-center">
-              <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-brand-red"></div> {/* CHANGED */}
-              <p className="mt-4 text-gray-400">Checking session...</p> {/* CHANGED */}
-            </div>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-brand-red"></div>
+          <p className="mt-4 text-gray-400">Checking session...</p>
         </div>
+      </div>
     )
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background py-12 px-4"> {/* CHANGED */}
+    <div className="min-h-screen flex items-center justify-center bg-background py-12 px-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          {/* --- START OF THEME CHANGE --- */}
-          <img src="/logo.jpg" alt="EventX Logo" className="w-48 mx-auto mb-4" /> {/* CHANGED */}
+          <img src="/logo.jpg" alt="EventX Logo" className="w-48 mx-auto mb-4" />
           <h1 className="text-3xl font-bold">
             <GradientText>Participant Portal</GradientText>
           </h1>
-          <p className="text-gray-400 mt-2">Login or create an account to register for events</p> {/* CHANGED */}
-          {/* --- END OF THEME CHANGE --- */}
+          <p className="text-gray-400 mt-2">Login or create an account to register for events</p>
         </div>
 
         <Tabs defaultValue="login" className="w-full" value={currentTab} onValueChange={setCurrentTab}>
@@ -96,8 +164,13 @@ export default function ParticipantAuthPage() {
               <CardContent>
                 <form onSubmit={handleLogin} className="space-y-4">
                   {error && (
-                    <div className="bg-red-900/50 border border-red-700 text-red-300 px-4 py-3 rounded"> {/* CHANGED */}
+                    <div className="bg-red-900/50 border border-red-700 text-red-300 px-4 py-3 rounded">
                       {error}
+                    </div>
+                  )}
+                  {success && (
+                    <div className="bg-green-900/50 border border-green-700 text-green-300 px-4 py-3 rounded">
+                      {success}
                     </div>
                   )}
                   <div className="space-y-2">
@@ -121,30 +194,29 @@ export default function ParticipantAuthPage() {
                       required
                     />
                   </div>
-                  
+
                   <div className="text-right">
-                    <Button 
-                        type="button" 
-                        variant="link" 
-                        className="h-auto p-0 text-sm"
-                        onClick={() => {
-                            setError('')
-                            setIsForgotPasswordOpen(true)
-                        }}
+                    <Button
+                      type="button"
+                      variant="link"
+                      className="h-auto p-0 text-sm"
+                      onClick={() => {
+                        setError('')
+                        setSuccess('')
+                        setIsForgotPasswordOpen(true)
+                      }}
                     >
-                        Forgot Password?
+                      Forgot Password?
                     </Button>
                   </div>
 
-                  {/* --- START OF THEME CHANGE --- */}
                   <Button
                     type="submit"
-                    className="w-full bg-brand-gradient text-white font-semibold hover:opacity-90 transition-opacity" // CHANGED
+                    className="w-full bg-brand-gradient text-white font-semibold hover:opacity-90 transition-opacity"
                     disabled={loading}
                   >
                     {loading ? 'Logging in...' : 'Login'}
                   </Button>
-                  {/* --- END OF THEME CHANGE --- */}
                 </form>
               </CardContent>
             </Card>
@@ -159,11 +231,15 @@ export default function ParticipantAuthPage() {
               <CardContent>
                 <form onSubmit={handleSignup} className="space-y-4">
                   {error && (
-                    <div className="bg-red-900/50 border border-red-700 text-red-300 px-4 py-3 rounded"> {/* CHANGED */}
+                    <div className="bg-red-900/50 border border-red-700 text-red-300 px-4 py-3 rounded">
                       {error}
                     </div>
                   )}
-                  {/* (Fields unchanged) */}
+                  {success && (
+                    <div className="bg-green-900/50 border border-green-700 text-green-300 px-4 py-3 rounded">
+                      {success}
+                    </div>
+                  )}
                   <div className="space-y-2">
                     <Label htmlFor="signup-email">Email</Label>
                     <Input
@@ -182,6 +258,7 @@ export default function ParticipantAuthPage() {
                       type="password"
                       value={signupData.password}
                       onChange={(e) => setSignupData({ ...signupData, password: e.target.value })}
+                      placeholder="Must be at least 6 characters"
                       required
                     />
                   </div>
@@ -195,15 +272,13 @@ export default function ParticipantAuthPage() {
                       required
                     />
                   </div>
-                  {/* --- START OF THEME CHANGE --- */}
                   <Button
                     type="submit"
-                    className="w-full bg-brand-gradient text-white font-semibold hover:opacity-90 transition-opacity" // CHANGED
+                    className="w-full bg-brand-gradient text-white font-semibold hover:opacity-90 transition-opacity"
                     disabled={loading}
                   >
                     {loading ? 'Creating Account...' : 'Sign Up'}
                   </Button>
-                  {/* --- END OF THEME CHANGE --- */}
                 </form>
               </CardContent>
             </Card>
@@ -221,9 +296,9 @@ export default function ParticipantAuthPage() {
           </DialogHeader>
           <form onSubmit={handleForgotPassword} className="space-y-4">
             {resetMessage && (
-                <div className={`px-4 py-3 rounded text-sm ${resetMessage.includes('Error') ? 'bg-red-900/50 text-red-300' : 'bg-green-900/50 text-green-300'}`}> {/* CHANGED */}
-                    {resetMessage}
-                </div>
+              <div className={`px-4 py-3 rounded text-sm ${resetMessage.includes('Error') ? 'bg-red-900/50 text-red-300' : 'bg-green-900/50 text-green-300'}`}>
+                {resetMessage}
+              </div>
             )}
             <div className="grid gap-2">
               <Label htmlFor="reset-email">Email</Label>
@@ -238,27 +313,40 @@ export default function ParticipantAuthPage() {
               />
             </div>
             <DialogFooter>
-              <Button 
-                type="button" 
-                variant="outline" 
+              <Button
+                type="button"
+                variant="outline"
                 onClick={() => setIsForgotPasswordOpen(false)}
                 disabled={isResetting}
               >
                 Cancel
               </Button>
-              {/* --- START OF THEME CHANGE --- */}
-              <Button 
-                type="submit" 
-                className="bg-brand-gradient text-white font-semibold hover:opacity-90 transition-opacity" // CHANGED
+              <Button
+                type="submit"
+                className="bg-brand-gradient text-white font-semibold hover:opacity-90 transition-opacity"
                 disabled={isResetting || resetMessage.includes('Password reset link sent')}
               >
                 {isResetting ? 'Sending...' : 'Send Reset Link'}
               </Button>
-              {/* --- END OF THEME CHANGE --- */}
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
     </div>
+  )
+}
+
+// We wrap the default export in Suspense to allow useSearchParams()
+export default function AuthPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-brand-red"></div>
+        </div>
+      </div>
+    }>
+      <AuthPageWithSuspense />
+    </Suspense>
   )
 }
