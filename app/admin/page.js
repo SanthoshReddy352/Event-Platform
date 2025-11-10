@@ -110,7 +110,7 @@ function AdminDashboardContent() {
       <div className="flex justify-between items-center mb-8">
         <div>
           <h1 className="text-4xl font-bold" data-testid="admin-dashboard-title">
-            {isSuperAdmin ? 'Super Admin Dashboard' : 'Admin Dashboard'}
+            <GradientText>{isSuperAdmin ? 'Super Admin Dashboard' : 'Admin Dashboard'}</GradientText>
           </h1>
           <p className="text-gray-400 mt-2">Welcome back, {user?.email}</p> {/* CHANGED */}
           {isSuperAdmin && (
