@@ -239,7 +239,7 @@ function ProfileContent() {
 
               <Button
                 type="submit"
-                className="w-full bg-[#00629B] hover:bg-[#004d7a]"
+                className="w-full bg-brand-gradient text-white font-semibold hover:opacity-90 transition-opacity"
                 disabled={isSubmitting}
               >
                 {isSubmitting ? 'Saving Changes...' : 'Save Changes'}
