@@ -141,3 +141,24 @@ code {
     @apply bg-background text-foreground;
     }
 }
+
+/* Gradient text utilities */
+@layer utilities {
+  .text-gradient {
+    background: linear-gradient(90deg, #ff3131, #ff914d);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  
+  .last-letter-gradient {
+    display: inline;
+  }
+  
+  .last-letter-gradient .gradient-letter {
+    background: linear-gradient(90deg, #ff3131, #ff914d);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+}
