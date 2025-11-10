@@ -149,7 +149,9 @@ function ClubProfileContent() {
       <form onSubmit={handleSubmit}>
         <Card>
           <CardHeader>
-            <CardTitle>Edit Club Profile</CardTitle>
+            <CardTitle>
+              <GradientText>Edit Club Profile</GradientText>
+            </CardTitle>
             <CardDescription>
               This information will be shown on the homepage to help participants find your events.
             </CardDescription>
