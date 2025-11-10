@@ -79,8 +79,8 @@ export default function UpdatePasswordPage() {
     if (loading) {
         return (
             <div className="text-center py-12">
-              <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-[#00629B]"></div>
-              <p className="mt-4 text-gray-600">Checking link validity...</p>
+              <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-brand-red"></div>
+              <p className="mt-4 text-gray-400">Checking link validity...</p>
             </div>
         )
     }
@@ -88,10 +88,10 @@ export default function UpdatePasswordPage() {
     if (success) {
         return (
             <div className="text-center py-12">
-                <h2 className="text-2xl font-bold text-green-600 mb-4">Success!</h2>
-                <p className="text-gray-600 mb-6">Your password has been updated. You can now log in with your new password.</p>
+                <h2 className="text-2xl font-bold text-green-500 mb-4">Success!</h2>
+                <p className="text-gray-400 mb-6">Your password has been updated. You can now log in with your new password.</p>
                 <Link href="/auth">
-                    <Button className="bg-[#00629B] hover:bg-[#004d7a]">Go to Login</Button>
+                    <Button className="bg-brand-gradient text-white font-semibold hover:opacity-90 transition-opacity">Go to Login</Button>
                 </Link>
             </div>
         )
