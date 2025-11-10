@@ -65,7 +65,9 @@ export default function AdminLoginPage() {
         <div className="text-center mb-8">
           {/* --- START OF THEME CHANGE --- */}
           <img src="/logo.jpg" alt="EventX Logo" className="w-48 mx-auto mb-4" /> {/* CHANGED */}
-          <h1 className="text-3xl font-bold">Admin Portal</h1>
+          <h1 className="text-3xl font-bold">
+            <GradientText>Admin Portal</GradientText>
+          </h1>
           <p className="text-gray-400 mt-2">Manage events and participants. Contact a super-admin to get access.</p> {/* CHANGED */}
           {/* --- END OF THEME CHANGE --- */}
         </div>
