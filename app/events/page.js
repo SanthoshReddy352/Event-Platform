@@ -116,8 +116,10 @@ function EventsPage() {
   return (
     <div className="container mx-auto px-4 py-12">
       <div className="mb-8">
-        <h1 className="text-4xl font-bold mb-4">All Events</h1>
-        <p className="text-gray-600">Browse and register for our hackathons and tech events</p>
+        <h1 className="text-4xl font-bold mb-4">
+          <GradientText>All Events</GradientText>
+        </h1>
+        <p className="text-gray-400">Browse and register for our hackathons and tech events</p>
       </div>
 
       {/* Filters */}
