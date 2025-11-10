@@ -169,7 +169,7 @@ function ProfileContent() {
       <div className="max-w-xl mx-auto">
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold mb-2">My Profile</h1>
-          <p className="text-gray-600">Manage your basic participant information.</p>
+          <p className="text-gray-400">Manage your basic participant information.</p>
         </div>
         
         <Card>
