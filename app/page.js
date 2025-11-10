@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import EventCard from "@/components/EventCard";
 import GradientText from "@/components/GradientText";
 import { Calendar, Users, Trophy, Zap, Building } from "lucide-react"; // Import Building
+import { parseISO } from 'date-fns'; // --- IMPORT parseISO ---
 
 export default function Home() {
   const [upcomingEvents, setUpcomingEvents] = useState([]);
@@ -22,10 +23,48 @@ export default function Home() {
 
   const fetchUpcomingEvents = async () => {
     try {
-      const response = await fetch("/api/events?active=true&limit=3");
+      // --- START OF FIX: Fetch more events to filter on the client ---
+      // We fetch all active events (including completed)
+      const response = await fetch("/api/events?active=true");
       const data = await response.json();
+      
       if (data.success) {
-        setUpcomingEvents(data.events);
+        const now = new Date();
+
+        // Filter for events that are "upcoming" (not completed) and "open"
+        const filtered = data.events.filter(event => {
+          // 1. Check if completed
+          const eventEndDate = event.event_end_date ? parseISO(event.event_end_date) : null;
+          if (eventEndDate && now > eventEndDate) {
+            return false; // Skip completed events
+          }
+
+          // 2. Check if registration is explicitly closed
+          if (!event.registration_open) {
+            return false;
+          }
+
+          // 3. Check registration window
+          const regStartDate = event.registration_start ? parseISO(event.registration_start) : null;
+          const regEndDate = event.registration_end ? parseISO(event.registration_end) : null;
+
+          // Check if registration hasn't started yet
+          if (regStartDate && now < regStartDate) {
+            return false;
+          }
+          
+          // Check if registration has already ended
+          if (regEndDate && now > regEndDate) {
+            return false;
+          }
+
+          // If all checks pass, the event is active and open
+          return true;
+        });
+
+        // Set only the first 3 matching events
+        setUpcomingEvents(filtered.slice(0, 3));
+        // --- END OF FIX ---
       }
     } catch (error) {
       console.error("Error fetching events:", error);
@@ -176,7 +215,9 @@ export default function Home() {
           ) : (
             <Card>
               <CardContent className="py-12 text-center text-gray-500">
-                <p>No upcoming events at the moment. Check back soon!</p>
+                {/* --- START OF FIX: Updated empty state message --- */}
+                <p>No events are open for registration right now. Check back soon!</p>
+                {/* --- END OF FIX --- */}
               </CardContent>
             </Card>
           )}

@@ -155,13 +155,15 @@ export async function GET(request) {
         .order('created_at', { ascending: false })
       // --- END OF FIX ---
 
+      // --- START OF FIX: Modified 'active' parameter logic ---
       // Filter by active status
       if (params.active === 'true') {
-        const now = new Date().toISOString();
-        query = query
-          .eq('is_active', true) 
-          .or(`event_end_date.gt.${now},event_end_date.is.null`)
+        // This parameter now *only* filters for publicly visible events
+        // (i.e., not drafts).
+        // The frontend will handle filtering for completed/active.
+        query = query.eq('is_active', true)
       }
+      // --- END OF FIX ---
 
       // Limit results
       if (params.limit) {
@@ -896,4 +898,4 @@ export async function DELETE(request) {
       { status: 500, headers: corsHeaders }
     )
   }
-}
+} 

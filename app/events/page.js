@@ -27,12 +27,10 @@ function EventsPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [filter, setFilter] = useState('all')
 
-  // --- START OF MODIFICATION: Get URL parameters ---
   const searchParams = useSearchParams()
   const router = useRouter()
   const clubFilterParam = searchParams.get('club')
   const [clubFilter, setClubFilter] = useState(clubFilterParam || null)
-  // --- END OF MODIFICATION ---
 
   useEffect(() => {
     fetchEvents()
@@ -45,11 +43,12 @@ function EventsPage() {
 
   useEffect(() => {
     filterEvents()
-  }, [searchTerm, filter, events, clubFilter]) // Add clubFilter to dependency array
+  }, [searchTerm, filter, events, clubFilter]) // Add filter to dependency array
 
   const fetchEvents = async () => {
     try {
-      const response = await fetch('/api/events', { cache: 'no-store' })
+      // Fetch active=true (published) events. The API now returns completed events as well.
+      const response = await fetch('/api/events?active=true', { cache: 'no-store' })
       const data = await response.json()
       if (data.success) {
         setEvents(data.events)
@@ -66,13 +65,11 @@ function EventsPage() {
     let filtered = events
     const now = new Date();
 
-    // --- START OF MODIFICATION: Filter by club ---
     if (clubFilter) {
       filtered = filtered.filter(event => 
         event.club && event.club.club_name === clubFilter
       )
     }
-    // --- END OF MODIFICATION ---
 
     // Filter by search term
     if (searchTerm) {
@@ -82,6 +79,7 @@ function EventsPage() {
       )
     }
 
+    // --- START OF FIX: Updated filter logic ---
     // Filter by status
     if (filter === 'active') {
       filtered = filtered.filter(event => {
@@ -101,17 +99,22 @@ function EventsPage() {
 
         return event.registration_open && isWithinDateRange && !isCompleted;
       })
+    } else if (filter === 'completed') {
+      filtered = filtered.filter(event => {
+        const eventEndDate = event.event_end_date ? parseISO(event.event_end_date) : null;
+        return eventEndDate && now > eventEndDate;
+      })
     }
+    // If filter is 'all', we do nothing and show all fetched (is_active: true) events
+    // --- END OF FIX ---
 
     setFilteredEvents(filtered)
   }
 
-  // --- START OF MODIFICATION: Handle clearing the club filter ---
   const clearClubFilter = () => {
     setClubFilter(null)
     router.push('/events') // Update URL to remove query param
   }
-  // --- END OF MODIFICATION ---
 
   return (
     <div className="container mx-auto px-4 py-12">
@@ -137,15 +140,17 @@ function EventsPage() {
           <SelectTrigger className="w-full md:w-48">
             <SelectValue />
           </SelectTrigger>
+          {/* --- START OF FIX: Added 'Completed' filter --- */}
           <SelectContent>
             <SelectItem value="all">All Events</SelectItem>
             <SelectItem value="active">Active Only</SelectItem>
             <SelectItem value="open">Registration Open</SelectItem>
+            <SelectItem value="completed">Completed</SelectItem>
           </SelectContent>
+          {/* --- END OF FIX --- */}
         </Select>
       </div>
 
-      {/* --- START OF MODIFICATION: Show clear filter button --- */}
       {clubFilter && (
         <div className="mb-6 flex justify-start">
           <Button variant="outline" onClick={clearClubFilter} className="bg-brand-red/10 border-brand-red text-brand-orange hover:bg-brand-red/20">
@@ -154,7 +159,6 @@ function EventsPage() {
           </Button>
         </div>
       )}
-      {/* --- END OF MODIFICATION --- */}
 
 
       {/* Events Grid */}
@@ -181,7 +185,6 @@ function EventsPage() {
   )
 }
 
-// --- START OF MODIFICATION: Added LoadingSpinner component ---
 function LoadingSpinner() {
   return (
     <div className="text-center py-12">
@@ -189,4 +192,3 @@ function LoadingSpinner() {
     </div>
   );
 }
-// --- END OF MODIFICATION ---
