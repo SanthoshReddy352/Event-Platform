@@ -53,12 +53,10 @@ export default function EventDetailPage() {
   
   const [isRegistered, setIsRegistered] = useState(false) 
   const [registrationStatus, setRegistrationStatus] = useState(null) // 'pending', 'approved', 'rejected'
-  
-  // --- START OF FIX: Initialize regCheckLoading to false ---
+
+  // --- START OF FIX 1: Initialize regCheckLoading to false ---
   // This prevents the loader from showing on mount/tab-back by default.
-  // It will only be set to true when the check is *actively* running.
   const [regCheckLoading, setRegCheckLoading] = useState(false) 
-  // --- END OF FIX ---
   
   // --- Use sessionStorage for form data persistence ---
   const storageKey = `formData-${params.id}`;
@@ -89,11 +87,13 @@ export default function EventDetailPage() {
     }
   };
 
+  // --- START OF FIX 2: Add state setters to useCallback dependency array ---
+  // This ensures the function is stable and correct.
   const checkRegistrationStatus = useCallback(async (userId, eventId) => {
       if (!userId || !eventId) {
           setIsRegistered(false)
           setRegistrationStatus(null)
-          // setRegCheckLoading(false) // Not needed here, will be set in effect
+          setRegCheckLoading(false) // Ensure loader is off
           return
       }
       setRegCheckLoading(true) // Loader ON
@@ -120,7 +120,8 @@ export default function EventDetailPage() {
       } finally {
           setRegCheckLoading(false) // Loader OFF
       }
-  }, []) // Empty dependency array is okay here as setters are stable
+  }, [setIsRegistered, setRegistrationStatus, setRegCheckLoading]) // <-- Added dependencies
+  // --- END OF FIX 2 ---
 
   useEffect(() => {
     const fetchEventData = async () => {
@@ -144,20 +145,21 @@ export default function EventDetailPage() {
     fetchEventData();
   }, [params.id]);
 
+  // --- START OF FIX 3: Change dependency array to use IDs ---
+  // This prevents the effect from re-running when the 'user' object
+  // reference changes on tab focus, unless the user.id *itself* has changed.
   useEffect(() => {
-    // This guard ensures we don't run until auth and event data are loaded
     if (loading || authLoading || !event) return; 
 
     if (user) {
         checkRegistrationStatus(user.id, event.id);
     } else {
-        // If user is not logged in, we know they aren't registered
         setIsRegistered(false);
         setRegistrationStatus(null);
-        // We also know we don't need to check, so loading is false.
         setRegCheckLoading(false); 
     }
-  }, [user, event, loading, authLoading, checkRegistrationStatus]); 
+  }, [user?.id, event?.id, loading, authLoading, checkRegistrationStatus]); 
+  // --- END OF FIX 3 ---
 
   const handleSubmit = async (submitData) => {
     if (!user) {
@@ -219,10 +221,8 @@ export default function EventDetailPage() {
     }
   }
 
-  // --- START OF FIX: Show main event loader if auth is done but event isn't ---
-  // This handles the initial load gracefully.
+  // Show this loader *only* if auth is finished but event is still loading
   if (loading && !authLoading) {
-  // --- END OF FIX ---
      return (
         <div className="min-h-screen flex items-center justify-center">
             <div className="text-center">
