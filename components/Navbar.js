@@ -25,31 +25,33 @@ export default function Navbar() {
   }
   
   return (
-    <nav className="bg-white border-b shadow-sm sticky top-0 z-50">
+    <nav className="bg-background border-b border-border shadow-sm sticky top-0 z-50"> {/* MODIFIED: Added border-border */}
       <div className="container mx-auto px-4">
-        <div className="flex justify-between items-center h-16">
+        {/* --- START OF FIX: Increased navbar height --- */}
+        <div className="flex justify-between items-center h-20"> {/* CHANGED: h-16 to h-20 */}
           {/* Logo */}
           <Link href="/" className="flex items-center space-x-2">
-            <div className="w-10 h-10 bg-[#00629B] rounded-full flex items-center justify-center">
-              <span className="text-white font-bold text-lg">IEEE</span>
-            </div>
-            <span className="font-bold text-xl text-[#00629B] hidden sm:block">IEEE Club</span>
+            {/* --- START OF FIX: Increased logo size --- */}
+            {/* Make sure you moved logo.jpg to /public/logo.jpg */}
+            <img src="/logo.jpg" alt="EventX Logo" className="h-14 w-auto" /> {/* CHANGED: h-10 to h-14 */}
+            {/* --- END OF FIX --- */}
           </Link>
+          {/* --- END OF FIX --- */}
 
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center space-x-6">
             <Link
               href="/"
-              className={`transition-colors hover:text-[#00629B] ${
-                isActive('/') ? 'text-[#00629B] font-semibold' : 'text-gray-600'
+              className={`transition-colors hover:text-brand-orange ${ 
+                isActive('/') ? 'text-brand-orange font-semibold' : 'text-gray-300'
               }`}
             >
               Home
             </Link>
             <Link
               href="/events"
-              className={`transition-colors hover:text-[#00629B] ${
-                isActive('/events') ? 'text-[#0629B] font-semibold' : 'text-gray-600'
+              className={`transition-colors hover:text-brand-orange ${ 
+                isActive('/events') ? 'text-brand-orange font-semibold' : 'text-gray-300'
               }`}
             >
               Events
@@ -58,8 +60,8 @@ export default function Navbar() {
             {user && !isAdmin && (
                 <Link
                   href="/contact"
-                  className={`transition-colors hover:text-[#00629B] ${
-                    isActive('/contact') ? 'text-[#00629B] font-semibold' : 'text-gray-600'
+                  className={`transition-colors hover:text-brand-orange ${ 
+                    isActive('/contact') ? 'text-brand-orange font-semibold' : 'text-gray-300'
                   }`}
                 >
                   Contact
@@ -72,7 +74,7 @@ export default function Navbar() {
                 <Link href="/profile">
                   <Button 
                     variant="ghost" 
-                    className={`text-gray-600 hover:text-[#00629B] ${isActive('/profile') ? 'font-semibold' : ''}`}
+                    className={`text-gray-300 hover:text-brand-orange ${isActive('/profile') ? 'font-semibold' : ''}`}
                   >
                     <User size={16} className="mr-2" />
                     Profile
@@ -83,7 +85,7 @@ export default function Navbar() {
                     <Link href="/admin/club-profile">
                       <Button 
                         variant="ghost" 
-                        className={`text-gray-600 hover:text-[#00629B] ${isActive('/admin/club-profile') ? 'font-semibold' : ''}`}
+                        className={`text-gray-300 hover:text-brand-orange ${isActive('/admin/club-profile') ? 'font-semibold' : ''}`}
                       >
                         <Building size={16} className="mr-2" />
                         Club Profile
@@ -93,15 +95,13 @@ export default function Navbar() {
                 
                 {isAdmin && (
                     <Link href="/admin">
-                      <Button variant="ghost" className="text-gray-600 hover:text-[#00629B]">
-                        {/* --- START OF FIX --- */}
+                      <Button variant="ghost" className="text-gray-300 hover:text-brand-orange">
                         {isSuperAdmin ? 'Super Admin Portal' : 'Admin Portal'}
-                        {/* --- END OF FIX --- */}
                       </Button>
                     </Link>
                 )}
                 
-                <Button variant="default" onClick={handleLogout} className="bg-red-500 hover:bg-red-600">
+                <Button variant="destructive" onClick={handleLogout}>
                   <LogOut size={16} className="mr-2" />
                   Logout
                 </Button>
@@ -110,12 +110,12 @@ export default function Navbar() {
               <>
                 {/* User is logged out */}
                 <Link href="/admin/login">
-                  <Button variant="ghost" className="text-gray-600 hover:text-[#00629B]">
+                  <Button variant="ghost" className="text-gray-300 hover:text-brand-orange">
                     Admin Login
                   </Button>
                 </Link>
                 <Link href="/auth">
-                  <Button variant="default" className="bg-[#00629B] hover:bg-[#004d7a]">
+                  <Button variant="default" className="bg-brand-gradient text-white font-semibold hover:opacity-90 transition-opacity">
                     <LogIn size={16} className="mr-2" />
                     Login/Register
                   </Button>
@@ -126,7 +126,7 @@ export default function Navbar() {
 
           {/* Mobile Menu Button */}
           <button
-            className="md:hidden p-2"
+            className="md:hidden p-2 text-gray-300"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
           >
             {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
@@ -138,14 +138,14 @@ export default function Navbar() {
           <div className="md:hidden py-4 space-y-3">
             <Link
               href="/"
-              className="block py-2 text-gray-600 hover:text-[#00629B]"
+              className="block py-2 text-gray-300 hover:text-brand-orange"
               onClick={() => setMobileMenuOpen(false)}
             >
               Home
             </Link>
             <Link
               href="/events"
-              className="block py-2 text-gray-600 hover:text-[#00629B]"
+              className="block py-2 text-gray-300 hover:text-brand-orange"
               onClick={() => setMobileMenuOpen(false)}
             >
               Events
@@ -154,7 +154,7 @@ export default function Navbar() {
             {user && !isAdmin && (
                 <Link
                   href="/contact"
-                  className="block py-2 text-gray-600 hover:text-[#00629B]"
+                  className="block py-2 text-gray-300 hover:text-brand-orange"
                   onClick={() => setMobileMenuOpen(false)}
                 >
                   Contact
@@ -166,7 +166,7 @@ export default function Navbar() {
                 <Link
                   href="/profile"
                   onClick={() => setMobileMenuOpen(false)}
-                  className="block py-2 text-gray-600 hover:text-[#00629B]"
+                  className="block py-2 text-gray-300 hover:text-brand-orange"
                 >
                   Profile
                 </Link>
@@ -175,7 +175,7 @@ export default function Navbar() {
                     <Link
                       href="/admin/club-profile"
                       onClick={() => setMobileMenuOpen(false)}
-                      className="block py-2 text-gray-600 hover:text-[#00629B]"
+                      className="block py-2 text-gray-300 hover:text-brand-orange"
                     >
                       Club Profile
                     </Link>
@@ -185,17 +185,15 @@ export default function Navbar() {
                     <Link
                       href="/admin"
                       onClick={() => setMobileMenuOpen(false)}
-                      className="block py-2 text-gray-600 hover:text-[#00629B]"
+                      className="block py-2 text-gray-300 hover:text-brand-orange"
                     >
-                      {/* --- START OF FIX --- */}
                       {isSuperAdmin ? 'Super Admin Portal' : 'Admin Portal'}
-                      {/* --- END OF FIX --- */}
                     </Link>
                 )}
                 
                 <Button 
                   onClick={handleLogout}
-                  className="w-full bg-red-500 hover:bg-red-600"
+                  className="w-full bg-brand-red hover:bg-brand-red/90"
                 >
                   <LogOut size={16} className="mr-2" />
                   Logout
@@ -207,7 +205,7 @@ export default function Navbar() {
                   href="/auth"
                   onClick={() => setMobileMenuOpen(false)}
                 >
-                  <Button className="w-full bg-[#00629B] hover:bg-[#004d7a]">
+                  <Button className="w-full bg-brand-gradient text-white font-semibold hover:opacity-90 transition-opacity">
                     <LogIn size={16} className="mr-2" />
                     Login/Register
                   </Button>
@@ -215,7 +213,7 @@ export default function Navbar() {
                 <Link
                   href="/admin/login"
                   onClick={() => setMobileMenuOpen(false)}
-                  className="block pt-2 text-sm text-center text-gray-500 hover:text-[#00629B]"
+                  className="block pt-2 text-sm text-center text-gray-500 hover:text-brand-orange"
                 >
                   Admin Login
                 </Link>

@@ -11,10 +11,8 @@ export default function Home() {
   const [upcomingEvents, setUpcomingEvents] = useState([])
   const [loading, setLoading] = useState(true)
   
-  // --- START OF MODIFICATION ---
   const [clubs, setClubs] = useState([])
   const [loadingClubs, setLoadingClubs] = useState(true)
-  // --- END OF MODIFICATION ---
 
   useEffect(() => {
     fetchUpcomingEvents()
@@ -35,7 +33,6 @@ export default function Home() {
     }
   }
 
-  // --- START OF MODIFICATION: Add fetchClubs ---
   const fetchClubs = async () => {
     try {
       const response = await fetch('/api/clubs');
@@ -56,30 +53,30 @@ export default function Home() {
       setLoadingClubs(false);
     }
   }
-  // --- END OF MODIFICATION ---
 
 
   return (
     <div>
-      {/* Hero Section (Unchanged) */}
-      <section className="bg-gradient-to-br from-[#00629B] to-[#004d7a] text-white py-20">
+      {/* Hero Section */}
+      {/* --- START OF THEME CHANGE --- */}
+      <section className="bg-brand-gradient text-white py-20"> {/* CHANGED */}
         <div className="container mx-auto px-4">
           <div className="max-w-3xl mx-auto text-center">
             <h1 className="text-5xl font-bold mb-6">
-              Welcome to IEEE Club
+              Welcome to EventX {/* CHANGED */}
             </h1>
-            <p className="text-xl mb-8 text-blue-100">
-              Advancing Technology for Humanity. Join us for world-class hackathons, 
-              workshops, and tech events that shape the future.
+            <p className="text-xl mb-8 text-gray-200"> {/* CHANGED */}
+              Your central hub for hackathons, workshops, and tech events
+              from every club on campus.
             </p>
             <div className="flex flex-col sm:flex-row justify-center gap-4">
               <Link href="/events">
-                <Button size="lg" className="bg-white text-[#00629B] hover:bg-gray-100">
+                <Button size="lg" className="bg-white text-brand-red font-semibold hover:bg-gray-100"> {/* CHANGED */}
                   Browse Events
                 </Button>
               </Link>
               <Link href="/contact">
-                <Button size="lg" className="bg-[#FFD700] text-gray-900 hover:bg-[#FFD700]/90 font-semibold">
+                <Button size="lg" variant="outline" className="text-white border-white hover:bg-white hover:text-brand-red"> {/* CHANGED */}
                   Contact Us
                 </Button>
               </Link>
@@ -87,15 +84,16 @@ export default function Home() {
           </div>
         </div>
       </section>
+      {/* --- END OF THEME CHANGE --- */}
 
-      {/* --- START OF MODIFICATION: Replaced "Why Join" with "Browse by Club" --- */}
-      <section className="py-16 bg-gray-50">
+      {/* Browse by Club (Unchanged) */}
+      <section className="py-16 bg-card"> {/* CHANGED: bg-gray-50 to bg-card */}
         <div className="container mx-auto px-4">
           <h2 className="text-3xl font-bold text-center mb-12">Browse by Club</h2>
           {loadingClubs ? (
             <div className="text-center py-12">
-              <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-[#00629B]"></div>
-              <p className="mt-4 text-gray-600">Loading clubs...</p>
+              <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-brand-red"></div> {/* CHANGED */}
+              <p className="mt-4 text-gray-400">Loading clubs...</p> {/* CHANGED */}
             </div>
           ) : clubs.length > 0 ? (
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 md:gap-6">
@@ -105,14 +103,14 @@ export default function Home() {
                   key={club.club_name}
                   className="group"
                 >
-                  <Card className="h-full hover:shadow-xl transition-shadow duration-300">
+                  <Card className="h-full hover:shadow-xl transition-shadow duration-300 bg-background hover:bg-zinc-900"> {/* CHANGED */}
                     <CardContent className="pt-6 text-center flex flex-col items-center justify-center">
                       <img
                         src={club.club_logo_url}
                         alt={`${club.club_name} logo`}
-                        className="w-24 h-24 object-contain rounded-full mx-auto mb-4 border-2 border-gray-100 group-hover:border-[#00629B] transition-colors"
+                        className="w-24 h-24 object-contain rounded-full mx-auto mb-4 border-2 border-border group-hover:border-brand-orange transition-colors" // CHANGED
                       />
-                      <h3 className="font-semibold text-md text-gray-900 group-hover:text-[#00629B] transition-colors">
+                      <h3 className="font-semibold text-md text-gray-100 group-hover:text-brand-orange transition-colors"> {/* CHANGED */}
                         {club.club_name}
                       </h3>
                     </CardContent>
@@ -130,7 +128,6 @@ export default function Home() {
           )}
         </div>
       </section>
-      {/* --- END OF MODIFICATION --- */}
 
       {/* Upcoming Events (Unchanged) */}
       <section className="py-16">
@@ -144,7 +141,7 @@ export default function Home() {
 
           {loading ? (
             <div className="text-center py-12">
-              <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-[#00629B]"></div>
+              <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-brand-red"></div> {/* CHANGED */}
             </div>
           ) : upcomingEvents.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -162,22 +159,21 @@ export default function Home() {
         </div>
       </section>
 
-      {/* About IEEE (Unchanged) */}
-      <section className="py-16 bg-gray-50">
+      {/* About Section */}
+      <section className="py-16 bg-card"> {/* CHANGED */}
         <div className="container mx-auto px-4">
           <div className="max-w-3xl mx-auto text-center">
-            <h2 className="text-3xl font-bold mb-6">About IEEE</h2>
-            <p className="text-gray-600 mb-4">
-              IEEE (Institute of Electrical and Electronics Engineers) is the world's largest 
-              technical professional organization dedicated to advancing technology for the benefit 
-              of humanity.
+            <h2 className="text-3xl font-bold mb-6">About EventX</h2> {/* CHANGED */}
+            <p className="text-gray-400 mb-4"> {/* CHANGED */}
+              EventX is your college's central platform for discovering and managing
+              technical and non-technical events.
             </p>
-            <p className="text-gray-600 mb-6">
-              Our student branch brings together students passionate about technology, innovation, 
-              and making a difference through engineering and computer science.
+            <p className="text-gray-400 mb-6"> {/* CHANGED */}
+              Our mission is to bring all student-run clubs together, making it
+              easy for students to find opportunities and for clubs to manage their participants.
             </p>
             <Link href="/events">
-              <Button className="bg-[#00629B] hover:bg-[#004d7a]">
+              <Button className="bg-brand-gradient text-white font-semibold hover:opacity-90 transition-opacity"> {/* CHANGED */}
                 Join Our Next Event
               </Button>
             </Link>

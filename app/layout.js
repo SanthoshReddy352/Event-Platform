@@ -8,13 +8,13 @@ import { AuthProvider } from "@/context/AuthContext"; // IMPORT THE PROVIDER
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata = {
-  title: "IEEE Club - Hackathons & Tech Events",
-  description: "Join us for amazing hackathons and technical events organized by IEEE Club",
+  title: "EventX - College Event Platform", // <-- CHANGED
+  description: "Join us for amazing hackathons and technical events from all clubs", // <-- CHANGED
 };
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
+    <html lang="en" className="dark"> {/* <-- ADDED "dark" CLASS */}
       <body className={inter.className}>
         <AuthProvider> {/* WRAP WITH PROVIDER */}
           <Navbar />

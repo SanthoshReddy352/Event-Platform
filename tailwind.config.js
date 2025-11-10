@@ -18,6 +18,10 @@ module.exports = {
     	},
     	extend: {
     		colors: {
+          // --- START OF NEW THEME COLORS ---
+          'brand-red': '#ff3131',
+          'brand-orange': '#ff914d',
+          // --- END OF NEW THEME COLORS ---
     			border: 'hsl(var(--border))',
     			input: 'hsl(var(--input))',
     			ring: 'hsl(var(--ring))',
@@ -74,6 +78,11 @@ module.exports = {
     			md: 'calc(var(--radius) - 2px)',
     			sm: 'calc(var(--radius) - 4px)'
     		},
+        // --- START OF NEW GRADIENT ---
+        backgroundImage: {
+          'brand-gradient': 'linear-gradient(90deg, #ff3131, #ff914d)',
+        },
+        // --- END OF NEW GRADIENT ---
     		keyframes: {
     			'accordion-down': {
     				from: {
