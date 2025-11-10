@@ -168,7 +168,9 @@ export default function Home() {
       <section className="py-16 bg-card"> {/* CHANGED */}
         <div className="container mx-auto px-4">
           <div className="max-w-3xl mx-auto text-center">
-            <h2 className="text-3xl font-bold mb-6">About EventX</h2> {/* CHANGED */}
+            <h2 className="text-3xl font-bold mb-6">
+              <GradientText>About EventX</GradientText>
+            </h2>
             <p className="text-gray-400 mb-4"> {/* CHANGED */}
               EventX is your college's central platform for discovering and managing
               technical and non-technical events.
