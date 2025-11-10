@@ -103,7 +103,9 @@ function AdminRegistrationsContent() {
   return (
     <div className="container mx-auto px-4 py-12">
       <div className="mb-8">
-        <h1 className="text-4xl font-bold mb-2" data-testid="registrations-page-title">Review Registrations</h1>
+        <h1 className="text-4xl font-bold mb-2" data-testid="registrations-page-title">
+          <GradientText>Review Registrations</GradientText>
+        </h1>
         <p className="text-gray-400">Approve or reject participant registrations for your events</p> {/* CHANGED */}
       </div>
 
