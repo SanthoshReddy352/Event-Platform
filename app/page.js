@@ -90,7 +90,9 @@ export default function Home() {
       {/* Browse by Club (Unchanged) */}
       <section className="py-16 bg-card"> {/* CHANGED: bg-gray-50 to bg-card */}
         <div className="container mx-auto px-4">
-          <h2 className="text-3xl font-bold text-center mb-12">Browse by Club</h2>
+          <h2 className="text-3xl font-bold text-center mb-12">
+            <GradientText>Browse by Club</GradientText>
+          </h2>
           {loadingClubs ? (
             <div className="text-center py-12">
               <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-brand-red"></div> {/* CHANGED */}
