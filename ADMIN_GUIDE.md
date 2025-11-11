@@ -32,7 +32,7 @@ This document explains how EventX administrators manage events, registrations, p
 
 ## Building Registration Forms
 ```
-1. Admin Dashboard → Events → [Your Event] → Registration Form
+1. Admin Dashboard → Events → [Your Event] → Registration Form.
 2. Add fields (Text, Email, Number, Dropdown, Checkbox, File Upload)
 3. Set field validations (required, max length, accepted file types)
 4. Rearrange fields by drag & drop
