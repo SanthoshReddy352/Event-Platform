@@ -67,8 +67,8 @@ export default function UpdatePasswordPage() {
         }
         
         // Success! The 200 OK was received.
-        // Now we force a redirect to the login page.
-        window.location.href = '/auth';
+        // Now we force a redirect to the home page.
+        window.location.href = '/';
       })
       .catch(error => {
         // Handle any errors from the API call
