@@ -55,17 +55,17 @@ function ProfileContent() {
       
       const data = await response.json()
       
-      if (data.success) {
+      if (data.success && data.profile) {
         setProfileData({
             name: data.profile.name || '',
             phone_number: data.profile.phone_number || '',
-            email: currentUser.email, // Get email from context user
+            email: data.profile.email || currentUser.email || '', // <-- THE FIX
         })
       } else {
         // Fallback
         setProfileData(prev => ({
             ...prev,
-            email: currentUser.email,
+            email: currentUser.email || '',
         }))
       }
     } catch (err) {
@@ -201,7 +201,7 @@ function ProfileContent() {
                     type="email"
                     value={profileData.email}
                     disabled
-                    className="cursor-not-allowed bg-gray-50"
+                    className="cursor-not-allowed bg-gray-800 text-gray-400"
                   />
                 </div>
               </div>

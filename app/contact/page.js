@@ -20,7 +20,6 @@ export default function ContactPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
-  // --- START OF FIX ---
   useEffect(() => {
     // Pre-fill form if user is logged in and is a participant
     if (user && !isAdmin) {
@@ -41,7 +40,6 @@ export default function ContactPage() {
     }
   // Depend on user.id and isAdmin status
   }, [user?.id, isAdmin])
-  // --- END OF FIX ---
 
   const handleChange = (e) => {
     const { id, value } = e.target
@@ -122,8 +120,9 @@ export default function ContactPage() {
                     onChange={handleChange}
                     placeholder="Your Name"
                     required
-                    disabled={isUserParticipant}
-                    className={isUserParticipant ? 'cursor-not-allowed bg-gray-800/50' : ''}
+                    // --- FIX: This field is no longer disabled ---
+                    // disabled={isUserParticipant} 
+                    // className={isUserParticipant ? 'cursor-not-allowed bg-gray-800/50' : ''}
                   />
                 </div>
                 <div className="space-y-2">
@@ -135,6 +134,7 @@ export default function ContactPage() {
                     onChange={handleChange}
                     placeholder="your.email@example.com"
                     required
+                    // --- FIX: This field *remains* disabled ---
                     disabled={isUserParticipant}
                     className={isUserParticipant ? 'cursor-not-allowed bg-gray-800/50' : ''}
                   />

@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import GradientText from "@/components/GradientText";
 import { Facebook, Twitter, Linkedin, Instagram, Mail } from 'lucide-react'
 import { useAdminStatus } from '@/hooks/use-admin-status'
 
@@ -69,10 +70,9 @@ export default function Footer() {
               <ul className="space-y-2 text-sm text-gray-400">
                 <li className="flex items-center space-x-2">
                   <Mail size={16} />
-                  <span>kareieeewiesba@gmail.com</span>
+                  <span>gsreddy1182006@gmail.com</span>
                 </li>
-                <li>Kalasalingam University</li>
-                <li>Srivilliputtur, Tamil Nadu</li>
+                <li><GradientText>EventX</GradientText></li>
               </ul>
             </div>
           )}

@@ -1,6 +1,15 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
+// --- START OF CHANGE: Import new email function ---
+import { 
+  sendAdminNotification, 
+  sendApprovalEmail, 
+  sendRejectionEmail,
+  sendContactEmailToAdmin // <-- ADD THIS
+} from '@/lib/email'
+// --- END OF CHANGE ---
+
 // Initialize Supabase client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -237,11 +246,13 @@ export async function GET(request) {
             { status: 500, headers: corsHeaders }
           )
         }
-
+        
+        // --- START OF CHANGE: Also return email ---
         return NextResponse.json(
-          { success: true, profile: data || { id: user.id, name: '', phone_number: '', email: user.email } },
+          { success: true, profile: { ...(data || {}), email: user.email } },
           { headers: corsHeaders }
         )
+        // --- END OF CHANGE ---
     }
 
     // GET /api/participants/count - Get total participant count
@@ -572,6 +583,19 @@ export async function POST(request) {
           { status: 500, headers: corsHeaders }
         )
       }
+      
+      // --- START OF NEW CODE ---
+      try {
+        await sendContactEmailToAdmin({
+          fromName: contactData.name,
+          fromEmail: contactData.email,
+          message: contactData.message
+        });
+      } catch (emailError) {
+        console.error("Error sending contact email to admin:", emailError);
+        // Don't fail the whole request if email fails, just log it.
+      }
+      // --- END OF NEW CODE ---
 
       return NextResponse.json(
         { success: true, submission: data },
@@ -855,13 +879,6 @@ export async function PUT(request) {
     )
   } catch (error) {
     console.error('PUT Error:', error)
-    // Check if the error is due to empty JSON body (for approve/reject)
-    if (error instanceof SyntaxError && error.message.includes("Unexpected end of JSON input")) {
-      return NextResponse.json(
-        { success: false, error: "This endpoint does not require a JSON body, but one was expected." },
-        { status: 400, headers: corsHeaders }
-      );
-    }
     return NextResponse.json(
       { success: false, error: error.message },
       { status: 500, headers: corsHeaders }
