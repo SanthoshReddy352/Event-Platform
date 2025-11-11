@@ -43,7 +43,6 @@ function ParticipantAuthPage({ finalRedirect }) {
   const [resetMessage, setResetMessage] = useState('')
   const [isResetting, setIsResetting] = useState(false)
 
-  // --- START OF FIX ---
   // This useEffect redirects the user if they are already logged in
   useEffect(() => {
     if (!authLoading) {
@@ -55,7 +54,6 @@ function ParticipantAuthPage({ finalRedirect }) {
     }
   // Depend on the primitive user?.id
   }, [user?.id, authLoading, router, finalRedirect])
-  // --- END OF FIX ---
 
   const handleLogin = async (e) => {
     e.preventDefault() // This prevents the page from reloading
@@ -79,6 +77,7 @@ function ParticipantAuthPage({ finalRedirect }) {
     }
   }
 
+  // --- START OF FIX: Modified handleSignup ---
   const handleSignup = async (e) => {
     e.preventDefault() // This prevents the page from reloading
     setError('')
@@ -91,14 +90,24 @@ function ParticipantAuthPage({ finalRedirect }) {
 
     setLoading(true)
     try {
-      const { error: signUpError } = await supabase.auth.signUp({
+      // Get both data and error from the signUp call
+      const { data, error: signUpError } = await supabase.auth.signUp({
         email: signupData.email,
         password: signupData.password,
       })
 
       if (signUpError) throw signUpError
 
-      // Show success message and reset form
+      // NEW CHECK: Check if the user exists AND is already confirmed.
+      // data.user.email_confirmed_at will be null for new or unconfirmed users.
+      // It will have a timestamp for existing, confirmed users.
+      if (data.user && data.user.email_confirmed_at) {
+          setError("A user with this email already exists. Please log in.")
+          setLoading(false)
+          return; // Stop execution
+      }
+
+      // Show success message (for new users or unconfirmed users re-triggering email)
       setSuccess('Sign up successful! Please check your email to confirm your account.')
       setSignupData({ email: '', password: '', confirmPassword: '' })
       setCurrentTab('login'); // Switch to login tab
@@ -109,6 +118,7 @@ function ParticipantAuthPage({ finalRedirect }) {
       setLoading(false)
     }
   }
+  // --- END OF FIX ---
 
   const handleForgotPassword = async (e) => {
     e.preventDefault() // This prevents the page from reloading

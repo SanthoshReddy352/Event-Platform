@@ -13,9 +13,9 @@ export default function UpdatePasswordPage() {
   const router = useRouter()
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(true) // For initial link check
+  const [isSubmitting, setIsSubmitting] = useState(false) // <-- FIX: Added separate state for submission
   const [error, setError] = useState('')
-  const [success, setSuccess] = useState(false)
   const [user, setUser] = useState(null)
 
   useEffect(() => {
@@ -55,7 +55,7 @@ export default function UpdatePasswordPage() {
       return
     }
 
-    setLoading(true)
+    setIsSubmitting(true) // <-- FIX: Use isSubmitting state
 
     try {
       const { error } = await supabase.auth.updateUser({
@@ -64,19 +64,20 @@ export default function UpdatePasswordPage() {
 
       if (error) throw error
 
-      setSuccess(true)
-      // Log user out after successful password update for security
-      await supabase.auth.signOut() 
+      // Show an alert for immediate feedback
+      alert("Password updated successfully! Redirecting to login.");
+      
+      // Redirect to the login page
+      router.push('/auth'); 
 
     } catch (error) {
       setError(error.message)
-    } finally {
-      setLoading(false)
+      setIsSubmitting(false) // <-- FIX: Set isSubmitting false on error
     }
   }
 
   const renderContent = () => {
-    if (loading) {
+    if (loading) { // This state is now *only* for the initial check
         return (
             <div className="text-center py-12">
               <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-brand-red"></div>
@@ -85,18 +86,6 @@ export default function UpdatePasswordPage() {
         )
     }
     
-    if (success) {
-        return (
-            <div className="text-center py-12">
-                <h2 className="text-2xl font-bold text-green-500 mb-4">Success!</h2>
-                <p className="text-gray-400 mb-6">Your password has been updated. You can now log in with your new password.</p>
-                <Link href="/auth">
-                    <Button className="bg-brand-gradient text-white font-semibold hover:opacity-90 transition-opacity">Go to Login</Button>
-                </Link>
-            </div>
-        )
-    }
-
     if (error) {
         return (
             <div className="text-center py-12">
@@ -136,9 +125,9 @@ export default function UpdatePasswordPage() {
             <Button
                 type="submit"
                 className="w-full bg-brand-gradient text-white font-semibold hover:opacity-90 transition-opacity"
-                disabled={loading}
+                disabled={isSubmitting} // <-- FIX: Disable button based on isSubmitting
             >
-                {loading ? 'Updating...' : 'Set New Password'}
+                {isSubmitting ? 'Updating...' : 'Set New Password'} {/* <-- FIX: Show correct text */}
             </Button>
         </form>
     )

@@ -1,25 +1,26 @@
 // app/layout.js
 import { Inter } from "next/font/google";
 import "./globals.css";
-import Navbar from "@/components/Navbar";
-import Footer from "@/components/Footer";
 import { AuthProvider } from "@/context/AuthContext"; // IMPORT THE PROVIDER
 
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata = {
-  title: "EventX - College Event Platform", // <-- CHANGED
-  description: "Join us for amazing hackathons and technical events from all clubs", // <-- CHANGED
+  title: "EventX - College Event Platform",
+  description: "Join us for amazing hackathons and technical events from all clubs",
 };
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" className="dark"> {/* <-- ADDED "dark" CLASS */}
+    <html lang="en" className="dark">
       <body className={inter.className}>
-        <AuthProvider> {/* WRAP WITH PROVIDER */}
-          <Navbar />
-          <main className="min-h-screen">{children}</main>
-          <Footer />
+        <AuthProvider>
+          {/* Navbar and Footer are REMOVED from here.
+            They will be rendered by the app/(main)/layout.js file.
+            Auth pages like login/password reset will NOT use that layout,
+            which solves the security and hydration bugs.
+          */}
+          {children}
         </AuthProvider>
       </body>
     </html>
