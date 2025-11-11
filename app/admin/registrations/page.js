@@ -132,8 +132,16 @@ function AdminRegistrationsContent() {
     }
   }
 
+  // --- START OF CHANGE: Modify handleReject ---
   const handleReject = async (participantId) => {
     if (processingId) return; // Prevent multiple clicks
+    
+    // Ask for a rejection reason
+    const reason = prompt('Please provide a reason for rejection (optional):');
+    if (reason === null) {
+      return; // Admin clicked "Cancel"
+    }
+
     setProcessingId(participantId);
     
     try {
@@ -142,7 +150,11 @@ function AdminRegistrationsContent() {
 
       const response = await fetch(`/api/participants/${participantId}/reject`, {
         method: 'PUT',
-        headers: { 'Authorization': `Bearer ${session.access_token}` }
+        headers: { 
+          'Content-Type': 'application/json', // Specify content type
+          'Authorization': `Bearer ${session.access_token}` 
+        },
+        body: JSON.stringify({ reason: reason }) // Send the reason in the body
       });
       
       const data = await response.json();
@@ -160,6 +172,7 @@ function AdminRegistrationsContent() {
       setProcessingId(null);
     }
   }
+  // --- END OF CHANGE ---
 
   const getFilteredRegistrations = () => {
     if (filter === 'all') return registrations

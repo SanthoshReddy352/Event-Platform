@@ -1,461 +1,578 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, Suspense } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import ProtectedRoute from '@/components/ProtectedRoute'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
+import DynamicForm from '@/components/DynamicForm'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card' 
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
-import { Upload, Link as LinkIcon, ShieldAlert } from 'lucide-react'
-import { useDropzone } from 'react-dropzone'
-import { supabase } from '@/lib/supabase/client'
+import { Calendar, Clock, ArrowLeft, Loader2, FileClock, XCircle, CheckCircle } from 'lucide-react'
+// --- START OF FIX: Import 'format' ---
+import { parseISO, format } from 'date-fns'; 
+// --- END OF FIX ---
+import { formatInTimeZone } from 'date-fns-tz'; 
+import Link from 'next/link'
+import { supabase } from '@/lib/supabase/client' 
 import { useAuth } from '@/context/AuthContext' 
 
-// (Helper functions toDateTimeLocal and toISOString remain unchanged)
-const toDateTimeLocal = (isoString) => {
-  if (!isoString) return '';
-  try {
-    const date = new Date(isoString);
-    const localDate = new Date(date.getTime() - (date.getTimezoneOffset() * 60000));
-    return localDate.toISOString().slice(0, 16);
-  } catch {
-    return '';
+// Helper function to format date ranges
+const formatEventDate = (start, end, timeZone) => {
+  if (!start) return 'Date TBA';
+  
+  const tz = formatInTimeZone(start, timeZone, 'zzz');
+  const startDate = formatInTimeZone(start, timeZone, 'MMM dd');
+  const startTime = formatInTimeZone(start, timeZone, 'hh:mm a');
+  
+  if (!end) {
+    return `${startDate} at ${startTime} ${tz}`;
   }
+
+  const endDate = formatInTimeZone(end, timeZone, 'MMM dd');
+  const endTime = formatInTimeZone(end, timeZone, 'hh:mm a');
+
+  if (startDate === endDate) {
+    return `${startDate} · ${startTime} - ${endTime} ${tz}`;
+  }
+  
+  return `${startDate} ${startTime} - ${endDate} ${endTime} ${tz}`;
 }
-const toISOString = (dateTimeLocalString) => {
-    if (!dateTimeLocalString) return null;
-    return new Date(dateTimeLocalString).toISOString();
+
+// Helper function to get event status
+const getEventStatus = (event) => {
+  const now = new Date();
+  const eventEndDate = event.event_end_date ? parseISO(event.event_end_date) : null;
+  const regStartDate = event.registration_start ? parseISO(event.registration_start) : null;
+  const regEndDate = event.registration_end ? parseISO(event.registration_end) : null;
+
+  if (eventEndDate && now > eventEndDate) {
+    return { text: 'Completed', color: 'bg-gray-500', icon: <CheckCircle size={16} /> };
+  }
+  
+  if (!event.is_active) {
+    return { text: 'Inactive', color: 'bg-gray-400' };
+  }
+
+  if (regStartDate && now < regStartDate) {
+    return { 
+      // --- FIX: 'format' is now defined ---
+      text: `Opens ${format(regStartDate, 'MMM dd')}`, 
+      color: 'bg-blue-500',
+      icon: <FileClock size={16} />
+    };
+  }
+
+  if ((regEndDate && now > regEndDate) || !event.registration_open) {
+    return { text: 'Registration Closed', color: 'bg-red-500', icon: <XCircle size={16} /> };
+  }
+
+  if (regStartDate && regEndDate && now >= regStartDate && now < regEndDate && event.registration_open) {
+     return { text: 'Registration Open', color: 'bg-green-500', icon: <CheckCircle size={16} /> };
+  }
+  
+  if (event.registration_open && !regStartDate && !regEndDate) {
+     return { text: 'Registration Open', color: 'bg-green-500', icon: <CheckCircle size={16} /> };
+  }
+
+  return { text: 'Closed', color: 'bg-red-500', icon: <XCircle size={16} /> };
 }
 
 
-function EditEventContent() {
+function EventDetailContent() {
   const params = useParams()
   const router = useRouter()
+  const [event, setEvent] = useState(null)
+  const [loading, setLoading] = useState(true) 
+  const [submitted, setSubmitted] = useState(false)
+  const { user, loading: authLoading } = useAuth() 
+  const [isRegistered, setIsRegistered] = useState(false) 
+  const [registrationStatus, setRegistrationStatus] = useState(null)
+  const [regCheckLoading, setRegCheckLoading] = useState(true) // Start true
+  const storageKey = `formData-${params.id}`;
   
-  // --- START OF FIX: Add dynamic storage keys and loaded flag ---
-  const storageKey = `editEventFormData-${params.id}`;
-  const bannerUrlStorageKey = `editEventBannerUrl-${params.id}`;
-  const [isDataLoaded, setIsDataLoaded] = useState(false);
-  // --- END OF FIX ---
+  // --- START OF CHANGE: Add state for rejection history ---
+  const [rejectionHistory, setRejectionHistory] = useState(null);
+  // --- END OF CHANGE ---
 
-  const [event, setEvent] = useState(null) 
-  const [loading, setLoading] = useState(true)
-  const [found, setFound] = useState(false) 
-  
-  // --- START OF FIX: Initialize from session storage or default ---
   const [formData, setFormData] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const savedData = window.sessionStorage.getItem(storageKey);
-      if (savedData) {
-        return JSON.parse(savedData);
-      }
+     if (typeof window !== 'undefined') {
+      const saved = window.sessionStorage.getItem(storageKey);
+      return saved ? JSON.parse(saved) : {};
     }
-    return {
-      title: '',
-      description: '',
-      event_date: '',
-      event_end_date: '',
-      is_active: true,
-      registration_open: true,
-      registration_start: '',
-      registration_end: '',
-      banner_url: '',
-    };
+    return {};
   });
-  
-  const [bannerMode, setBannerMode] = useState('url')
 
-  const [bannerUrl, setBannerUrl] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return window.sessionStorage.getItem(bannerUrlStorageKey) || '';
-    }
-    return '';
-  });
-  // --- END OF FIX ---
-  
-  const [bannerFile, setBannerFile] = useState(null)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  
-  const { user, isSuperAdmin, loading: authLoading } = useAuth()
+  const setAndStoreFormData = (newData) => {
+    setFormData(newData);
+    window.sessionStorage.setItem(storageKey, JSON.stringify(newData));
+  };
 
   const fetchEvent = useCallback(async () => {
     if (!params.id) return;
+    
+    setLoading(true); // Ensure loading is true at the start
     try {
-      const response = await fetch(`/api/events/${params.id}`)
-      const data = await response.json()
+      const response = await fetch(`/api/events/${params.id}`);
+      const data = await response.json();
       if (data.success) {
-        const event = data.event
-        setEvent(event) 
-        
-        // --- START OF FIX: Load from storage or fetch ---
-        // Check if session storage has data. If not, populate from fetch.
-        if (typeof window !== 'undefined' && !window.sessionStorage.getItem(storageKey)) {
-          setFormData({
-            title: event.title,
-            description: event.description || '',
-            event_date: toDateTimeLocal(event.event_date),
-            event_end_date: toDateTimeLocal(event.event_end_date),
-            is_active: event.is_active,
-            registration_open: event.registration_open,
-            registration_start: toDateTimeLocal(event.registration_start), 
-            registration_end: toDateTimeLocal(event.registration_end),     
-            banner_url: event.banner_url || '',
-          });
-          setBannerUrl(event.banner_url || '');
-        }
-        // If storage *does* have data, useState initializer already loaded it.
-        // We just ensure bannerUrl is also loaded (in case it wasn't set)
-        else if (typeof window !== 'undefined' && !window.sessionStorage.getItem(bannerUrlStorageKey)) {
-           setBannerUrl(event.banner_url || '');
-        }
-        
-        setFound(true)
-        setIsDataLoaded(true); // Signal that initial data is loaded
-        // --- END OF FIX ---
-
+        setEvent(data.event);
       } else {
-        setFound(false)
+        setEvent(null); // Set event to null on error
       }
     } catch (error) {
-      console.error('Error fetching event:', error)
-      setFound(false)
+      console.error('Error fetching event:', error);
+      setEvent(null);
     } finally {
-      setLoading(false)
+      setLoading(false); // Set loading to false after fetch
     }
-  }, [params.id, storageKey, bannerUrlStorageKey]) // Add storage keys to dependency array
+  }, [params.id]);
 
-  useEffect(() => {
-    if (params.id) {
-      fetchEvent()
+  // --- START OF CHANGE: Update checkRegistrationStatus ---
+  const checkRegistrationStatus = useCallback(async (userId, eventId) => {
+    if (!userId || !eventId) {
+      setRegCheckLoading(false);
+      return;
     }
-  }, [params.id, fetchEvent])
-
-  // --- START OF FIX: Save form data to session storage on change ---
-  useEffect(() => {
-    // Don't save to session storage until *after* the initial data has been loaded
-    if (isDataLoaded && params.id) {
-      window.sessionStorage.setItem(storageKey, JSON.stringify(formData));
-      window.sessionStorage.setItem(bannerUrlStorageKey, bannerUrl);
-    }
-  }, [formData, bannerUrl, isDataLoaded, params.id, storageKey, bannerUrlStorageKey]);
-  // --- END OF FIX ---
-
-  const onDrop = useCallback((acceptedFiles) => {
-    if (acceptedFiles.length > 0) {
-      setBannerFile(acceptedFiles[0])
-    }
-  }, [])
-
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
-    accept: { 'image/*': [] },
-    maxFiles: 1,
-  })
-
-  const uploadBanner = async () => {
-    if (!bannerFile) return null
-
-    const fileExt = bannerFile.name.split('.').pop()
-    const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`
-    const filePath = `${fileName}`
-
-    const { data, error } = await supabase.storage
-      .from('event-banners')
-      .upload(filePath, bannerFile)
-
-    if (error) {
-      console.error('Upload error:', error)
-      throw error
-    }
-
-    const { data: { publicUrl } } = supabase.storage
-      .from('event-banners')
-      .getPublicUrl(filePath)
-
-    return publicUrl
-  }
-
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-
-    // --- (Validation remains unchanged) ---
-    if (formData.event_end_date && formData.event_date && new Date(formData.event_end_date) < new Date(formData.event_date)) {
-        alert('Event end date cannot be before the event start date.');
-        return;
-    }
-    if (formData.registration_end && formData.registration_start && new Date(formData.registration_end) < new Date(formData.registration_start)) {
-        alert('Registration end date cannot be before the registration start date.');
-        return;
-    }
-    // --- END OF VALIDATION ---
-
-    setIsSubmitting(true)
-
+    setRegCheckLoading(true);
+    setRejectionHistory(null); // Reset history on check
     try {
-      let finalBannerUrl = formData.banner_url
-
-      if (bannerMode === 'upload' && bannerFile) {
-        finalBannerUrl = await uploadBanner()
-      } else if (bannerMode === 'url') {
-        finalBannerUrl = bannerUrl
-      }
-
-      const eventData = {
-        ...formData,
-        banner_url: finalBannerUrl,
-        event_date: toISOString(formData.event_date),
-        event_end_date: toISOString(formData.event_end_date),
-        registration_start: toISOString(formData.registration_start),
-        registration_end: toISOString(formData.registration_end),
-      }
-      
       const { data: { session } } = await supabase.auth.getSession();
-      const response = await fetch(`/api/events/${params.id}`, {
-        method: 'PUT',
-        headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.access_token}`
-        },
-        body: JSON.stringify(eventData),
-      })
+      if (!session) {
+         throw new Error("No active session");
+      }
 
-      const data = await response.json()
-      if (data.success) {
-        alert('Event updated successfully!')
+      const response = await fetch(`/api/participants/${eventId}?userId=${userId}`, {
+        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      });
+      const data = await response.json();
+      
+      // data.participants is now an array
+      if (data.success && data.participants && data.participants.length > 0) {
+        // Get the most recent registration
+        const mostRecent = data.participants[data.participants.length - 1];
         
-        // --- START OF FIX: Clear storage on success ---
-        if (typeof window !== 'undefined') {
-          window.sessionStorage.removeItem(storageKey);
-          window.sessionStorage.removeItem(bannerUrlStorageKey);
+        setIsRegistered(true);
+        setRegistrationStatus(mostRecent.status);
+
+        // Find the most recent *rejected* registration to show history
+        const rejected = data.participants
+          .filter(p => p.status === 'rejected')
+          .pop(); // Gets the last one
+
+        if (rejected) {
+          setRejectionHistory(rejected);
         }
-        // --- END OF FIX ---
-        
-        router.push('/admin/events')
+
       } else {
-        alert(`Failed to update event: ${data.error}`) 
-        console.error('API Error:', data.error);
+        setIsRegistered(false);
+        setRegistrationStatus(null);
+        setRejectionHistory(null);
       }
     } catch (error) {
-      console.error('Error updating event:', error)
-      alert('An error occurred')
+      console.error("Error checking registration:", error);
+      setIsRegistered(false);
+      setRegistrationStatus(null);
+      setRejectionHistory(null);
     } finally {
-      setIsSubmitting(false)
+      setRegCheckLoading(false);
+    }
+  }, []); // Removed setters from deps, they are stable
+  // --- END OF CHANGE ---
+
+  useEffect(() => {
+    fetchEvent();
+  }, [fetchEvent]); 
+  
+  useEffect(() => {
+    if (loading || authLoading || !event?.id) return; 
+
+    if (user?.id) {
+        checkRegistrationStatus(user.id, event.id);
+    } else {
+        setIsRegistered(false);
+        setRegistrationStatus(null);
+        setRegCheckLoading(false); 
+        setRejectionHistory(null); // Clear history if user logs out
+    }
+  // Depend on user.id and event.id
+  }, [user?.id, event?.id, loading, authLoading, checkRegistrationStatus]); 
+
+  const handleSubmit = async (submitData) => {
+    if (!user) {
+        alert('You must be logged in to register.');
+        return;
+    }
+    
+    try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+            throw new Error("No active session. Please log in again.");
+        }
+      
+        const response = await fetch('/api/participants', {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${session.access_token}`
+            },
+            body: JSON.stringify({
+                event_id: params.id,
+                user_id: user.id,
+                responses: submitData
+            }),
+        });
+        
+        const data = await response.json();
+
+        if (data.success) {
+            setSubmitted(true);
+            window.sessionStorage.removeItem(storageKey); // Clear saved form data
+        } else {
+            alert(`Registration failed: ${data.error}`);
+        }
+    } catch (error) {
+        console.error('Registration error:', error);
+        alert(`An error occurred: ${error.message}`);
     }
   }
 
-  if (loading || authLoading) {
+  if (loading || (authLoading && !event)) {
+     return (
+        <div className="min-h-screen flex items-center justify-center">
+            <div className="text-center">
+              <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-brand-red"></div>
+              <p className="mt-4 text-gray-400">Loading event...</p>
+            </div>
+        </div>
+     )
+  }
+
+  if (!event) {
     return (
-      <div className="text-center py-12">
-        <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-brand-red"></div>
+      <div className="container mx-auto px-4 py-12">
+        <div className="max-w-4xl mx-auto text-center">
+           <Link href="/events">
+            <Button 
+                variant="ghost" 
+                className="mb-4"
+            >
+              <ArrowLeft size={20} className="mr-2" />
+              Back to Events
+            </Button>
+          </Link>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-2xl text-red-500">Event Not Found</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-gray-400">Sorry, we couldn't find the event you're looking for.</p>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     )
   }
   
-  if (!found) {
-    // (Unchanged)
-  }
+  // Date/status logic
+  const TIME_ZONE = 'Asia/Kolkata'; 
+  const eventStartDate = event.event_date ? parseISO(event.event_date) : null;
+  const eventEndDate = event.event_end_date ? parseISO(event.event_end_date) : null;
+  const regStartDate = event.registration_start ? parseISO(event.registration_start) : null;
+  const regEndDate = event.registration_end ? parseISO(event.registration_end) : null;
+  
+  const formattedDate = formatEventDate(eventStartDate, eventEndDate, TIME_ZONE);
+  const formattedTime = eventStartDate ? formatInTimeZone(eventStartDate, TIME_ZONE, 'hh:mm a zzz') : null;
+  const formattedRegStart = regStartDate ? formatEventDate(regStartDate, null, TIME_ZONE) : 'Not specified';
+  const formattedRegEnd = regEndDate ? formatEventDate(regEndDate, null, TIME_ZONE) : 'Not specified';
+  
+  const status = getEventStatus(event);
+  const isCompleted = status.text === 'Completed';
+  const isRegistrationAvailable = status.color === 'bg-green-500';
+  
+  const statusBadge = (
+      <span 
+          className={`text-white text-xs px-3 py-1 rounded-full flex items-center gap-1.5 ${status.color}`}
+      >
+          {status.icon}
+          {status.text}
+      </span>
+  );
+  
+  // --- START OF CHANGE: Updated registrationContent function ---
+  const registrationContent = () => {
+      if (authLoading || regCheckLoading) {
+          return (
+              <Card>
+                  <CardContent className="py-12 text-center">
+                      <Loader2 className="mx-auto h-8 w-8 animate-spin text-brand-red" />
+                      <p className="mt-4 text-gray-400">Checking your status...</p>
+                  </CardContent>
+              </Card>
+          )
+      }
+      
+      if (isCompleted) {
+           return (
+              <Card>
+                  <CardContent className="py-12 text-center text-gray-500">
+                      <CheckCircle size={48} className="mx-auto mb-4 text-gray-400" />
+                      <p className="text-lg font-semibold mb-2">Event Completed</p>
+                      <p>This event has already finished.</p>
+                  </CardContent>
+              </Card>
+          )
+      }
 
-  const canManage = event && user && (isSuperAdmin || event.created_by === user.id);
-  if (!canManage) {
-    // (Unchanged)
-  }
+      // --- ADDED THIS BLOCK to show rejection history if they are re-applying ---
+      const rejectionHistoryCard = rejectionHistory && registrationStatus !== 'rejected' && (
+        <Card className="border-red-500 mb-6">
+          <CardHeader>
+            <CardTitle className="text-red-500">Previous Registration Rejected</CardTitle>
+            <CardDescription>Your previous submission was not approved.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-gray-300 font-medium">Reason:</p>
+            <p className="text-gray-300 whitespace-pre-wrap">
+              {rejectionHistory.rejection_reason || 'No reason provided.'}
+            </p>
+            <p className="text-gray-400 text-sm mt-3">
+              You may submit a new registration below.
+            </p>
+          </CardContent>
+        </Card>
+      );
+      
+      if (isRegistered) {
+          if (registrationStatus === 'approved') {
+              return (
+                  <Card className="border-green-500">
+                      <CardHeader>
+                          <CardTitle className="text-green-500">You are Registered!</CardTitle>
+                          <CardDescription>Your registration for this event has been approved.</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                          <p className="text-gray-300">We look forward to seeing you at the event. You will receive further details via email.</p>
+                      </CardContent>
+                  </Card>
+              )
+          }
+          if (registrationStatus === 'pending') {
+              return (
+                  <>
+                    {rejectionHistoryCard} {/* Show history if it exists */}
+                    <Card className="border-orange-500">
+                        <CardHeader>
+                            <CardTitle className="text-orange-500">Registration Pending</CardTitle>
+                            <CardDescription>Your new submission is being reviewed by the admin.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <p className="text-gray-300">You will be notified by email once your registration is approved or rejected.</p>
+                        </CardContent>
+                    </Card>
+                  </>
+              )
+          }
+           if (registrationStatus === 'rejected') {
+              // If rejected, show the rejection card AND the registration form below
+              // We don't return here, we fall through
+           }
+      }
+      
+      if (!isRegistrationAvailable) {
+          // But if registration is closed AND they were rejected, just show rejection.
+          if (registrationStatus === 'rejected') {
+             return (
+                  <Card className="border-red-500">
+                      <CardHeader>
+                          <CardTitle className="text-red-500">Registration Rejected</CardTitle>
+                          <CardDescription>Unfortunately, your registration was not approved.</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                          <p className="text-gray-300 font-medium">Reason:</p>
+                          <p className="text-gray-300 whitespace-pre-wrap">
+                            {rejectionHistory.rejection_reason || 'No reason provided.'}
+                          </p>
+                          <p className="text-gray-500 text-sm mt-3">The registration period for this event is also closed.</p>
+                      </CardContent>
+                  </Card>
+              )
+          }
+          // Otherwise, show the normal "Closed" card
+          return (
+              <Card>
+                  <CardContent className="py-12 text-center text-gray-500">
+                      <XCircle size={48} className="mx-auto mb-4 text-gray-400" />
+                      <p className="text-lg font-semibold mb-2">Registration Closed</p>
+                      <p>The registration period for this event has ended or has not yet begun.</p>
+                  </CardContent>
+              </Card>
+          )
+      }
+      
+      if (!user) {
+          return (
+              <Card className="border-yellow-500">
+                  <CardHeader>
+                    <CardTitle>Sign in to Register</CardTitle>
+                    <CardDescription>You must be logged in to access the registration form for this event.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                      <Link href={`/auth?redirect=${params.id}`}>
+                        <Button className="w-full bg-brand-gradient text-white font-semibold hover:opacity-90 transition-opacity">
+                          Login or Register
+                        </Button>
+                      </Link>
+                  </CardContent>
+              </Card>
+          )
+      }
+      
+      if (submitted) {
+          return (
+              <Card className="border-orange-500">
+                  <CardHeader>
+                      <CardTitle className="text-orange-500">Registration Submitted</CardTitle>
+                      <CardDescription>Your submission is now pending review.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                      <p className="text-gray-300">You will be notified by email once your registration is approved or rejected.</p>
+                  </CardContent>
+              </Card>
+          )
+      }
 
-  // If we reach here, user has permission
+      // --- MODIFIED: Show rejection card *above* the form ---
+      const rejectedCard = registrationStatus === 'rejected' && (
+         <Card className="border-red-500 mb-6">
+            <CardHeader>
+                <CardTitle className="text-red-500">Registration Rejected</CardTitle>
+                <CardDescription>Unfortunately, your last registration was not approved. You may register again below.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <p className="text-gray-300 font-medium">Reason:</p>
+                <p className="text-gray-300 whitespace-pre-wrap">
+                  {rejectionHistory.rejection_reason || 'No reason provided.'}
+                </p>
+            </CardContent>
+        </Card>
+      );
+
+      // 6. Show Form
+      return (
+          <>
+            {rejectionHistoryCard} {/* Show if last status was rejected */}
+            {rejectionHistoryCard === null && rejectionHistoryCard} {/* Show if previous (but not last) was rejected */}
+            <Card>
+                <CardHeader>
+                    <CardTitle>Registration Form</CardTitle>
+                    <CardDescription>Logged in as: {user?.email || 'Loading...'}</CardDescription>
+                </CardHeader>
+                <CardContent className="relative">
+                    <DynamicForm
+                        fields={event.form_fields || []}
+                        onSubmit={handleSubmit}
+                        eventId={params.id}
+                        formData={formData} 
+                        onFormChange={setAndStoreFormData} 
+                    />
+                </CardContent>
+            </Card>
+          </>
+      )
+  }
+  // --- END OF CHANGE ---
+
   return (
-    <div className="container mx-auto px-4 py-12 max-w-3xl">
-      <h1 className="text-4xl font-bold mb-8">Edit Event</h1>
+    <div className="min-h-screen bg-background">
+      <div className="w-full h-64 bg-brand-gradient relative">
+        {event?.banner_url && (
+          <img
+            src={event.banner_url}
+            alt={event.title}
+            className="w-full h-full object-cover"
+          />
+        )}
+        <div className="absolute inset-0 bg-black/40"></div>
+      </div>
 
-      <form onSubmit={handleSubmit}>
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle>Event Details</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="title">Event Title *</Label>
-              <Input
-                id="title"
-                value={formData.title}
-                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="description">Description</Label>
-              <Textarea
-                id="description"
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                rows={6}
-              />
-            </div>
+      <div className="container mx-auto px-4 -mt-16 relative z-10 pb-12">
+        <div className="max-w-4xl mx-auto">
+          <Link href="/events">
+            <Button 
+                variant="ghost" 
+                className="mb-4 text-white hover:text-gray-200 hover:bg-white/10"
+            >
+              <ArrowLeft size={20} className="mr-2" />
+              Back to Events
+            </Button>
+          </Link>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="event_date">Event Start Date & Time</Label>
-                <Input
-                  id="event_date"
-                  type="datetime-local"
-                  value={formData.event_date}
-                  onChange={(e) => setFormData({ ...formData, event_date: e.target.value })}
-                  className="custom-date-icon"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="event_end_date">Event End Date & Time</Label>
-                <Input
-                  id="event_end_date"
-                  type="datetime-local"
-                  value={formData.event_end_date}
-                  onChange={(e) => setFormData({ ...formData, event_end_date: e.target.value })}
-                  className="custom-date-icon"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="registration_start">Registration Start Date & Time</Label>
-                <Input
-                  id="registration_start"
-                  type="datetime-local"
-                  value={formData.registration_start}
-                  onChange={(e) => setFormData({ ...formData, registration_start: e.target.value })}
-                  className="custom-date-icon"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="registration_end">Registration End Date & Time</Label>
-                <Input
-                  id="registration_end"
-                  type="datetime-local"
-                  value={formData.registration_end}
-                  onChange={(e) => setFormData({ ...formData, registration_end: e.target.value })}
-                  className="custom-date-icon"
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="is_active"
-                checked={formData.is_active}
-                onCheckedChange={(checked) =>
-                  setFormData({ ...formData, is_active: checked })
-                }
-              />
-              <Label htmlFor="is_active" className="font-normal">
-                Event is Active (Publicly Visible)
-              </Label>
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="registration_open"
-                checked={formData.registration_open}
-                onCheckedChange={(checked) =>
-                  setFormData({ ...formData, registration_open: checked })
-                }
-              />
-              <Label htmlFor="registration_open" className="font-normal">
-                Registration is Open
-              </Label>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle>Event Banner</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {formData.banner_url && (
-              <div className="mb-4">
-                <Label className="mb-2 block">Current Banner</Label>
-                <img
-                  src={formData.banner_url}
-                  alt="Current banner"
-                  className="w-full h-48 object-cover rounded-lg"
-                />
-              </div>
-            )}
-
-            <div className="flex space-x-4 mb-4">
-              <Button
-                type="button"
-                variant={bannerMode === 'url' ? 'default' : 'outline'}
-                onClick={() => setBannerMode('url')}
-                className={bannerMode === 'url' ? 'bg-brand-gradient text-white hover:opacity-90' : ''}
-              >
-                <LinkIcon size={16} className="mr-2" />
-                Use URL
-              </Button>
-              <Button
-                type="button"
-                variant={bannerMode === 'upload' ? 'default' : 'outline'}
-                onClick={() => setBannerMode('upload')}
-                className={bannerMode === 'upload' ? 'bg-brand-gradient text-white hover:opacity-90' : ''}
-              >
-                <Upload size={16} className="mr-2" />
-                Upload New
-              </Button>
-            </div>
-
-            {bannerMode === 'url' ? (
-              <div className="space-y-2">
-                <Label htmlFor="banner_url">Banner URL</Label>
-                <Input
-                  id="banner_url"
-                  value={bannerUrl}
-                  onChange={(e) => setBannerUrl(e.target.value)}
-                  placeholder="https://example.com/banner.jpg"
-                />
-              </div>
-            ) : (
-              <div
-                {...getRootProps()}
-                className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer ${
-                  isDragActive ? 'border-brand-red bg-red-900/10' : 'border-gray-600'
-                }`}
-              >
-                <input {...getInputProps()} />
-                <Upload size={48} className="mx-auto mb-4 text-gray-400" />
-                {bannerFile ? (
-                  <p className="text-sm">Selected: <strong>{bannerFile.name}</strong></p>
-                ) : (
-                  <p className="text-sm text-gray-400">
-                    {isDragActive ? 'Drop here' : 'Drag & drop or click to select new image'}
+          {event && (
+            <>
+              <Card className="mb-8">
+                <CardHeader>
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <CardTitle className="text-3xl mb-2">{event.title}</CardTitle>
+                      <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-gray-400">
+                        <div className="flex items-center">
+                          <Calendar size={16} className="mr-2 text-brand-red" />
+                          <span>{formattedDate}</span>
+                        </div>
+                        {formattedTime && (
+                          <div className="flex items-center">
+                            <Clock size={16} className="mr-2 text-brand-red" />
+                            <span>{formattedTime}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    {statusBadge}
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <Card className="mb-6 bg-background">
+                    <CardHeader>
+                      <CardTitle className="text-lg">Registration Timeline</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-2 text-sm">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium w-20">Starts:</span>
+                        <span className="text-gray-300">{formattedRegStart}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium w-20">Ends:</span>
+                        <span className="text-gray-300">{formattedRegEnd}</span>
+                      </div>
+                    </CardContent>
+                  </Card>
+                
+                  <h3 className="font-bold text-xl mb-2">Description</h3>
+                  <p className="text-gray-300 whitespace-pre-wrap">
+                    {event.description || 'No description available'}
                   </p>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                </CardContent>
+              </Card>
 
-        <div className="flex justify-end space-x-4">
-          <Button type="button" variant="outline" onClick={() => router.back()}>
-            Cancel
-          </Button>
-          <Button
-            type="submit"
-            className="bg-brand-gradient text-white font-semibold hover:opacity-90 transition-opacity"
-            disabled={isSubmitting}
-          >
-            {isSubmitting ? 'Updating...' : 'Update Event'}
-          </Button>
+              {registrationContent()}
+            </>
+          )}
         </div>
-      </form>
+      </div>
     </div>
   )
 }
 
-export default function EditEventPage() {
+// We wrap the default export in Suspense to allow useParams()
+export default function EventDetailPage() {
   return (
-    <ProtectedRoute>
-      <EditEventContent />
-    </ProtectedRoute>
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-brand-red"></div>
+          <p className="mt-4 text-gray-400">Loading event...</p>
+        </div>
+      </div>
+    }>
+      <EventDetailContent />
+    </Suspense>
   )
 }

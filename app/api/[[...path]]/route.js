@@ -328,17 +328,20 @@ export async function GET(request) {
              return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403, headers: corsHeaders })
         }
         
+        // --- START OF CHANGE: Fetch all records for user, not just one ---
         const { data, error } = await supabase
             .from('participants')
             .select('*')
             .eq('event_id', eventId)
             .eq('user_id', user.id)
-            .maybeSingle()
+            .order('created_at', { ascending: true }) // Order by date
 
         if (error) {
             return NextResponse.json({ success: false, error: error.message }, { status: 500, headers: corsHeaders })
         }
-        return NextResponse.json({ success: true, participant: data }, { headers: corsHeaders })
+        // Return an array of participants
+        return NextResponse.json({ success: true, participants: data }, { headers: corsHeaders })
+        // --- END OF CHANGE ---
         
       } else {
         // This is an ADMIN request for all participants
@@ -475,25 +478,31 @@ export async function POST(request) {
           return NextResponse.json({ success: false, error: 'Unauthorized: Missing user ID' }, { status: 401, headers: corsHeaders })
       }
       
+      // --- START OF CHANGE: Allow re-registration if rejected ---
+      // This logic now checks for *active* (pending or approved) registrations.
+      // If a user only has 'rejected' registrations, this check will pass.
       const { data: existingReg } = await supabase
         .from('participants')
         .select('id, status')
         .eq('event_id', body.event_id)
         .eq('user_id', participantUserId)
+        .in('status', ['pending', 'approved']) // Only check for active ones
         .maybeSingle();
       
-      if (existingReg && (existingReg.status === 'approved' || existingReg.status === 'pending')) {
+      if (existingReg) {
         return NextResponse.json(
           { success: false, error: `You already have a ${existingReg.status} registration for this event.` },
           { status: 409, headers: corsHeaders }
         )
       }
+      // --- END OF CHANGE ---
       
       const participantData = {
         event_id: body.event_id,
         user_id: participantUserId, 
         responses: body.responses,
         status: 'pending', 
+        // rejection_reason will be null by default
       }
 
       const { data, error } = await supabase
@@ -587,11 +596,10 @@ export async function POST(request) {
 export async function PUT(request) {
   try {
     const segments = getPathSegments(request)
-    // const body = await request.json() // <-- MOVED
     
     // PUT /api/profile - Update current user profile
     if (segments[0] === 'profile') {
-        const body = await request.json() // <-- ADDED HERE
+        const body = await request.json()
         const authHeader = request.headers.get('Authorization')
         if (!authHeader) {
              return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401, headers: corsHeaders })
@@ -632,7 +640,7 @@ export async function PUT(request) {
 
     // PUT /api/events/:id - Update event
     if (segments[0] === 'events' && segments[1]) {
-      const body = await request.json() // <-- ADDED HERE
+      const body = await request.json()
       const eventId = segments[1]
       
       const { user, role, error: adminError } = await getAdminUser(request);
@@ -718,7 +726,8 @@ export async function PUT(request) {
         .update({
           status: 'approved',
           reviewed_by: user.id,
-          reviewed_at: new Date().toISOString()
+          reviewed_at: new Date().toISOString(),
+          rejection_reason: null // Clear any previous rejection reason
         })
         .eq('id', participantId)
         .select()
@@ -751,6 +760,11 @@ export async function PUT(request) {
 
     // PUT /api/participants/:id/reject - Reject participant registration
     if (segments[0] === 'participants' && segments[1] && segments[2] === 'reject') {
+      // --- START OF CHANGE: Read body to get reason ---
+      const body = await request.json()
+      const reason = body.reason || null
+      // --- END OF CHANGE ---
+      
       const participantId = segments[1];
       
       const { user, role, error: adminError } = await getAdminUser(request);
@@ -773,16 +787,19 @@ export async function PUT(request) {
         return NextResponse.json({ success: false, error: 'Forbidden: You do not own this event' }, { status: 403, headers: corsHeaders })
       }
       
+      // --- START OF CHANGE: Add rejection_reason to update ---
       const { data, error } = await supabase
         .from('participants')
         .update({
           status: 'rejected',
           reviewed_by: user.id,
-          reviewed_at: new Date().toISOString()
+          reviewed_at: new Date().toISOString(),
+          rejection_reason: reason // Save the reason
         })
         .eq('id', participantId)
         .select()
         .single();
+      // --- END OF CHANGE ---
       
       if (error) {
         return NextResponse.json({ success: false, error: error.message }, { status: 500, headers: corsHeaders })
@@ -794,13 +811,15 @@ export async function PUT(request) {
         if (participantUser?.email) {
           const participantName = participant.responses?.['Name'] || participant.responses?.['Full Name'] || participant.responses?.['name'] || 'Participant'
           
+          // --- START OF CHANGE: Pass the reason to the email ---
           const { sendRejectionEmail } = await import('@/lib/email')
           await sendRejectionEmail({
             to: participantUser.email,
             participantName,
             eventTitle: participant.event.title,
-            reason: null 
+            reason: reason // Pass the reason here
           })
+          // --- END OF CHANGE ---
         }
       } catch (emailError) {
         console.error('Error sending rejection email:', emailError)
