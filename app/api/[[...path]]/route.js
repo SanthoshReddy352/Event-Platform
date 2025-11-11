@@ -706,11 +706,13 @@ export async function PUT(request) {
           return NextResponse.json({ success: false, error: adminError?.message || 'Unauthorized' }, { status: 401, headers: corsHeaders })
       }
       
+      // --- START OF CHANGE: Fetch event_end_date ---
       const { data: participant, error: participantError } = await supabase
         .from('participants')
-        .select('*, event:events(id, title, created_by, event_date)') 
+        .select('*, event:events(id, title, created_by, event_date, event_end_date)') 
         .eq('id', participantId)
         .single();
+      // --- END OF CHANGE ---
       
       if (participantError || !participant) {
         return NextResponse.json({ success: false, error: 'Participant not found' }, { status: 404, headers: corsHeaders })
@@ -737,33 +739,42 @@ export async function PUT(request) {
         return NextResponse.json({ success: false, error: error.message }, { status: 500, headers: corsHeaders })
       }
       
+      // --- START OF CHANGE: Send 'from' email and dates ---
       try {
         const { data: { user: participantUser } } = await supabase.auth.admin.getUserById(participant.user_id)
+        const { data: { user: adminUser } } = await supabase.auth.admin.getUserById(participant.event.created_by)
         
-        if (participantUser?.email) {
+        if (participantUser?.email && adminUser?.email) {
           const participantName = participant.responses?.['Name'] || participant.responses?.['Full Name'] || participant.responses?.['name'] || 'Participant'
+          
+          // Get admin's name and logo
+          const { data: adminProfile } = await supabase.from('admin_users').select('club_name, club_logo_url').eq('user_id', adminUser.id).single();
+          const fromName = adminProfile?.club_name || participant.event.title;
+          const clubLogoUrl = adminProfile?.club_logo_url || null;
           
           const { sendApprovalEmail } = await import('@/lib/email')
           await sendApprovalEmail({
             to: participantUser.email,
+            from: { name: fromName, email: adminUser.email },
             participantName,
             eventTitle: participant.event.title,
-            eventDate: participant.event.event_date 
+            eventStartDate: participant.event.event_date,
+            eventEndDate: participant.event.event_end_date,
+            clubLogoUrl: clubLogoUrl
           })
         }
       } catch (emailError) {
         console.error('Error sending approval email:', emailError)
       }
+      // --- END OF CHANGE ---
       
       return NextResponse.json({ success: true, participant: data }, { headers: corsHeaders })
     }
 
     // PUT /api/participants/:id/reject - Reject participant registration
     if (segments[0] === 'participants' && segments[1] && segments[2] === 'reject') {
-      // --- START OF CHANGE: Read body to get reason ---
       const body = await request.json()
       const reason = body.reason || null
-      // --- END OF CHANGE ---
       
       const participantId = segments[1];
       
@@ -772,11 +783,13 @@ export async function PUT(request) {
           return NextResponse.json({ success: false, error: adminError?.message || 'Unauthorized' }, { status: 401, headers: corsHeaders })
       }
       
+      // --- START OF CHANGE: Fetch event_end_date ---
       const { data: participant, error: participantError } = await supabase
         .from('participants')
-        .select('*, event:events(id, title, created_by)')
+        .select('*, event:events(id, title, created_by, event_date, event_end_date)')
         .eq('id', participantId)
         .single();
+      // --- END OF CHANGE ---
       
       if (participantError || !participant) {
         return NextResponse.json({ success: false, error: 'Participant not found' }, { status: 404, headers: corsHeaders })
@@ -787,7 +800,6 @@ export async function PUT(request) {
         return NextResponse.json({ success: false, error: 'Forbidden: You do not own this event' }, { status: 403, headers: corsHeaders })
       }
       
-      // --- START OF CHANGE: Add rejection_reason to update ---
       const { data, error } = await supabase
         .from('participants')
         .update({
@@ -799,31 +811,40 @@ export async function PUT(request) {
         .eq('id', participantId)
         .select()
         .single();
-      // --- END OF CHANGE ---
       
       if (error) {
         return NextResponse.json({ success: false, error: error.message }, { status: 500, headers: corsHeaders })
       }
       
+      // --- START OF CHANGE: Send 'from' email and dates ---
       try {
         const { data: { user: participantUser } } = await supabase.auth.admin.getUserById(participant.user_id)
+        const { data: { user: adminUser } } = await supabase.auth.admin.getUserById(participant.event.created_by)
         
-        if (participantUser?.email) {
+        if (participantUser?.email && adminUser?.email) {
           const participantName = participant.responses?.['Name'] || participant.responses?.['Full Name'] || participant.responses?.['name'] || 'Participant'
+
+          // Get admin's name and logo
+          const { data: adminProfile } = await supabase.from('admin_users').select('club_name, club_logo_url').eq('user_id', adminUser.id).single();
+          const fromName = adminProfile?.club_name || participant.event.title;
+          const clubLogoUrl = adminProfile?.club_logo_url || null;
           
-          // --- START OF CHANGE: Pass the reason to the email ---
           const { sendRejectionEmail } = await import('@/lib/email')
           await sendRejectionEmail({
             to: participantUser.email,
+            from: { name: fromName, email: adminUser.email },
             participantName,
             eventTitle: participant.event.title,
-            reason: reason // Pass the reason here
+            reason: reason,
+            eventStartDate: participant.event.event_date,
+            eventEndDate: participant.event.event_end_date,
+            clubLogoUrl: clubLogoUrl
           })
-          // --- END OF CHANGE ---
         }
       } catch (emailError) {
         console.error('Error sending rejection email:', emailError)
       }
+      // --- END OF CHANGE ---
       
       return NextResponse.json({ success: true, participant: data }, { headers: corsHeaders })
     }
@@ -834,6 +855,13 @@ export async function PUT(request) {
     )
   } catch (error) {
     console.error('PUT Error:', error)
+    // Check if the error is due to empty JSON body (for approve/reject)
+    if (error instanceof SyntaxError && error.message.includes("Unexpected end of JSON input")) {
+      return NextResponse.json(
+        { success: false, error: "This endpoint does not require a JSON body, but one was expected." },
+        { status: 400, headers: corsHeaders }
+      );
+    }
     return NextResponse.json(
       { success: false, error: error.message },
       { status: 500, headers: corsHeaders }
