@@ -1,11 +1,10 @@
--- IEEE Club Hackathon Website Database Schema
+-- EventX Platform Database Schema
 -- Run this SQL in your Supabase SQL Editor
 --
--- NEW in this version:
--- - Added 'club_name' and 'club_logo_url' to 'admin_users'
--- - Added 'club-logos' storage bucket for club branding
---
--- To update existing database, run the migration commands at the end of this file
+-- This schema includes:
+-- - 'rejection_reason' column on the 'participants' table.
+-- - 'club_name' and 'club_logo_url' on 'admin_users'
+-- - 'club-logos' storage bucket for club branding
 
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -55,6 +54,7 @@ CREATE TABLE IF NOT EXISTS participants (
     status TEXT NOT NULL DEFAULT 'pending', -- 'pending', 'approved', 'rejected'
     reviewed_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
     reviewed_at TIMESTAMP WITH TIME ZONE,
+    rejection_reason TEXT, -- <-- ADDED THIS COLUMN
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     CONSTRAINT participant_status_check CHECK (status IN ('pending', 'approved', 'rejected'))
 );
@@ -294,21 +294,26 @@ CREATE INDEX IF NOT EXISTS idx_participants_reviewed_by ON participants(reviewed
 -- MIGRATION COMMANDS (For existing databases)
 -- ====================================================================
 -- If your database already exists, you can run ONLY the commands below
--- to add the new multi-club features without deleting your data.
+-- to add the new features without deleting your data.
 -- ====================================================================
 
 /*
--- 1. Add columns to admin_users table
+
+-- 1. Add rejection_reason to participants table
+ALTER TABLE public.participants
+ADD COLUMN IF NOT EXISTS rejection_reason TEXT;
+
+-- 2. Add columns to admin_users table
 ALTER TABLE public.admin_users
 ADD COLUMN IF NOT EXISTS club_name TEXT,
 ADD COLUMN IF NOT EXISTS club_logo_url TEXT;
 
--- 2. Create 'club-logos' storage bucket
+-- 3. Create 'club-logos' storage bucket
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('club-logos', 'club-logos', true)
 ON CONFLICT (id) DO NOTHING;
 
--- 3. Add policies for 'club-logos' bucket
+-- 4. Add policies for 'club-logos' bucket
 -- (These are safe to run even if they exist)
 DROP POLICY IF EXISTS "Club logos are publicly accessible" ON storage.objects;
 CREATE POLICY "Club logos are publicly accessible"
@@ -330,7 +335,7 @@ CREATE POLICY "Admins can delete club logos"
     ON storage.objects FOR DELETE
     USING (bucket_id = 'club-logos' AND public.get_admin_role() IS NOT NULL);
 
--- 4. Update RLS policy for admin_users to allow self-editing
+-- 5. Update RLS policy for admin_users to allow self-editing
 DROP POLICY IF EXISTS "Super admins can manage admin users" ON admin_users;
 CREATE POLICY "Super admins can manage admin users"
     ON admin_users FOR ALL

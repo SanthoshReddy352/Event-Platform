@@ -6,9 +6,7 @@ import DynamicForm from '@/components/DynamicForm'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card' 
 import { Button } from '@/components/ui/button'
 import { Calendar, Clock, ArrowLeft, Loader2, FileClock, XCircle, CheckCircle } from 'lucide-react'
-// --- START OF FIX: Import 'format' ---
 import { parseISO, format } from 'date-fns'; 
-// --- END OF FIX ---
 import { formatInTimeZone } from 'date-fns-tz'; 
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client' 
@@ -53,7 +51,6 @@ const getEventStatus = (event) => {
 
   if (regStartDate && now < regStartDate) {
     return { 
-      // --- FIX: 'format' is now defined ---
       text: `Opens ${format(regStartDate, 'MMM dd')}`, 
       color: 'bg-blue-500',
       icon: <FileClock size={16} />
@@ -88,6 +85,9 @@ function EventDetailContent() {
   const [regCheckLoading, setRegCheckLoading] = useState(true) // Start true
   const storageKey = `formData-${params.id}`;
   
+  // --- STATE FOR REJECTION HISTORY ---
+  const [rejectionHistory, setRejectionHistory] = useState(null);
+
   const [formData, setFormData] = useState(() => {
      if (typeof window !== 'undefined') {
       const saved = window.sessionStorage.getItem(storageKey);
@@ -121,12 +121,14 @@ function EventDetailContent() {
     }
   }, [params.id]);
 
+  // --- UPDATED: checkRegistrationStatus fetches all records ---
   const checkRegistrationStatus = useCallback(async (userId, eventId) => {
     if (!userId || !eventId) {
       setRegCheckLoading(false);
       return;
     }
     setRegCheckLoading(true);
+    setRejectionHistory(null); // Reset history on check
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
@@ -138,21 +140,37 @@ function EventDetailContent() {
       });
       const data = await response.json();
       
-      if (data.success && data.participant) {
+      // data.participants is now an array
+      if (data.success && data.participants && data.participants.length > 0) {
+        // Get the most recent registration
+        const mostRecent = data.participants[data.participants.length - 1];
+        
         setIsRegistered(true);
-        setRegistrationStatus(data.participant.status);
+        setRegistrationStatus(mostRecent.status);
+
+        // Find the most recent *rejected* registration to show history
+        const rejected = data.participants
+          .filter(p => p.status === 'rejected')
+          .pop(); // Gets the last one
+
+        if (rejected) {
+          setRejectionHistory(rejected);
+        }
+
       } else {
         setIsRegistered(false);
         setRegistrationStatus(null);
+        setRejectionHistory(null);
       }
     } catch (error) {
       console.error("Error checking registration:", error);
       setIsRegistered(false);
       setRegistrationStatus(null);
+      setRejectionHistory(null);
     } finally {
       setRegCheckLoading(false);
     }
-  }, []); // Removed setters from deps, they are stable
+  }, []); 
 
   useEffect(() => {
     fetchEvent();
@@ -167,6 +185,7 @@ function EventDetailContent() {
         setIsRegistered(false);
         setRegistrationStatus(null);
         setRegCheckLoading(false); 
+        setRejectionHistory(null); // Clear history if user logs out
     }
   // Depend on user.id and event.id
   }, [user?.id, event?.id, loading, authLoading, checkRegistrationStatus]); 
@@ -272,6 +291,7 @@ function EventDetailContent() {
       </span>
   );
   
+  // --- UPDATED: registrationContent function ---
   const registrationContent = () => {
       if (authLoading || regCheckLoading) {
           return (
@@ -295,6 +315,25 @@ function EventDetailContent() {
               </Card>
           )
       }
+
+      // --- THIS CARD SHOWS REJECTION HISTORY IF RE-APPLYING ---
+      const rejectionHistoryCard = rejectionHistory && registrationStatus !== 'rejected' && (
+        <Card className="border-red-500 mb-6">
+          <CardHeader>
+            <CardTitle className="text-red-500">Previous Registration Rejected</CardTitle>
+            <CardDescription>Your previous submission was not approved.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-gray-300 font-medium">Reason:</p>
+            <p className="text-gray-300 whitespace-pre-wrap">
+              {rejectionHistory.rejection_reason || 'No reason provided.'}
+            </p>
+            <p className="text-gray-400 text-sm mt-3">
+              You may submit a new registration below.
+            </p>
+          </CardContent>
+        </Card>
+      );
       
       if (isRegistered) {
           if (registrationStatus === 'approved') {
@@ -312,33 +351,46 @@ function EventDetailContent() {
           }
           if (registrationStatus === 'pending') {
               return (
-                  <Card className="border-orange-500">
-                      <CardHeader>
-                          <CardTitle className="text-orange-500">Registration Pending</CardTitle>
-                          <CardDescription>Your submission is being reviewed by the admin.</CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                          <p className="text-gray-300">You will be notified by email once your registration is approved or rejected.</p>
-                      </CardContent>
-                  </Card>
+                  <>
+                    {rejectionHistoryCard} {/* Show history if it exists */}
+                    <Card className="border-orange-500">
+                        <CardHeader>
+                            <CardTitle className="text-orange-500">Registration Pending</CardTitle>
+                            <CardDescription>Your new submission is being reviewed by the admin.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <p className="text-gray-300">You will be notified by email once your registration is approved or rejected.</p>
+                        </CardContent>
+                    </Card>
+                  </>
               )
           }
            if (registrationStatus === 'rejected') {
-              return (
+              // If rejected, show the rejection card AND the registration form below
+              // We don't return here, we fall through
+           }
+      }
+      
+      if (!isRegistrationAvailable) {
+          // But if registration is closed AND they were rejected, just show rejection.
+          if (registrationStatus === 'rejected' && rejectionHistory) {
+             return (
                   <Card className="border-red-500">
                       <CardHeader>
                           <CardTitle className="text-red-500">Registration Rejected</CardTitle>
                           <CardDescription>Unfortunately, your registration was not approved.</CardDescription>
                       </CardHeader>
                       <CardContent>
-                          <p className="text-gray-300">If you believe this is a mistake, please contact the event organizers.</p>
+                          <p className="text-gray-300 font-medium">Reason:</p>
+                          <p className="text-gray-300 whitespace-pre-wrap">
+                            {rejectionHistory.rejection_reason || 'No reason provided.'}
+                          </p>
+                          <p className="text-gray-500 text-sm mt-3">The registration period for this event is also closed.</p>
                       </CardContent>
                   </Card>
               )
           }
-      }
-      
-      if (!isRegistrationAvailable) {
+          // Otherwise, show the normal "Closed" card
           return (
               <Card>
                   <CardContent className="py-12 text-center text-gray-500">
@@ -382,23 +434,43 @@ function EventDetailContent() {
           )
       }
 
+      // --- THIS IS THE CARD FOR REJECTION + RE-APPLY ---
+      const rejectedCard = registrationStatus === 'rejected' && rejectionHistory && (
+         <Card className="border-red-500 mb-6">
+            <CardHeader>
+                <CardTitle className="text-red-500">Registration Rejected</CardTitle>
+                <CardDescription>Unfortunately, your last registration was not approved. You may register again below.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <p className="text-gray-300 font-medium">Message by the Event Organizer :</p>
+                <p className="text-gray-300 whitespace-pre-wrap">
+                  {rejectionHistory.rejection_reason || 'No reason provided.'}
+                </p>
+            </CardContent>
+        </Card>
+      );
+
       // 6. Show Form
       return (
-          <Card>
-              <CardHeader>
-                  <CardTitle>Registration Form</CardTitle>
-                  <CardDescription>Logged in as: {user?.email || 'Loading...'}</CardDescription>
-              </CardHeader>
-              <CardContent className="relative">
-                  <DynamicForm
-                      fields={event.form_fields || []}
-                      onSubmit={handleSubmit}
-                      eventId={params.id}
-                      formData={formData} 
-                      onFormChange={setAndStoreFormData} 
-                  />
-              </CardContent>
-          </Card>
+          <>
+            {rejectedCard} {/* Show if last status was rejected */}
+            {rejectionHistoryCard} {/* Show if previous (but not last) was rejected */}
+            <Card>
+                <CardHeader>
+                    <CardTitle>Registration Form</CardTitle>
+                    <CardDescription>Logged in as: {user?.email || 'Loading...'}</CardDescription>
+                </CardHeader>
+                <CardContent className="relative">
+                    <DynamicForm
+                        fields={event.form_fields || []}
+                        onSubmit={handleSubmit}
+                        eventId={params.id}
+                        formData={formData} 
+                        onFormChange={setAndStoreFormData} 
+                    />
+                </CardContent>
+            </Card>
+          </>
       )
   }
 
