@@ -1,70 +1,175 @@
-# EventX — Developer Guide (Copy‑Paste Ready)
+# EventX — Developer Guide
 
-## Project layout (standard)
-```
-/app/           # backend app (Django/Express/Flask — adapt to your stack)
-  /models
-  /views
-  /serializers
-  /tests
-/frontend/      # React/Vue/Next.js front-end
-  /components
-  /pages
-  /styles
-/config/        # environment / deployment configs
-scripts/        # helper scripts and utilities
-README.md
-```
+## Overview
+This guide provides developers with the essential information required to set up, understand, develop, and maintain the EventX platform. It covers project structure, local development setup, environment configuration, API conventions, testing, coding standards, database management, and deployment strategies.
 
-## Getting started (local dev)
-```
-1. Copy .env.example -> .env and set values (DB, RAZORPAY keys, SECRET_KEY)
-2. Install dependencies:
-   - Backend: python -m pip install -r requirements.txt
-   - Frontend: cd frontend && npm install
-3. Run database migrations
-4. Start backend server (e.g. python manage.py runserver)
-5. Start frontend dev server (npm run dev)
-```
+## Project Layout
+The EventX project follows a standard Next.js application structure with API routes serving as the backend.
 
-## Environment variables (essential)
 ```
-# Backend
-SECRET_KEY=
-DATABASE_URL=postgres://user:pass@localhost:5432/eventx
-RAZORPAY_KEY_ID=
-RAZORPAY_KEY_SECRET=
-AWS_S3_BUCKET=
-EMAIL_HOST=
-EMAIL_PORT=
-EMAIL_USER=
-EMAIL_PASSWORD=
+/
+├── app/                  # Next.js App Router root
+│   ├── (auth)/           # Authentication related routes (e.g., login, register)
+│   ├── admin/            # Admin dashboard and management pages
+│   │   ├── events/       # Event creation/editing, form builder
+│   │   └── participants/ # Participant management
+│   ├── events/           # Public event listing and detail pages
+│   ├── api/              # Next.js API Routes for backend logic
+│   │   └── [[...path]]/  # Catch-all API route handler
+│   ├── components/       # Reusable UI components
+│   ├── lib/              # Utility functions, Supabase client/server setup
+│   ├── styles/           # Global CSS and Tailwind configuration
+│   └── page.tsx          # Root public page
+├── public/               # Static assets (images, favicon)
+├── hooks/                # Custom React hooks
+├── types/                # TypeScript type definitions
+├── SUPABASE_SETUP.sql    # Database schema for Supabase
+├── .env.local.example    # Example environment variables
+├── README.md             # Project overview and quick start
+└── package.json          # Project dependencies and scripts
 ```
 
-## API conventions
-- Base path: /api/v1/
-- Authentication: JWT in Authorization: Bearer <token>
-- Pagination: use ?page= and ?page_size=
-- Responses:
-  - Success: { "status": "success", "data": ... }
-  - Error: { "status": "error", "message": "..." }
+## Getting Started (Local Development)
+
+To set up the EventX project for local development:
+
+1.  **Clone the Repository:**
+    ```bash
+    git clone <repository-url>
+    cd EventX
+    ```
+
+2.  **Database Setup (Supabase):**
+    -   Go to your Supabase Dashboard: `https://supabase.com/dashboard`
+    -   Create a new project.
+    -   Navigate to **SQL Editor** (left sidebar).
+    -   Copy the entire content of the `SUPABASE_SETUP.sql` file from the project root.
+    -   Paste and run it in the Supabase SQL Editor. This will create all necessary tables, Row Level Security (RLS) policies, and storage buckets (`event-banners`, `club-logos`).
+
+3.  **Environment Variables:**
+    -   Copy the example environment file:
+        ```bash
+        cp .env.local.example .env.local
+        ```
+    -   Update `.env.local` with your Supabase project credentials, which can be found in your Supabase project settings (`Project Settings` → `API`):
+        ```env
+        NEXT_PUBLIC_SUPABASE_URL=YOUR_SUPABASE_PROJECT_URL
+        NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
+        SUPABASE_SERVICE_ROLE_KEY=YOUR_SUPABASE_SERVICE_ROLE_KEY
+        # Optional: Email service configuration for Edge Functions or external service
+        RESEND_API_KEY=your_resend_api_key_if_used
+        SENDGRID_API_KEY=your_sendgrid_api_key_if_used
+        NEXT_PUBLIC_SUPABASE_FUNCTION_URL=your_supabase_edge_function_url_if_used
+        ```
+
+4.  **Install Dependencies:**
+    ```bash
+    yarn install
+    # or npm install
+    ```
+
+5.  **Run Development Server:**
+    ```bash
+    yarn dev
+    # or npm run dev
+    ```
+    The application will be accessible at `http://localhost:3000`.
+
+6.  **Create Admin Account (Important):**
+    -   Go to your Supabase Dashboard → **Authentication** → **Users**.
+    -   Click **Add user** → **Create new user**.
+    -   Enter an email and password.
+    -   Click **Create user**.
+    -   To grant this user admin privileges, manually add their `user_id` to the `admin_users` table in your Supabase database with the desired `role` (`admin` or `super_admin`). This user can then log in to the admin dashboard at `/admin/login`.
+
+## Environment Variables (Essential)
+The following environment variables are crucial for the application's operation:
+
+```env
+# Supabase Project Credentials (required)
+NEXT_PUBLIC_SUPABASE_URL=https://<your-project-id>.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
+SUPABASE_SERVICE_ROLE_KEY=eyJ...
+
+# Email Service (choose one if using for notifications)
+RESEND_API_KEY=re_...           # For Resend (recommended with Edge Functions)
+SENDGRID_API_KEY=SG...          # For SendGrid (alternative)
+
+# Supabase Edge Function URL (if deploying email function)
+NEXT_PUBLIC_SUPABASE_FUNCTION_URL=https://<your-project-id>.supabase.co/functions/v1/send-email
+```
+*Note: `NEXT_PUBLIC_` prefixed variables are exposed to the browser, others are server-side only.*
+
+## API Conventions
+EventX uses Next.js API Routes for its backend logic.
+-   **Base Path**: All API endpoints reside under `/api/`.
+-   **Authentication**: Handled via Supabase Auth. User sessions are managed by JWTs, typically handled automatically by the Supabase client library. Server-side API routes use the `SUPABASE_SERVICE_ROLE_KEY` for elevated privileges when necessary.
+-   **Pagination**: For list endpoints, utilize `?page=` and `?page_size=` query parameters.
+-   **Responses**:
+    -   **Success**: Generally returns a JSON object with a `data` field: `{ "status": "success", "data": ... }`.
+    -   **Error**: Returns a JSON object with an `error` message and an appropriate HTTP status code: `{ "status": "error", "message": "..." }`.
 
 ## Tests
-- Unit tests under app/tests/ (backend) and frontend/tests/.
-- Run backend tests:
-```
-python manage.py test
-```
-- CI should run tests, lint, build frontend, and run security checks.
+Unit and integration tests are crucial for maintaining code quality.
+-   **Frontend Tests**: Located under the respective component/page directories. (e.g., `components/__tests__/`). Use React Testing Library and Jest.
+-   **API Route Tests**: Located under `app/api/__tests__/`. Use Jest for testing server-side logic.
+-   **Running Tests:**
+    ```bash
+    yarn test
+    # or npm test
+    ```
+-   **CI/CD**: Continuous Integration pipelines should include steps for running tests, linting, building the frontend, and performing security checks.
 
-## Coding standards
-- Use type hints (Python) / PropTypes or TypeScript (frontend)
-- Linting: flake8 / eslint
-- Commit messages: Conventional Commits (feat/fix/docs/chore)
+## Coding Standards
+To ensure consistency and maintainability:
+-   **TypeScript**: Use TypeScript for all new code to leverage type safety and improve code clarity.
+-   **Linting**: Adhere to ESLint rules (configured in `.eslintrc.json`). Run `yarn lint` to check for issues.
+-   **Formatting**: Use Prettier (configured in `.prettierrc.json`) for consistent code formatting. Run `yarn format` to automatically fix formatting.
+-   **Component Structure**: Follow Atomic Design principles where applicable (e.g., small, reusable components).
+-   **Commit Messages**: Use Conventional Commits (e.g., `feat: add new feature`, `fix: resolve bug`, `docs: update documentation`, `chore: update dependencies`).
 
-## Database migrations
-- Use Django migrations / Alembic / Sequelize migrations depending on stack.
-- Always generate a migration after schema changes and review before deploy.
+## Database Management (Supabase)
+Supabase provides a powerful PostgreSQL database with various integrated tools.
+-   **Schema Management**: Database schema is defined in `SUPABASE_SETUP.sql`. All schema changes should first be reflected in this file and then applied to the Supabase project.
+-   **Migrations**: Supabase CLI allows for local development of database migrations.
+    -   `supabase db diff > migrations/<timestamp>_migration_name.sql`
+    -   `supabase db push` (to apply local changes to your Supabase project or local database)
+-   **Row Level Security (RLS)**: Crucial for data protection. Ensure RLS policies are correctly configured for all tables to prevent unauthorized data access. These are defined in `SUPABASE_SETUP.sql`.
+
+## Deployment
+The EventX platform is designed for seamless deployment on Vercel.
+
+### Vercel Deployment
+1.  **Version Control**: Ensure your project is pushed to a Git repository (e.g., GitHub, GitLab, Bitbucket).
+2.  **Import Project**: In Vercel, import your Git repository as a new project.
+3.  **Environment Variables**: Add all necessary environment variables from your `.env.local` file to the Vercel project settings (under `Settings` → `Environment Variables`). Ensure sensitive keys like `SUPABASE_SERVICE_ROLE_KEY` are marked as `Server-side only`.
+4.  **Connect Supabase**: Vercel integrates seamlessly with Supabase. Ensure your `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` are correctly configured.
+5.  **Deploy**: Vercel will automatically build and deploy your application. Subsequent pushes to the configured branch will trigger automatic re-deployments.
+
+### Supabase Edge Functions Deployment (for email service)
+If utilizing the Supabase Edge Function for email notifications:
+1.  **Install Supabase CLI:** `npm install -g supabase`
+2.  **Login to Supabase CLI:** `supabase login`
+3.  **Link your project:** `supabase link --project-ref <your-supabase-project-id>`
+4.  **Deploy the function:**
+    ```bash
+    supabase functions deploy send-email --no-verify-jwt
+    ```
+    (Ensure `RESEND_API_KEY` or `SENDGRID_API_KEY` and `NEXT_PUBLIC_SUPABASE_FUNCTION_URL` are set as Supabase secrets and in your Vercel environment variables, respectively).
+
+## Troubleshooting & Debugging
+-   **Console Logs**: Utilize `console.log` for quick debugging in development.
+-   **Supabase Logs**: For issues with database operations or Edge Functions, check the logs directly in your Supabase Dashboard.
+-   **Browser Dev Tools**: Use network tab for API calls, console for frontend errors.
+-   **Vercel Logs**: For deployed applications, Vercel provides comprehensive logs for both frontend builds and serverless functions (API Routes).
+-   **Error Handling**: Implement robust error handling (try-catch blocks) in API routes and client-side code for better debugging and user experience.
+
+## Security Considerations
+-   **Row Level Security (RLS)**: Always enable and properly configure RLS on all Supabase tables to prevent unauthorized data access.
+-   **Environment Variables**: Never commit sensitive information directly into the codebase. Use `.env.local` and environment variables in deployment platforms.
+-   **Input Validation**: Validate all user inputs on both client-side and server-side to prevent injection attacks and data corruption.
+-   **CORS**: Ensure CORS policies are correctly configured for API routes and Supabase Edge Functions.
+-   **Dependency Audits**: Regularly check for vulnerabilities in project dependencies using tools like `npm audit` or `yarn audit`.
 
 ---
-_Last updated: 2025-11-11
+_Last updated: 2024-07-30_
