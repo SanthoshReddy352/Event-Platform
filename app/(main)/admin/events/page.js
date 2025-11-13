@@ -157,7 +157,7 @@ function AdminEventsContent() {
                 </CardHeader>
                 <CardFooter className="mt-auto flex flex-col gap-2">
                   <div className="grid grid-cols-2 gap-2 w-full">
-                    <Link href={`/admin/events/${event.id}`} className="w-full">
+                    <Link href={`/admin/events/${event.id}/edit`} className="w-full">
                       <Button variant="outline" className="w-full" size="sm" disabled={!canManage}>
                         <Edit size={16} className="mr-1" />
                         Edit

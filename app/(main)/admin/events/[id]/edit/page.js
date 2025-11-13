@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, useCallback, Suspense } from 'react'
+import { useRouter, useParams } from 'next/navigation'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -20,10 +20,12 @@ const toISOString = (dateTimeLocalString) => {
     return new Date(dateTimeLocalString).toISOString();
 }
 
-// Helper to get current datetime-local string
-const getCurrentDateTimeLocal = () => {
+// Helper to convert ISO string (from DB) to datetime-local string (for input)
+const fromISOString = (isoString) => {
+  if (!isoString) return '';
   try {
-    const date = new Date();
+    const date = new Date(isoString);
+    // Adjust for local timezone for the input
     const localDate = new Date(date.getTime() - (date.getTimezoneOffset() * 60000));
     return localDate.toISOString().slice(0, 16);
   } catch {
@@ -31,60 +33,75 @@ const getCurrentDateTimeLocal = () => {
   }
 }
 
-// --- START OF FIX: Add storage keys ---
-const storageKey = 'newEventFormData';
-const bannerUrlStorageKey = 'newEventBannerUrl';
-// --- END OF FIX ---
 
-function NewEventContent() {
+function EditEventContent() {
   const router = useRouter()
-  
-  // --- START OF FIX: Load formData from session storage ---
-  const [formData, setFormData] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const savedData = window.sessionStorage.getItem(storageKey);
-      if (savedData) {
-        return JSON.parse(savedData);
-      }
-    }
-    // Return default state if nothing is saved
-    return {
-      title: '',
-      description: '',
-      event_date: '',
-      event_end_date: '',
-      is_active: false,
-      registration_open: true,
-      registration_start: getCurrentDateTimeLocal(),
-      registration_end: '',
-      banner_url: '',
-    };
+  const params = useParams()
+  const { id } = params // Get the event ID from the URL
+
+  const [formData, setFormData] = useState({
+    title: '',
+    description: '',
+    event_date: '',
+    event_end_date: '',
+    is_active: false,
+    registration_open: true,
+    registration_start: '',
+    registration_end: '',
+    banner_url: '', // This will be set from the fetched event
   });
   
   const [bannerMode, setBannerMode] = useState('url')
-  
-  // Load bannerUrl from session storage
-  const [bannerUrl, setBannerUrl] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return window.sessionStorage.getItem(bannerUrlStorageKey) || '';
-    }
-    return '';
-  });
-  // --- END OF FIX ---
-
+  const [bannerUrl, setBannerUrl] = useState(''); // For the URL input
   const [bannerFile, setBannerFile] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isLoading, setIsLoading] = useState(true) // For fetching data
   
   const { loading: authLoading } = useAuth()
 
-  // --- START OF FIX: Save form data to session storage on change ---
+  // --- MODIFICATION: Fetch existing event data ---
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      window.sessionStorage.setItem(storageKey, JSON.stringify(formData));
-      window.sessionStorage.setItem(bannerUrlStorageKey, bannerUrl);
-    }
-  }, [formData, bannerUrl]);
-  // --- END OF FIX ---
+    if (!id) return;
+
+    const fetchEvent = async () => {
+      setIsLoading(true);
+      try {
+        const response = await fetch(`/api/events/${id}`);
+        const data = await response.json();
+
+        if (data.success && data.event) {
+          const event = data.event;
+          // Populate the form with fetched data
+          setFormData({
+            title: event.title || '',
+            description: event.description || '',
+            event_date: fromISOString(event.event_date),
+            event_end_date: fromISOString(event.event_end_date),
+            is_active: event.is_active || false,
+            registration_open: event.registration_open || false,
+            registration_start: fromISOString(event.registration_start),
+            registration_end: fromISOString(event.registration_end),
+            banner_url: event.banner_url || '', // Keep track of original
+          });
+          // Set the banner URL for the input field
+          setBannerUrl(event.banner_url || '');
+          if (event.banner_url) {
+            setBannerMode('url');
+          }
+        } else {
+          alert('Error: Could not find event data.');
+          router.push('/admin/events');
+        }
+      } catch (error) {
+        console.error('Failed to fetch event:', error);
+        alert('An error occurred while fetching event data.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchEvent();
+  }, [id, router]);
 
   const onDrop = useCallback((acceptedFiles) => {
     if (acceptedFiles.length > 0) {
@@ -121,6 +138,7 @@ function NewEventContent() {
     return publicUrl
   }
 
+  // --- MODIFICATION: Handle SUBMIT for UPDATE ---
   const handleSubmit = async (e) => {
     e.preventDefault()
 
@@ -138,28 +156,34 @@ function NewEventContent() {
     setIsSubmitting(true)
 
     try {
-      let finalBannerUrl = ''
+      let finalBannerUrl = formData.banner_url; // Default to existing URL
 
       if (bannerMode === 'upload' && bannerFile) {
+        // Upload new banner
         finalBannerUrl = await uploadBanner()
       } else if (bannerMode === 'url') {
+        // Use the URL from the text input
         finalBannerUrl = bannerUrl
       }
 
+      // We don't send form_fields here, as that's handled by the form-builder page
+      // We only update the core event details
       const eventData = {
-        ...formData,
+        title: formData.title,
+        description: formData.description,
         banner_url: finalBannerUrl,
         event_date: toISOString(formData.event_date),
         event_end_date: toISOString(formData.event_end_date),
         registration_start: toISOString(formData.registration_start),
         registration_end: toISOString(formData.registration_end),
-        form_fields: [], // Initialize with empty form
+        is_active: formData.is_active,
+        registration_open: formData.registration_open,
       }
       
       const { data: { session } } = await supabase.auth.getSession();
       
-      const response = await fetch(`/api/events`, {
-        method: 'POST',
+      const response = await fetch(`/api/events/${id}`, { // Use ID in URL
+        method: 'PUT', // Use PUT for update
         headers: { 
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${session.access_token}`
@@ -169,32 +193,25 @@ function NewEventContent() {
 
       const data = await response.json()
       if (data.success) {
-        alert('Event created successfully! (Saved as draft)')
-        
-        // --- START OF FIX: Clear storage on success ---
-        if (typeof window !== 'undefined') {
-          window.sessionStorage.removeItem(storageKey);
-          window.sessionStorage.removeItem(bannerUrlStorageKey);
-        }
-        // --- END OF FIX ---
-
+        alert('Event updated successfully!')
         router.push('/admin/events')
       } else {
-        alert(`Failed to create event: ${data.error}`) 
+        alert(`Failed to update event: ${data.error}`) 
         console.error('API Error:', data.error);
       }
     } catch (error) {
-      console.error('Error creating event:', error)
+      console.error('Error updating event:', error)
       alert('An error occurred')
     } finally {
       setIsSubmitting(false)
     }
   }
 
-  if (authLoading) {
+  if (authLoading || isLoading) {
     return (
       <div className="text-center py-12">
-        <Loader2 className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-brand-red" />
+        <Loader2 className="inline-block animate-spin rounded-full h-12 w-12 text-brand-red" />
+        <p className="mt-4 text-gray-400">Loading Event Data...</p>
       </div>
     )
   }
@@ -210,7 +227,7 @@ function NewEventContent() {
         Back to Events
       </Button>
       
-      <h1 className="text-4xl font-bold mb-8">Create New Event</h1>
+      <h1 className="text-4xl font-bold mb-8">Edit Event</h1>
 
       <form onSubmit={handleSubmit}>
         <Card className="mb-6">
@@ -381,10 +398,10 @@ function NewEventContent() {
             {isSubmitting ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Creating...
+                Updating...
               </>
             ) : (
-              'Create Event'
+              'Update Event'
             )}
           </Button>
         </div>
@@ -393,10 +410,17 @@ function NewEventContent() {
   )
 }
 
-export default function NewEventPage() {
+// We must wrap the default export in Suspense to allow useParams()
+export default function EditEventPage() {
   return (
     <ProtectedRoute>
-      <NewEventContent />
+      <Suspense fallback={
+        <div className="text-center py-12">
+          <Loader2 className="inline-block animate-spin rounded-full h-12 w-12 text-brand-red" />
+        </div>
+      }>
+        <EditEventContent />
+      </Suspense>
     </ProtectedRoute>
   )
 }
