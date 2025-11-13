@@ -39,7 +39,11 @@ function EditEventContent() {
   const params = useParams()
   const { id } = params // Get the event ID from the URL
 
-  const [formData, setFormData] = useState({
+  // --- START OF DATA PERSISTENCE (1 of 6) ---
+  const storageKey = `editEventFormData-${id}`;
+  const bannerUrlStorageKey = `editEventBannerUrl-${id}`;
+
+  const defaultFormState = {
     title: '',
     description: '',
     event_date: '',
@@ -49,10 +53,22 @@ function EditEventContent() {
     registration_start: '',
     registration_end: '',
     banner_url: '', // This will be set from the fetched event
+  };
+
+  const [formData, setFormData] = useState(() => {
+    if (typeof window === 'undefined') return defaultFormState;
+    const saved = window.sessionStorage.getItem(storageKey);
+    return saved ? JSON.parse(saved) : defaultFormS_tate;
   });
   
   const [bannerMode, setBannerMode] = useState('url')
-  const [bannerUrl, setBannerUrl] = useState(''); // For the URL input
+  
+  const [bannerUrl, setBannerUrl] = useState(() => {
+    if (typeof window === 'undefined') return '';
+    return window.sessionStorage.getItem(bannerUrlStorageKey) || '';
+  });
+  // --- END OF DATA PERSISTENCE (1 of 6) ---
+
   const [bannerFile, setBannerFile] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isLoading, setIsLoading] = useState(true) // For fetching data
@@ -71,23 +87,33 @@ function EditEventContent() {
 
         if (data.success && data.event) {
           const event = data.event;
-          // Populate the form with fetched data
-          setFormData({
-            title: event.title || '',
-            description: event.description || '',
-            event_date: fromISOString(event.event_date),
-            event_end_date: fromISOString(event.event_end_date),
-            is_active: event.is_active || false,
-            registration_open: event.registration_open || false,
-            registration_start: fromISOString(event.registration_start),
-            registration_end: fromISOString(event.registration_end),
-            banner_url: event.banner_url || '', // Keep track of original
-          });
-          // Set the banner URL for the input field
-          setBannerUrl(event.banner_url || '');
-          if (event.banner_url) {
-            setBannerMode('url');
+          
+          // --- START OF DATA PERSISTENCE (2 of 6) ---
+          // Check if data is already in storage (meaning user was editing)
+          const savedData = window.sessionStorage.getItem(storageKey);
+          
+          if (!savedData) {
+            // First load: populate from DB
+            setFormData({
+              title: event.title || '',
+              description: event.description || '',
+              event_date: fromISOString(event.event_date),
+              event_end_date: fromISOString(event.event_end_date),
+              is_active: event.is_active || false,
+              registration_open: event.registration_open || false,
+              registration_start: fromISOString(event.registration_start),
+              registration_end: fromISOString(event.registration_end),
+              banner_url: event.banner_url || '',
+            });
+            setBannerUrl(event.banner_url || '');
+            if (event.banner_url) {
+              setBannerMode('url');
+            }
           }
+          // If savedData *does* exist, the useState initializer
+          // already loaded it, so we don't overwrite it.
+          // --- END OF DATA PERSISTENCE (2 of 6) ---
+
         } else {
           alert('Error: Could not find event data.');
           router.push('/admin/events');
@@ -101,7 +127,18 @@ function EditEventContent() {
     };
 
     fetchEvent();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, router]);
+
+  // --- START OF DATA PERSISTENCE (3 of 6) ---
+  // Save form data to session storage on change
+  useEffect(() => {
+    if (typeof window !== 'undefined' && !isLoading) { // Only save *after* initial load
+      window.sessionStorage.setItem(storageKey, JSON.stringify(formData));
+      window.sessionStorage.setItem(bannerUrlStorageKey, bannerUrl);
+    }
+  }, [formData, bannerUrl, isLoading, storageKey, bannerUrlStorageKey]);
+  // --- END OF DATA PERSISTENCE (3 of 6) ---
 
   const onDrop = useCallback((acceptedFiles) => {
     if (acceptedFiles.length > 0) {
@@ -165,9 +202,7 @@ function EditEventContent() {
         // Use the URL from the text input
         finalBannerUrl = bannerUrl
       }
-
-      // We don't send form_fields here, as that's handled by the form-builder page
-      // We only update the core event details
+      
       const eventData = {
         title: formData.title,
         description: formData.description,
@@ -194,6 +229,15 @@ function EditEventContent() {
       const data = await response.json()
       if (data.success) {
         alert('Event updated successfully!')
+        
+        // --- START OF DATA PERSISTENCE (4 of 6) ---
+        // Clear storage on success
+        if (typeof window !== 'undefined') {
+          window.sessionStorage.removeItem(storageKey);
+          window.sessionStorage.removeItem(bannerUrlStorageKey);
+        }
+        // --- END OF DATA PERSISTENCE (4 of 6) ---
+
         router.push('/admin/events')
       } else {
         alert(`Failed to update event: ${data.error}`) 
@@ -240,7 +284,9 @@ function EditEventContent() {
               <Input
                 id="title"
                 value={formData.title}
+                // --- START OF DATA PERSISTENCE (5 of 6) ---
                 onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                // --- END OF DATA PERSISTENCE (5 of 6) ---
                 required
               />
             </div>
@@ -361,7 +407,9 @@ function EditEventContent() {
                 <Input
                   id="banner_url"
                   value={bannerUrl}
+                  // --- START OF DATA PERSISTENCE (6 of 6) ---
                   onChange={(e) => setBannerUrl(e.target.value)}
+                  // --- END OF DATA PERSISTENCE (6 of 6) ---
                   placeholder="https://example.com/banner.jpg"
                 />
               </div>

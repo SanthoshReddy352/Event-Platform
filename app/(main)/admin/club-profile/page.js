@@ -1,206 +1,263 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import GradientText from '@/components/GradientText'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Button } from '@/components/ui/button'
-import { Upload, ArrowLeft, Loader2 } from 'lucide-react'
+import { Upload, Link as LinkIcon, Loader2 } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 import { supabase } from '@/lib/supabase/client'
-import { useAuth } from '@/context/AuthContext'
+import { useAuth } from '@/context/AuthContext' 
 
 function ClubProfileContent() {
-  const router = useRouter()
-  const { user } = useAuth()
+  const { user, loading: authLoading } = useAuth()
   
+  // --- START OF DATA PERSISTENCE ---
+  const storageKey = 'adminClubProfileForm';
+
+  const [formData, setFormData] = useState(() => {
+    if (typeof window === 'undefined') {
+      return { clubName: '', clubLogoUrl: '', mode: 'url' };
+    }
+    const saved = window.sessionStorage.getItem(storageKey);
+    return saved ? JSON.parse(saved) : { clubName: '', clubLogoUrl: '', mode: 'url' };
+  });
+
+  const [uploadFile, setUploadFile] = useState(null); // File object can't be stored
+  // --- END OF DATA PERSISTENCE ---
+
   const [loading, setLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  
-  const [clubName, setClubName] = useState('')
-  const [logoUrl, setLogoUrl] = useState('') // For preview
-  const [logoFile, setLogoFile] = useState(null)
-  const [initialLogoUrl, setInitialLogoUrl] = useState('')
+  const [adminRecord, setAdminRecord] = useState(null)
 
-  // Fetch existing profile data
   const fetchProfile = useCallback(async () => {
-    if (!user) return;
-    setLoading(true);
+    if (!user) return
+    
+    setLoading(true)
     try {
       const { data, error } = await supabase
         .from('admin_users')
-        .select('club_name, club_logo_url')
+        .select('*')
         .eq('user_id', user.id)
-        .maybeSingle();
-      
-      if (error) throw error;
+        .maybeSingle()
+
+      if (error) throw error
       
       if (data) {
-        setClubName(data.club_name || '');
-        setLogoUrl(data.club_logo_url || '');
-        setInitialLogoUrl(data.club_logo_url || '');
+        setAdminRecord(data)
+        
+        // --- START OF DATA PERSISTENCE ---
+        // Only set from DB if session storage is empty
+        const savedData = window.sessionStorage.getItem(storageKey);
+        if (!savedData) {
+          setFormData({
+            clubName: data.club_name || '',
+            clubLogoUrl: data.club_logo_url || '',
+            mode: data.club_logo_url ? 'url' : 'upload',
+          });
+        }
+        // --- END OF DATA PERSISTENCE ---
       }
     } catch (error) {
-      console.error("Error fetching club profile:", error);
-      alert("Error fetching profile: " + error.message);
+      console.error('Error fetching club profile:', error)
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  }, [user?.id]); // Depend on user.id
+  }, [user])
 
   useEffect(() => {
-    fetchProfile();
-  }, [fetchProfile]);
+    fetchProfile()
+  }, [fetchProfile])
 
-  // Handle file drop
+  // --- START OF DATA PERSISTENCE ---
+  // Save form data to session storage on change
+  useEffect(() => {
+    if (typeof window !== 'undefined' && !loading) {
+      window.sessionStorage.setItem(storageKey, JSON.stringify(formData));
+    }
+  }, [formData, loading]);
+  // --- END OF DATA PERSISTENCE ---
+  
   const onDrop = useCallback((acceptedFiles) => {
     if (acceptedFiles.length > 0) {
-      const file = acceptedFiles[0];
-      setLogoFile(file);
-      setLogoUrl(URL.createObjectURL(file)); // Show local preview
+      setUploadFile(acceptedFiles[0])
     }
-  }, []);
+  }, [])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: { 'image/*': [] },
     maxFiles: 1,
-  });
+  })
 
-  // Upload logo to Supabase Storage
-  const uploadLogo = async () => {
-    // If no new file is selected, return the existing URL
-    if (!logoFile) return initialLogoUrl; 
+  const handleUpload = async () => {
+    if (!uploadFile) return null
+    if (!user) throw new Error('User not found')
 
-    const fileExt = logoFile.name.split('.').pop();
-    const fileName = `${user.id}-${Date.now()}.${fileExt}`;
-    const filePath = `${fileName}`;
+    const fileExt = uploadFile.name.split('.').pop()
+    const fileName = `${user.id}-${Date.now()}.${fileExt}`
+    const filePath = `club-logos/${fileName}`
 
-    // Upload to the 'club-logos' bucket
-    const { data, error } = await supabase.storage
-      .from('club-logos')
-      .upload(filePath, logoFile);
+    const { error: uploadError } = await supabase.storage
+      .from('event-banners') // Assuming you store logos here
+      .upload(filePath, uploadFile, { upsert: true })
 
-    if (error) throw error;
+    if (uploadError) throw uploadError
 
-    // Get the public URL
-    const { data: { publicUrl } } = supabase.storage
-      .from('club-logos')
-      .getPublicUrl(filePath);
+    const { data } = supabase.storage
+      .from('event-banners')
+      .getPublicUrl(filePath)
     
-    return publicUrl;
-  };
+    return data.publicUrl
+  }
 
-  // Handle form submission
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!user) {
-      alert("User not found. Please log in again.");
-      return;
-    }
+    e.preventDefault()
+    if (!user) return
 
-    setIsSubmitting(true);
+    setIsSubmitting(true)
     try {
-      const finalLogoUrl = await uploadLogo();
+      let finalLogoUrl = formData.clubLogoUrl;
 
+      if (formData.mode === 'upload' && uploadFile) {
+        finalLogoUrl = await handleUpload();
+      }
+
+      const updates = {
+        club_name: formData.clubName,
+        club_logo_url: finalLogoUrl,
+        updated_at: new Date().toISOString(),
+      }
+      
       const { error } = await supabase
         .from('admin_users')
-        .update({
-          club_name: clubName,
-          club_logo_url: finalLogoUrl,
-        })
-        .eq('user_id', user.id);
+        .update(updates)
+        .eq('user_id', user.id)
 
-      if (error) throw error;
+      if (error) throw error
       
-      alert('Club profile updated successfully!');
-      router.push('/admin'); // Go back to dashboard
-    } catch (error) {
-      console.error('Error updating profile:', error);
-      alert(`Failed to update profile: ${error.message}`);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+      alert('Profile updated successfully!')
+      
+      // --- START OF DATA PERSISTENCE ---
+      if (typeof window !== 'undefined') {
+        window.sessionStorage.removeItem(storageKey);
+      }
+      // --- END OF DATA PERSISTENCE ---
 
-  if (loading) {
+      setUploadFile(null); // Clear file
+    } catch (error) {
+      console.error('Error updating profile:', error)
+      alert(`Failed to update profile: ${error.message}`)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  if (loading || authLoading) {
     return (
       <div className="text-center py-12">
         <Loader2 className="mx-auto h-12 w-12 animate-spin text-brand-red" />
-        <p className="mt-4 text-gray-400">Loading profile...</p>
       </div>
-    );
+    )
   }
 
   return (
     <div className="container mx-auto px-4 py-12 max-w-2xl">
-      <Button
-        variant="ghost"
-        onClick={() => router.push('/admin')}
-        className="mb-4"
-      >
-        <ArrowLeft size={20} className="mr-2" />
-        Back to Dashboard
-      </Button>
+      <h1 className="text-4xl font-bold mb-8">
+        <GradientText>Club Profile</GradientText>
+      </h1>
+      <p className="text-gray-400 mb-6">
+        This information will be shown to users on your event pages.
+      </p>
 
       <form onSubmit={handleSubmit}>
         <Card>
           <CardHeader>
-            <CardTitle>
-              <GradientText>Edit Club Profile</GradientText>
-            </CardTitle>
+            <CardTitle>Your Club Details</CardTitle>
             <CardDescription>
-              This information will be shown on the homepage to help participants find your events.
+              Logged in as: {user?.email}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="clubName">Club Name *</Label>
+              <Label htmlFor="clubName">Club Name</Label>
               <Input
                 id="clubName"
-                value={clubName}
-                onChange={(e) => setClubName(e.target.value)}
+                value={formData.clubName}
+                // --- START OF DATA PERSISTENCE ---
+                onChange={(e) => setFormData(prev => ({ ...prev, clubName: e.target.value }))}
+                // --- END OF DATA PERSISTENCE ---
                 placeholder="e.g., IEEE Computer Society"
-                required
               />
             </div>
 
             <div className="space-y-2">
               <Label>Club Logo</Label>
-              {logoUrl && (
-                <div className="mb-4">
-                  <p className="text-sm text-gray-500 mb-2">Logo Preview:</p>
-                  <img
-                    src={logoUrl}
-                    alt="Club Logo Preview"
-                    className="w-32 h-32 object-contain rounded-md border p-2"
+              <div className="flex space-x-4 mb-4">
+                <Button
+                  type="button"
+                  variant={formData.mode === 'url' ? 'default' : 'outline'}
+                  // --- START OF DATA PERSISTENCE ---
+                  onClick={() => setFormData(prev => ({ ...prev, mode: 'url' }))}
+                  className={formData.mode === 'url' ? 'bg-brand-gradient text-white hover:opacity-90' : ''}
+                  // --- END OF DATA PERSISTENCE ---
+                >
+                  <LinkIcon size={16} className="mr-2" />
+                  Use URL
+                </Button>
+                <Button
+                  type="button"
+                  variant={formData.mode === 'upload' ? 'default' : 'outline'}
+                  // --- START OF DATA PERSISTENCE ---
+                  onClick={() => setFormData(prev => ({ ...prev, mode: 'upload' }))}
+                  className={formData.mode === 'upload' ? 'bg-brand-gradient text-white hover:opacity-90' : ''}
+                  // --- END OF DATA PERSISTENCE ---
+                >
+                  <Upload size={16} className="mr-2" />
+                  Upload New
+                </Button>
+              </div>
+
+              {formData.mode === 'url' ? (
+                <div className="space-y-2">
+                  <Label htmlFor="clubLogoUrl">Logo Image URL</Label>
+                  <Input
+                    id="clubLogoUrl"
+                    value={formData.clubLogoUrl}
+                    // --- START OF DATA PERSISTENCE ---
+                    onChange={(e) => setFormData(prev => ({ ...prev, clubLogoUrl: e.target.value }))}
+                    // --- END OF DATA PERSISTENCE ---
+                    placeholder="https://example.com/logo.png"
                   />
+                </div>
+              ) : (
+                <div
+                  {...getRootProps()}
+                  className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer ${
+                    isDragActive ? 'border-brand-red bg-red-900/10' : 'border-gray-600'
+                  }`}
+                >
+                  <input {...getInputProps()} />
+                  <Upload size={48} className="mx-auto mb-4 text-gray-400" />
+                  {uploadFile ? (
+                    <p className="text-sm">Selected: <strong>{uploadFile.name}</strong></p>
+                  ) : (
+                    <p className="text-sm text-gray-400">
+                      {isDragActive ? 'Drop here' : 'Drag & drop or click to select new image'}
+                    </p>
+                  )}
                 </div>
               )}
               
-              <div
-                {...getRootProps()}
-                className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
-                  isDragActive ? 'border-brand-red bg-brand-red/10' : 'border-gray-600'
-                }`}
-              >
-                <input {...getInputProps()} />
-                <Upload size={48} className="mx-auto mb-4 text-gray-400" />
-                {logoFile ? (
-                  <p className="text-sm">
-                    Selected: <strong>{logoFile.name}</strong>
-                  </p>
-                ) : (
-                  <p className="text-sm text-gray-400">
-                    {isDragActive
-                      ? 'Drop the logo here'
-                      : 'Drag & drop a logo, or click to select'}
-                  </p>
-                )}
-              </div>
+              {formData.clubLogoUrl && (
+                <div className="mt-4">
+                  <p className="text-sm text-gray-400 mb-2">Current Logo Preview:</p>
+                  <img src={formData.clubLogoUrl} alt="Club Logo" className="w-24 h-24 object-contain rounded-md border" />
+                </div>
+              )}
             </div>
             
             <div className="flex justify-end">
@@ -210,20 +267,17 @@ function ClubProfileContent() {
                 disabled={isSubmitting}
               >
                 {isSubmitting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  'Save Profile'
-                )}
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : null}
+                {isSubmitting ? 'Saving...' : 'Save Profile'}
               </Button>
             </div>
+
           </CardContent>
         </Card>
       </form>
     </div>
-  );
+  )
 }
 
 export default function ClubProfilePage() {
@@ -231,5 +285,5 @@ export default function ClubProfilePage() {
     <ProtectedRoute>
       <ClubProfileContent />
     </ProtectedRoute>
-  );
+  )
 }

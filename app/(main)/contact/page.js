@@ -1,176 +1,166 @@
-// app/contact/page.js
-
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react' // --- DATA PERSISTENCE ---
 import GradientText from '@/components/GradientText'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Button } from '@/components/ui/button'
-import { useAuth } from '@/context/AuthContext'
-import { supabase } from '@/lib/supabase/client'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Send } from 'lucide-react'
 
 export default function ContactPage() {
-  const { user, isAdmin, loading: authLoading } = useAuth()
-  const [formData, setFormData] = useState({ name: '', email: '', message: '' })
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
+  
+  // --- START OF DATA PERSISTENCE ---
+  const storageKey = 'contactForm';
+  const defaultState = { name: '', email: '', message: '' };
+  
+  const [formData, setFormData] = useState(() => {
+    if (typeof window === 'undefined') return defaultState;
+    const saved = window.sessionStorage.getItem(storageKey);
+    return saved ? JSON.parse(saved) : defaultState;
+  });
+  // --- END OF DATA PERSISTENCE ---
+  
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [error, setError] = useState(null)
+  const [success, setSuccess] = useState(false)
 
+  // --- START OF DATA PERSISTENCE ---
+  // Save form data to session storage on change
   useEffect(() => {
-    // Pre-fill form if user is logged in and is a participant
-    if (user && !isAdmin) {
-      const fetchProfile = async () => {
-        const { data: profile, error } = await supabase
-          .from('profiles')
-          .select('name')
-          .eq('id', user.id)
-          .maybeSingle()
-        
-        setFormData((prev) => ({
-          ...prev,
-          email: user.email || '',
-          name: profile?.name || '',
-        }))
-      }
-      fetchProfile()
+    if (typeof window !== 'undefined') {
+      window.sessionStorage.setItem(storageKey, JSON.stringify(formData));
     }
-  // Depend on user.id and isAdmin status
-  }, [user?.id, isAdmin])
+  }, [formData]);
+  // --- END OF DATA PERSISTENCE ---
 
   const handleChange = (e) => {
-    const { id, value } = e.target
-    setFormData((prev) => ({ ...prev, [id]: value }))
+    const { name, value } = e.target
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }))
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    setLoading(true)
-    setError('')
-    setSuccess('')
-
+    setIsSubmitting(true)
+    setError(null)
+    setSuccess(false)
+    
     try {
       const response = await fetch('/api/contact', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify(formData),
       })
-
+      
       const data = await response.json()
-
+      
       if (data.success) {
-        setSuccess('Your message has been sent successfully! We will get back to you soon.')
-        // Reset message field, but keep pre-filled data
-        setFormData((prev) => ({
-          ...prev,
-          message: '',
-        }))
+        setSuccess(true)
+        // --- START OF DATA PERSISTENCE ---
+        setFormData(defaultState); // Clear form state
+        if (typeof window !== 'undefined') {
+          window.sessionStorage.removeItem(storageKey); // Clear storage
+        }
+        // --- END OF DATA PERSISTENCE ---
       } else {
-        throw new Error(data.error || 'Failed to send message.')
+        throw new Error(data.error || 'An unknown error occurred')
       }
     } catch (err) {
       setError(err.message)
     } finally {
-      setLoading(false)
+      setIsSubmitting(false)
     }
   }
 
-  // Determine if fields should be disabled
-  const isUserParticipant = !authLoading && user && !isAdmin
-
   return (
-    <div className="container mx-auto px-4 py-12">
-      <div className="max-w-xl mx-auto">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold mb-4">
-            <GradientText>Contact Us</GradientText>
-          </h1>
-          <p className="text-gray-400">
-            Have questions? Fill out the form below to get in touch with our team.
-          </p>
-        </div>
+    <div className="container mx-auto px-4 py-12 max-w-lg">
+      <h1 className="text-4xl font-bold text-center mb-4">
+        <GradientText>Contact Us</GradientText>
+      </h1>
+      <p className="text-gray-400 text-center mb-8">
+        Have a question or feedback? Let us know!
+      </p>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Send Us a Message</CardTitle>
-            <CardDescription>We'll do our best to respond within 24 hours.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-6">
-              {success && (
-                <div className="bg-green-900/50 border border-green-700 text-green-300 px-4 py-3 rounded">
-                  {success}
-                </div>
-              )}
-              {error && (
-                <div className="bg-red-900/50 border border-red-700 text-red-300 px-4 py-3 rounded">
-                  {error}
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Name</Label>
-                  <Input
-                    id="name"
-                    value={formData.name}
-                    onChange={handleChange}
-                    placeholder="Your Name"
-                    required
-                    // --- FIX: This field is no longer disabled ---
-                    // disabled={isUserParticipant} 
-                    // className={isUserParticipant ? 'cursor-not-allowed bg-gray-800/50' : ''}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={formData.email}
-                    onChange={handleChange}
-                    placeholder="your.email@example.com"
-                    required
-                    // --- FIX: This field *remains* disabled ---
-                    disabled={isUserParticipant}
-                    className={isUserParticipant ? 'cursor-not-allowed bg-gray-800/50' : ''}
-                  />
-                </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Send us a Message</CardTitle>
+          <CardDescription>
+            We'll get back to you as soon as possible.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {success ? (
+            <div className="text-center py-8">
+              <Send size={48} className="mx-auto text-green-500 mb-4" />
+              <h3 className="text-xl font-semibold mb-2">Message Sent!</h3>
+              <p className="text-gray-400">
+                Thanks for reaching out. We'll be in touch.
+              </p>
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="name">Name</Label>
+                <Input
+                  id="name"
+                  name="name"
+                  value={formData.name}
+                  onChange={handleChange}
+                  placeholder="Your name"
+                  required
+                />
               </div>
-
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  name="email"
+                  type="email"
+                  value={formData.email}
+                  onChange={handleChange}
+                  placeholder="your.email@example.com"
+                  required
+                />
+              </div>
               <div className="space-y-2">
                 <Label htmlFor="message">Message</Label>
                 <Textarea
                   id="message"
+                  name="message"
                   value={formData.message}
                   onChange={handleChange}
-                  placeholder="Your message or question..."
-                  required
+                  placeholder="Your message..."
                   rows={6}
+                  required
                 />
               </div>
-
+              
+              {error && (
+                <p className="text-red-500 text-sm">{`Error: ${error}`}</p>
+              )}
+              
               <Button
                 type="submit"
                 className="w-full bg-brand-gradient text-white font-semibold hover:opacity-90 transition-opacity"
-                disabled={loading}
+                disabled={isSubmitting}
               >
-                {loading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Sending...
-                  </>
+                {isSubmitting ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
-                  'Send Message'
+                  <Send className="mr-2 h-4 w-4" />
                 )}
+                {isSubmitting ? 'Sending...' : 'Send Message'}
               </Button>
             </form>
-          </CardContent>
-        </Card>
-      </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 }
