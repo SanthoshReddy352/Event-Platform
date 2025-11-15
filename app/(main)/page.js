@@ -1,10 +1,8 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-
-// ✅ NEW Anime.js API
-import { createTimeline } from "animejs";
+import { motion } from "framer-motion";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -20,99 +18,20 @@ export default function Home() {
   const [clubs, setClubs] = useState([]);
   const [loadingClubs, setLoadingClubs] = useState(true);
 
-  // Prevent animation running twice
-  const animationPlayed = useRef(false);
-
   // Initial fetch
   useEffect(() => {
     fetchUpcomingEvents();
     fetchClubs();
   }, []);
 
-  // ------------------- ANIMATION (NEW API) -------------------
-  useEffect(() => {
-    if (loading || loadingClubs) return;
-    if (animationPlayed.current) return;
-
-    animationPlayed.current = true;
-
-    // Create a new timeline
-    const timeline = createTimeline({
-      defaults: {
-        easing: "easeOutExpo",
-        duration: 800,
-      },
-    });
-
-    timeline
-      .add(".hero-title", {
-        opacity: [0, 1],
-        translateY: [25, 0],
-        scale: [0.9, 1],
-      })
-      .add(
-        ".hero-p",
-        {
-          opacity: [0, 1],
-          translateY: [25, 0],
-        },
-        "-=600"
-      )
-      .add(
-        ".hero-button",
-        {
-          opacity: [0, 1],
-          translateY: [25, 0],
-          delay: 150,
-        },
-        "-=600"
-      )
-      .add(
-        ".club-section-title",
-        {
-          opacity: [0, 1],
-          translateY: [25, 0],
-        },
-        "-=500"
-      )
-      .add(
-        ".club-card",
-        {
-          opacity: [0, 1],
-          translateY: [25, 0],
-          scale: [0.95, 1],
-          delay: 100,
-        },
-        "-=600"
-      )
-      .add(
-        ".event-section-title",
-        {
-          opacity: [0, 1],
-          translateY: [25, 0],
-        },
-        "-=500"
-      )
-      .add(
-        ".event-card",
-        {
-          opacity: [0, 1],
-          translateY: [25, 0],
-          delay: 100,
-        },
-        "-=600"
-      )
-      .add(
-        ".about-section",
-        {
-          opacity: [0, 1],
-          translateY: [25, 0],
-          duration: 1000,
-        },
-        "-=500"
-      );
-  }, [loading, loadingClubs]);
-  // -------------------------------------------------------
+  // ------------------- ANIMATION (FRAMER MOTION) -------------------
+  const FADE_UP_VARIANT = {
+    initial: { opacity: 0, y: 25 },
+    whileInView: { opacity: 1, y: 0 },
+    viewport: { once: true }, // Ensures the animation only plays once
+    transition: { ease: "easeOut", duration: 0.8 },
+  };
+  // -----------------------------------------------------------------
 
   // ------------------- FETCH EVENTS -------------------
   const fetchUpcomingEvents = async () => {
@@ -179,30 +98,49 @@ export default function Home() {
       {/* HERO SECTION */}
       <section className="bg-brand-gradient text-white py-20">
         <div className="container mx-auto px-4 text-center">
-          <h1 className="hero-title opacity-0 text-5xl font-bold mb-6">
+          <motion.h1
+            className="hero-title text-5xl font-bold mb-6"
+            {...FADE_UP_VARIANT}
+          >
             Welcome to EventX
-          </h1>
+          </motion.h1>
 
-          <p className="hero-p opacity-0 text-xl mb-8 text-white/90">
+          <motion.p
+            className="hero-p text-xl mb-8 text-white/90"
+            {...FADE_UP_VARIANT}
+            transition={{ ...FADE_UP_VARIANT.transition, delay: 0.1 }}
+          >
             Your central hub for hackathons, workshops, and tech events from
             every club on campus.
-          </p>
+          </motion.p>
 
           <div className="flex flex-col sm:flex-row justify-center gap-4">
-            <Link href="/events" className="hero-button opacity-0">
-              <Button className="bg-white text-brand-red font-semibold hover:bg-gray-100 w-full">
-                Browse Events
-              </Button>
-            </Link>
+            <motion.div
+              className="hero-button"
+              {...FADE_UP_VARIANT}
+              transition={{ ...FADE_UP_VARIANT.transition, delay: 0.2 }}
+            >
+              <Link href="/events">
+                <Button className="bg-white text-brand-red font-semibold hover:bg-gray-100 w-full">
+                  Browse Events
+                </Button>
+              </Link>
+            </motion.div>
 
-            <Link href="/contact" className="hero-button opacity-0">
-              <Button
-                variant="outline"
-                className="text-white border-white hover:bg-white hover:text-brand-red w-full"
-              >
-                Contact Us
-              </Button>
-            </Link>
+            <motion.div
+              className="hero-button"
+              {...FADE_UP_VARIANT}
+              transition={{ ...FADE_UP_VARIANT.transition, delay: 0.3 }}
+            >
+              <Link href="/contact">
+                <Button
+                  variant="outline"
+                  className="text-white border-white hover:bg-white hover:text-brand-red w-full"
+                >
+                  Contact Us
+                </Button>
+              </Link>
+            </motion.div>
           </div>
         </div>
       </section>
@@ -210,9 +148,12 @@ export default function Home() {
       {/* CLUBS SECTION */}
       <section className="py-16 bg-card">
         <div className="container mx-auto px-4">
-          <h2 className="club-section-title opacity-0 text-3xl font-bold text-center mb-12">
+          <motion.h2
+            className="club-section-title text-3xl font-bold text-center mb-12"
+            {...FADE_UP_VARIANT}
+          >
             <GradientText>Browse by Club</GradientText>
-          </h2>
+          </motion.h2>
 
           {loadingClubs ? (
             <div className="text-center py-12">
@@ -221,8 +162,16 @@ export default function Home() {
             </div>
           ) : clubs.length > 0 ? (
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 md:gap-6">
-              {clubs.map((club) => (
-                <div key={club.club_name} className="club-card opacity-0">
+              {clubs.map((club, index) => (
+                <motion.div
+                  key={club.club_name}
+                  className="club-card"
+                  {...FADE_UP_VARIANT}
+                  transition={{
+                    ...FADE_UP_VARIANT.transition,
+                    delay: index * 0.05,
+                  }}
+                >
                   <Link
                     href={`/events?club=${encodeURIComponent(club.club_name)}`}
                     className="group"
@@ -240,7 +189,7 @@ export default function Home() {
                       </CardContent>
                     </Card>
                   </Link>
-                </div>
+                </motion.div>
               ))}
             </div>
           ) : (
@@ -257,15 +206,18 @@ export default function Home() {
       {/* UPCOMING EVENTS */}
       <section className="py-16">
         <div className="container mx-auto px-4">
-          <div className="flex justify-between items-center mb-8">
-            <h2 className="event-section-title opacity-0 text-3xl font-bold">
+          <motion.div
+            className="flex justify-between items-center mb-8"
+            {...FADE_UP_VARIANT}
+          >
+            <h2 className="event-section-title text-3xl font-bold">
               <GradientText>Upcoming Events</GradientText>
             </h2>
 
             <Link href="/events">
               <Button variant="outline">View All Events</Button>
             </Link>
-          </div>
+          </motion.div>
 
           {loading ? (
             <div className="text-center py-12">
@@ -273,10 +225,18 @@ export default function Home() {
             </div>
           ) : upcomingEvents.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {upcomingEvents.map((event) => (
-                <div key={event.id} className="event-card opacity-0">
+              {upcomingEvents.map((event, index) => (
+                <motion.div
+                  key={event.id}
+                  className="event-card"
+                  {...FADE_UP_VARIANT}
+                  transition={{
+                    ...FADE_UP_VARIANT.transition,
+                    delay: index * 0.1,
+                  }}
+                >
                   <EventCard event={event} />
-                </div>
+                </motion.div>
               ))}
             </div>
           ) : (
@@ -292,7 +252,10 @@ export default function Home() {
       {/* ABOUT SECTION */}
       <section className="py-16 bg-card">
         <div className="container mx-auto px-4">
-          <div className="about-section opacity-0 max-w-3xl mx-auto text-center">
+          <motion.div
+            className="about-section max-w-3xl mx-auto text-center"
+            {...FADE_UP_VARIANT}
+          >
             <h2 className="text-3xl font-bold mb-6">
               <GradientText>About EventX</GradientText>
             </h2>
@@ -313,7 +276,7 @@ export default function Home() {
                 Join Our Next Event
               </Button>
             </Link>
-          </div>
+          </motion.div>
         </div>
       </section>
     </div>
