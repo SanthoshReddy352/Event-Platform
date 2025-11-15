@@ -8,5 +8,6 @@
         "@/app/*": ["./app/*"]
       }
     },
+    "esModuleInterop": true,
     "exclude": ["node_modules", ".next"]
   }
