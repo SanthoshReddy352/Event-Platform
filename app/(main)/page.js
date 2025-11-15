@@ -1,13 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
+
+// ✅ NEW Anime.js API
+import { createTimeline } from "animejs";
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import EventCard from "@/components/EventCard";
 import GradientText from "@/components/GradientText";
-import { Calendar, Users, Trophy, Zap, Building } from "lucide-react"; // Import Building
-import { parseISO } from 'date-fns'; // --- IMPORT parseISO ---
+import { Building } from "lucide-react";
+import { parseISO } from "date-fns";
 
 export default function Home() {
   const [upcomingEvents, setUpcomingEvents] = useState([]);
@@ -16,55 +20,131 @@ export default function Home() {
   const [clubs, setClubs] = useState([]);
   const [loadingClubs, setLoadingClubs] = useState(true);
 
+  // Prevent animation running twice
+  const animationPlayed = useRef(false);
+
+  // Initial fetch
   useEffect(() => {
     fetchUpcomingEvents();
-    fetchClubs(); // Fetch clubs on load
+    fetchClubs();
   }, []);
 
+  // ------------------- ANIMATION (NEW API) -------------------
+  useEffect(() => {
+    if (loading || loadingClubs) return;
+    if (animationPlayed.current) return;
+
+    animationPlayed.current = true;
+
+    // Create a new timeline
+    const timeline = createTimeline({
+      defaults: {
+        easing: "easeOutExpo",
+        duration: 800,
+      },
+    });
+
+    timeline
+      .add(".hero-title", {
+        opacity: [0, 1],
+        translateY: [25, 0],
+        scale: [0.9, 1],
+      })
+      .add(
+        ".hero-p",
+        {
+          opacity: [0, 1],
+          translateY: [25, 0],
+        },
+        "-=600"
+      )
+      .add(
+        ".hero-button",
+        {
+          opacity: [0, 1],
+          translateY: [25, 0],
+          delay: 150,
+        },
+        "-=600"
+      )
+      .add(
+        ".club-section-title",
+        {
+          opacity: [0, 1],
+          translateY: [25, 0],
+        },
+        "-=500"
+      )
+      .add(
+        ".club-card",
+        {
+          opacity: [0, 1],
+          translateY: [25, 0],
+          scale: [0.95, 1],
+          delay: 100,
+        },
+        "-=600"
+      )
+      .add(
+        ".event-section-title",
+        {
+          opacity: [0, 1],
+          translateY: [25, 0],
+        },
+        "-=500"
+      )
+      .add(
+        ".event-card",
+        {
+          opacity: [0, 1],
+          translateY: [25, 0],
+          delay: 100,
+        },
+        "-=600"
+      )
+      .add(
+        ".about-section",
+        {
+          opacity: [0, 1],
+          translateY: [25, 0],
+          duration: 1000,
+        },
+        "-=500"
+      );
+  }, [loading, loadingClubs]);
+  // -------------------------------------------------------
+
+  // ------------------- FETCH EVENTS -------------------
   const fetchUpcomingEvents = async () => {
     try {
-      // --- START OF FIX: Fetch more events to filter on the client ---
-      // We fetch all active events (including completed)
       const response = await fetch("/api/events?active=true");
       const data = await response.json();
-      
-      if (data.success) {
+
+      if (data.success && Array.isArray(data.events)) {
         const now = new Date();
 
-        // Filter for events that are "upcoming" (not completed) and "open"
-        const filtered = data.events.filter(event => {
-          // 1. Check if completed
-          const eventEndDate = event.event_end_date ? parseISO(event.event_end_date) : null;
-          if (eventEndDate && now > eventEndDate) {
-            return false; // Skip completed events
-          }
+        const filtered = data.events.filter((event) => {
+          const eventEnd = event.event_end_date
+            ? parseISO(event.event_end_date)
+            : null;
 
-          // 2. Check if registration is explicitly closed
-          if (!event.registration_open) {
-            return false;
-          }
+          if (eventEnd && now > eventEnd) return false;
+          if (!event.registration_open) return false;
 
-          // 3. Check registration window
-          const regStartDate = event.registration_start ? parseISO(event.registration_start) : null;
-          const regEndDate = event.registration_end ? parseISO(event.registration_end) : null;
+          const regStart = event.registration_start
+            ? parseISO(event.registration_start)
+            : null;
+          const regEnd = event.registration_end
+            ? parseISO(event.registration_end)
+            : null;
 
-          // Check if registration hasn't started yet
-          if (regStartDate && now < regStartDate) {
-            return false;
-          }
-          
-          // Check if registration has already ended
-          if (regEndDate && now > regEndDate) {
-            return false;
-          }
+          if (regStart && now < regStart) return false;
+          if (regEnd && now > regEnd) return false;
 
-          // If all checks pass, the event is active and open
           return true;
         });
 
-        // Set only the first 3 matching events
         setUpcomingEvents(filtered.slice(0, 3));
-        // --- END OF FIX ---
       }
     } catch (error) {
       console.error("Error fetching events:", error);
@@ -73,19 +153,18 @@ export default function Home() {
     }
   };
 
+  // ------------------- FETCH CLUBS -------------------
   const fetchClubs = async () => {
     try {
       const response = await fetch("/api/clubs");
       const data = await response.json();
-      if (data.success) {
-        // Ensure clubs are unique by name
-        const uniqueClubs = data.clubs.reduce((acc, club) => {
-          if (!acc.find((item) => item.club_name === club.club_name)) {
-            acc.push(club);
-          }
-          return acc;
-        }, []);
-        setClubs(uniqueClubs);
+
+      if (data.success && Array.isArray(data.clubs)) {
+        const unique = [
+          ...new Map(data.clubs.map((club) => [club.club_name, club])).values(),
+        ];
+
+        setClubs(unique);
       }
     } catch (error) {
       console.error("Error fetching clubs:", error);
@@ -94,108 +173,95 @@ export default function Home() {
     }
   };
 
+  // ------------------- JSX RENDER -------------------
   return (
     <div>
-      {/* Hero Section */}
-      {/* --- START OF THEME CHANGE --- */}
+      {/* HERO SECTION */}
       <section className="bg-brand-gradient text-white py-20">
-        {" "}
-        {/* CHANGED */}
-        <div className="container mx-auto px-4">
-          <div className="max-w-3xl mx-auto text-center">
-            <h1 className="text-5xl font-bold mb-6">Welcome to EventX</h1>
-            <p className="text-xl mb-8 text-white/90">
-              Your central hub for hackathons, workshops, and tech events from
-              every club on campus.
-            </p>
-            <div className="flex flex-col sm:flex-row justify-center gap-4">
-              <Link href="/events">
-                <Button
-                  size="lg"
-                  className="bg-white text-brand-red font-semibold hover:bg-gray-100"
-                >
-                  {" "}
-                  {/* CHANGED */}
-                  Browse Events
-                </Button>
-              </Link>
-              <Link href="/contact">
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="text-white border-white hover:bg-white hover:text-brand-red"
-                >
-                  {" "}
-                  {/* CHANGED */}
-                  Contact Us
-                </Button>
-              </Link>
-            </div>
+        <div className="container mx-auto px-4 text-center">
+          <h1 className="hero-title opacity-0 text-5xl font-bold mb-6">
+            Welcome to EventX
+          </h1>
+
+          <p className="hero-p opacity-0 text-xl mb-8 text-white/90">
+            Your central hub for hackathons, workshops, and tech events from
+            every club on campus.
+          </p>
+
+          <div className="flex flex-col sm:flex-row justify-center gap-4">
+            <Link href="/events" className="hero-button opacity-0">
+              <Button className="bg-white text-brand-red font-semibold hover:bg-gray-100 w-full">
+                Browse Events
+              </Button>
+            </Link>
+
+            <Link href="/contact" className="hero-button opacity-0">
+              <Button
+                variant="outline"
+                className="text-white border-white hover:bg-white hover:text-brand-red w-full"
+              >
+                Contact Us
+              </Button>
+            </Link>
           </div>
         </div>
       </section>
-      {/* --- END OF THEME CHANGE --- */}
 
-      {/* Browse by Club (Unchanged) */}
+      {/* CLUBS SECTION */}
       <section className="py-16 bg-card">
-        {" "}
-        {/* CHANGED: bg-gray-50 to bg-card */}
         <div className="container mx-auto px-4">
-          <h2 className="text-3xl font-bold text-center mb-12">
+          <h2 className="club-section-title opacity-0 text-3xl font-bold text-center mb-12">
             <GradientText>Browse by Club</GradientText>
           </h2>
+
           {loadingClubs ? (
             <div className="text-center py-12">
-              <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-brand-red"></div>{" "}
-              {/* CHANGED */}
-              <p className="mt-4 text-gray-400">Loading clubs...</p>{" "}
-              {/* CHANGED */}
+              <div className="inline-block animate-spin h-12 w-12 rounded-full border-b-2 border-brand-red"></div>
+              <p className="mt-4 text-gray-400">Loading clubs...</p>
             </div>
           ) : clubs.length > 0 ? (
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 md:gap-6">
               {clubs.map((club) => (
-                <Link
-                  href={`/events?club=${encodeURIComponent(club.club_name)}`}
-                  key={club.club_name}
-                  className="group"
-                >
-                  <Card className="h-full hover:shadow-xl transition-shadow duration-300 bg-background hover:bg-zinc-900">
-                    {" "}
-                    {/* CHANGED */}
-                    <CardContent className="pt-6 text-center flex flex-col items-center justify-center">
-                      <img
-                        src={club.club_logo_url}
-                        alt={`${club.club_name} logo`}
-                        className="w-24 h-24 object-contain rounded-full mx-auto mb-4 border-2 border-border group-hover:border-brand-orange transition-colors" // CHANGED
-                      />
-                      <h3 className="font-semibold text-md text-gray-100 group-hover:text-brand-orange transition-colors">
-                        {" "}
-                        {/* CHANGED */}
-                        {club.club_name}
-                      </h3>
-                    </CardContent>
-                  </Card>
-                </Link>
+                <div key={club.club_name} className="club-card opacity-0">
+                  <Link
+                    href={`/events?club=${encodeURIComponent(club.club_name)}`}
+                    className="group"
+                  >
+                    <Card className="h-full hover:shadow-xl bg-background hover:bg-zinc-900 transition-shadow duration-300">
+                      <CardContent className="pt-6 text-center flex flex-col items-center">
+                        <img
+                          src={club.club_logo_url}
+                          alt={club.club_name}
+                          className="w-24 h-24 object-contain rounded-full mb-4 border-2 border-border group-hover:border-brand-orange transition-colors"
+                        />
+                        <h3 className="text-md text-gray-100 font-semibold group-hover:text-brand-orange transition-colors">
+                          {club.club_name}
+                        </h3>
+                      </CardContent>
+                    </Card>
+                  </Link>
+                </div>
               ))}
             </div>
           ) : (
             <Card>
               <CardContent className="py-12 text-center text-gray-500">
                 <Building size={48} className="mx-auto mb-4 text-gray-400" />
-                <p>No clubs have set up their profiles yet. Check back soon!</p>
+                <p>No clubs available yet. Check back soon!</p>
               </CardContent>
             </Card>
           )}
         </div>
       </section>
 
-      {/* Upcoming Events (Unchanged) */}
+      {/* UPCOMING EVENTS */}
       <section className="py-16">
         <div className="container mx-auto px-4">
           <div className="flex justify-between items-center mb-8">
-            <h2 className="text-3xl font-bold">
+            <h2 className="event-section-title opacity-0 text-3xl font-bold">
               <GradientText>Upcoming Events</GradientText>
             </h2>
+
             <Link href="/events">
               <Button variant="outline">View All Events</Button>
             </Link>
@@ -203,53 +269,47 @@ export default function Home() {
 
           {loading ? (
             <div className="text-center py-12">
-              <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-brand-red"></div>{" "}
-              {/* CHANGED */}
+              <div className="animate-spin h-12 w-12 inline-block rounded-full border-b-2 border-brand-red"></div>
             </div>
           ) : upcomingEvents.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {upcomingEvents.map((event) => (
-                <EventCard key={event.id} event={event} />
+                <div key={event.id} className="event-card opacity-0">
+                  <EventCard event={event} />
+                </div>
               ))}
             </div>
           ) : (
             <Card>
               <CardContent className="py-12 text-center text-gray-500">
-                {/* --- START OF FIX: Updated empty state message --- */}
-                <p>No events are open for registration right now. Check back soon!</p>
-                {/* --- END OF FIX --- */}
+                <p>No events open for registration. Check back soon!</p>
               </CardContent>
             </Card>
           )}
         </div>
       </section>
 
-      {/* About Section */}
+      {/* ABOUT SECTION */}
       <section className="py-16 bg-card">
-        {" "}
-        {/* CHANGED */}
         <div className="container mx-auto px-4">
-          <div className="max-w-3xl mx-auto text-center">
+          <div className="about-section opacity-0 max-w-3xl mx-auto text-center">
             <h2 className="text-3xl font-bold mb-6">
               <GradientText>About EventX</GradientText>
             </h2>
+
             <p className="text-gray-400 mb-4">
-              {" "}
-              {/* CHANGED */}
-              EventX is your college's central platform for discovering and
+              EventX is your college’s central platform for discovering and
               managing technical and non-technical events.
             </p>
+
             <p className="text-gray-400 mb-6">
-              {" "}
-              {/* CHANGED */}
-              Our mission is to bring all student-run clubs together, making it
-              easy for students to find opportunities and for clubs to manage
-              their participants.
+              Our mission is to bring all student-run clubs together, helping
+              students find opportunities easily and helping clubs manage their
+              participants effortlessly.
             </p>
+
             <Link href="/events">
-              <Button className="bg-brand-gradient text-white font-semibold hover:opacity-90 transition-opacity">
-                {" "}
-                {/* CHANGED */}
+              <Button className="bg-brand-gradient text-white font-semibold hover:opacity-90">
                 Join Our Next Event
               </Button>
             </Link>
