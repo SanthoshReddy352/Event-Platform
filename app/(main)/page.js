@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { motion } from "framer-motion"; // Make sure motion is imported
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -119,6 +119,9 @@ export default function Home() {
               className="hero-button"
               {...FADE_UP_VARIANT}
               transition={{ ...FADE_UP_VARIANT.transition, delay: 0.2 }}
+              // ✅ ADDED HOVER/TAP ANIMATIONS
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
             >
               <Link href="/events">
                 <Button className="bg-white text-brand-red font-semibold hover:bg-gray-100 w-full">
@@ -131,6 +134,9 @@ export default function Home() {
               className="hero-button"
               {...FADE_UP_VARIANT}
               transition={{ ...FADE_UP_VARIANT.transition, delay: 0.3 }}
+              // ✅ ADDED HOVER/TAP ANIMATIONS
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
             >
               <Link href="/contact">
                 <Button
@@ -165,12 +171,15 @@ export default function Home() {
               {clubs.map((club, index) => (
                 <motion.div
                   key={club.club_name}
-                  className="club-card"
+                  className="club-card h-full" // Added h-full
                   {...FADE_UP_VARIANT}
                   transition={{
                     ...FADE_UP_VARIANT.transition,
                     delay: index * 0.05,
                   }}
+                  // ✅ ADDED HOVER/TAP ANIMATIONS
+                  whileHover={{ scale: 1.03, y: -5 }}
+                  whileTap={{ scale: 0.98 }}
                 >
                   <Link
                     href={`/events?club=${encodeURIComponent(club.club_name)}`}
@@ -228,12 +237,15 @@ export default function Home() {
               {upcomingEvents.map((event, index) => (
                 <motion.div
                   key={event.id}
-                  className="event-card"
+                  className="event-card h-full" // Added h-full
                   {...FADE_UP_VARIANT}
                   transition={{
                     ...FADE_UP_VARIANT.transition,
                     delay: index * 0.1,
                   }}
+                  // ✅ ADDED HOVER/TAP ANIMATIONS
+                  whileHover={{ scale: 1.03, y: -5 }}
+                  whileTap={{ scale: 0.98 }}
                 >
                   <EventCard event={event} />
                 </motion.div>
