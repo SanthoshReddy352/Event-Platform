@@ -2,12 +2,15 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { motion } from "framer-motion"; // Make sure motion is imported
+import { motion } from "framer-motion";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import EventCard from "@/components/EventCard";
 import GradientText from "@/components/GradientText";
+import FirstLetterGradientText from "@/components/FirstLetterGradientText";
+import FirstWordGradientText from "@/components/FirstWordGradientText";
+import LastWordGradientText from "@/components/LastWordGradientText";
 import { Building } from "lucide-react";
 import { parseISO } from "date-fns";
 
@@ -25,14 +28,39 @@ export default function Home() {
   }, []);
 
   // ------------------- ANIMATION (FRAMER MOTION) -------------------
+
+  // Standard fade-up variant for sections
   const FADE_UP_VARIANT = {
     initial: { opacity: 0, y: 25 },
     whileInView: { opacity: 1, y: 0 },
-    viewport: { once: true }, // Ensures the animation only plays once
+    viewport: { once: true },
     transition: { ease: "easeOut", duration: 0.8 },
+  };
+
+  // ✅ NEW: Variants for the staggered hero title
+  const heroTitleContainerVariants = {
+    initial: { opacity: 0 },
+    whileInView: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.1, // Each word animates 0.1s after the previous
+        delayChildren: 0.2, // Start animation after 0.2s
+      },
+    },
+    viewport: { once: true },
+  };
+
+  const heroTitleWordVariants = {
+    initial: { opacity: 0, y: 20 },
+    whileInView: {
+      opacity: 1,
+      y: 0,
+      transition: { ease: "easeOut", duration: 0.6 },
+    },
   };
   // -----------------------------------------------------------------
 
+  // ... (Keep your fetchUpcomingEvents and fetchClubs functions here) ...
   // ------------------- FETCH EVENTS -------------------
   const fetchUpcomingEvents = async () => {
     try {
@@ -98,17 +126,32 @@ export default function Home() {
       {/* HERO SECTION */}
       <section className="bg-brand-gradient text-white py-20">
         <div className="container mx-auto px-4 text-center">
+          {/* ✅ MODIFIED: Apply new hero variants */}
           <motion.h1
             className="hero-title text-5xl font-bold mb-6"
-            {...FADE_UP_VARIANT}
+            variants={heroTitleContainerVariants}
+            initial="initial"
+            whileInView="whileInView"
+            viewport={{ once: true }}
           >
-            Welcome to EventX
+            {/* Split the title string and map over it */}
+            {"Welcome to EventX".split(" ").map((word, index) => (
+              <motion.span
+                key={index}
+                variants={heroTitleWordVariants}
+                // Add a small gap between animated words
+                style={{ display: "inline-block", marginRight: "0.5rem" }}
+              >
+                {word}
+              </motion.span>
+            ))}
           </motion.h1>
 
           <motion.p
             className="hero-p text-xl mb-8 text-white/90"
             {...FADE_UP_VARIANT}
-            transition={{ ...FADE_UP_VARIANT.transition, delay: 0.1 }}
+            // ✅ MODIFIED: Increased delay to animate *after* the title
+            transition={{ ...FADE_UP_VARIANT.transition, delay: 0.8 }}
           >
             Your central hub for hackathons, workshops, and tech events from
             every club on campus.
@@ -118,8 +161,8 @@ export default function Home() {
             <motion.div
               className="hero-button"
               {...FADE_UP_VARIANT}
-              transition={{ ...FADE_UP_VARIANT.transition, delay: 0.2 }}
-              // ✅ ADDED HOVER/TAP ANIMATIONS
+              // ✅ MODIFIED: Increased delay
+              transition={{ ...FADE_UP_VARIANT.transition, delay: 1.0 }}
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
             >
@@ -133,8 +176,8 @@ export default function Home() {
             <motion.div
               className="hero-button"
               {...FADE_UP_VARIANT}
-              transition={{ ...FADE_UP_VARIANT.transition, delay: 0.3 }}
-              // ✅ ADDED HOVER/TAP ANIMATIONS
+              // ✅ MODIFIED: Increased delay
+              transition={{ ...FADE_UP_VARIANT.transition, delay: 1.1 }}
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
             >
@@ -158,7 +201,7 @@ export default function Home() {
             className="club-section-title text-3xl font-bold text-center mb-12"
             {...FADE_UP_VARIANT}
           >
-            <GradientText>Browse by Club</GradientText>
+            <LastWordGradientText>Browse by Club</LastWordGradientText>
           </motion.h2>
 
           {loadingClubs ? (
@@ -171,13 +214,12 @@ export default function Home() {
               {clubs.map((club, index) => (
                 <motion.div
                   key={club.club_name}
-                  className="club-card h-full" // Added h-full
+                  className="club-card h-full"
                   {...FADE_UP_VARIANT}
                   transition={{
                     ...FADE_UP_VARIANT.transition,
                     delay: index * 0.05,
                   }}
-                  // ✅ ADDED HOVER/TAP ANIMATIONS
                   whileHover={{ scale: 1.03, y: -5 }}
                   whileTap={{ scale: 0.98 }}
                 >
@@ -220,7 +262,7 @@ export default function Home() {
             {...FADE_UP_VARIANT}
           >
             <h2 className="event-section-title text-3xl font-bold">
-              <GradientText>Upcoming Events</GradientText>
+              <LastWordGradientText>Upcoming Events</LastWordGradientText>
             </h2>
 
             <Link href="/events">
@@ -237,13 +279,12 @@ export default function Home() {
               {upcomingEvents.map((event, index) => (
                 <motion.div
                   key={event.id}
-                  className="event-card h-full" // Added h-full
+                  className="event-card h-full"
                   {...FADE_UP_VARIANT}
                   transition={{
                     ...FADE_UP_VARIANT.transition,
                     delay: index * 0.1,
                   }}
-                  // ✅ ADDED HOVER/TAP ANIMATIONS
                   whileHover={{ scale: 1.03, y: -5 }}
                   whileTap={{ scale: 0.98 }}
                 >

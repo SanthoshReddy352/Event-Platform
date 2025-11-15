@@ -3,8 +3,7 @@
 /**
  * GradientText Component
  * Renders text with the last letter in gradient colors
- * 
- * @param {string} children - The text to display
+ * * @param {string} children - The text to display
  * @param {string} className - Additional CSS classes
  */
 export default function GradientText({ children, className = '' }) {

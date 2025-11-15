@@ -141,7 +141,6 @@ code {
     @apply bg-background text-foreground;
     }
   
-  /* --- START OF CHANGE --- */
   /* Style for datetime-local and date input icons in dark mode */
   .dark .custom-date-icon::-webkit-calendar-picker-indicator {
     /* This filter changes the white icon to the theme's red color */
@@ -155,11 +154,33 @@ code {
     filter: invert(30%) sepia(90%) saturate(5000%) hue-rotate(345deg) brightness(100%) contrast(100%);
     cursor: pointer;
   }
-  /* --- END OF CHANGE --- */
 }
+
+/* --- START OF ANIMATIONS --- */
+@keyframes gradient-flow {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+/* This applies the animation to the hero background */
+.bg-brand-gradient {
+  background: linear-gradient(90deg, #ff3131, #ff914d);
+  background-size: 400% 400%;
+  animation: gradient-flow 15s ease infinite;
+}
+/* --- END OF ANIMATIONS --- */
+
 
 /* Gradient text utilities */
 @layer utilities {
+  /* This class is now static (no animation) */
   .text-gradient {
     background: linear-gradient(90deg, #ff3131, #ff914d);
     -webkit-background-clip: text;
@@ -167,11 +188,49 @@ code {
     background-clip: text;
   }
   
+  /* These classes are for the GradientText component (LAST letter) */
   .last-letter-gradient {
     display: inline;
   }
   
   .last-letter-gradient .gradient-letter {
+    background: linear-gradient(90deg, #ff3131, #ff914d);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* These classes are for the FirstLetterGradientText component (FIRST letter) */
+  .first-letter-gradient {
+    display: inline;
+  }
+  
+  .first-letter-gradient .gradient-letter {
+    background: linear-gradient(90deg, #ff3131, #ff914d);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* These classes are for the FirstWordGradientText component (FIRST word) */
+  .first-word-gradient {
+    display: inline;
+  }
+  
+  .first-word-gradient .gradient-letter {
+    background: linear-gradient(90deg, #ff3131, #ff914d);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* ✅ NEW: These classes are for the LastWordGradientText component (LAST word) */
+  .last-word-gradient {
+    display: inline;
+  }
+  
+  /* We reuse the .gradient-letter class for the word */
+  .last-word-gradient .gradient-letter {
     background: linear-gradient(90deg, #ff3131, #ff914d);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
