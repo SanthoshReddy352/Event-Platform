@@ -1,19 +1,16 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { supabaseAdmin } from '@/lib/supabase/server' // Uses your centralized admin client
 
-// --- START OF CHANGE: Import new email function ---
 import { 
   sendAdminNotification, 
   sendApprovalEmail, 
   sendRejectionEmail,
-  sendContactEmailToAdmin // <-- ADD THIS
+  sendContactEmailToAdmin 
 } from '@/lib/email'
-// --- END OF CHANGE ---
 
-// Initialize Supabase client
+// Initialize Anon client for verifying user tokens (checking who the caller is)
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-const supabase = createClient(supabaseUrl, supabaseServiceKey) // This is the ADMIN client
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY 
 
 // Helper function to extract path segments
@@ -50,6 +47,8 @@ async function getAdminUser(request) {
   }
 
   const token = authHeader.split(' ')[1]
+  
+  // Create a temporary client with the user's token to verify identity
   const userSupabase = createClient(supabaseUrl, supabaseAnonKey, {
     global: {
       headers: { 'Authorization': `Bearer ${token}` },
@@ -62,8 +61,8 @@ async function getAdminUser(request) {
       return { user: null, role: null, error }
   }
   
-  // Use service key to check the admin_users table
-  const { data: adminData, error: roleError } = await supabase
+  // Use the Admin client to check the role in the database (bypassing RLS if necessary for the check)
+  const { data: adminData, error: roleError } = await supabaseAdmin
       .from('admin_users')
       .select('role')
       .eq('user_id', user.id)
@@ -80,8 +79,9 @@ async function getAdminUser(request) {
   return { user, role: adminData.role, error: null }
 }
 
-
-// GET Handler
+// =================================================================================
+// GET HANDLER
+// =================================================================================
 export async function GET(request) {
   try {
     const segments = getPathSegments(request)
@@ -89,22 +89,18 @@ export async function GET(request) {
 
     // GET /api/clubs - Get all clubs with profiles
     if (segments[0] === 'clubs' && !segments[1]) {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseAdmin
         .from('admin_users')
         .select('club_name, club_logo_url')
-        .not('club_name', 'is', null) // Only get admins who have set a name
-        .not('club_name', 'eq', '')   // and the name is not empty
-        .not('club_logo_url', 'is', null) // and they have a logo
+        .not('club_name', 'is', null)
+        .not('club_name', 'eq', '')
+        .not('club_logo_url', 'is', null)
         .not('club_logo_url', 'eq', '');
 
       if (error) {
-        return NextResponse.json(
-          { success: false, error: error.message },
-          { status: 500, headers: corsHeaders }
-        )
+        return NextResponse.json({ success: false, error: error.message }, { status: 500, headers: corsHeaders })
       }
       
-      // --- FIX for duplicates: Get unique clubs ---
       const uniqueClubs = data.reduce((acc, club) => {
         if (!acc.find(item => item.club_name === club.club_name)) {
           acc.push(club);
@@ -112,48 +108,32 @@ export async function GET(request) {
         return acc;
       }, []);
 
-      return NextResponse.json(
-        { success: true, clubs: uniqueClubs },
-        { headers: corsHeaders }
-      )
+      return NextResponse.json({ success: true, clubs: uniqueClubs }, { headers: corsHeaders })
     }
-
 
     // GET /api/events - Get all events or filtered events
     if (segments[0] === 'events' && !segments[1]) {
-
-      // --- Cleanup logic (unchanged) ---
+      // --- Cleanup logic ---
       const now = new Date().toISOString();
       try {
-        const { data: completedEventIds, error: eventIdError } = await supabase
+        const { data: completedEventIds } = await supabaseAdmin
           .from('events')
           .select('id')
           .lt('event_end_date', now); 
 
-        if (eventIdError) {
-          console.error('Error fetching completed event IDs:', eventIdError.message);
-        } else if (completedEventIds && completedEventIds.length > 0) {
-          const idsToDelete = completedEventIds.map(e => e.id);
-          
-          const { error: cleanupError } = await supabase
+        if (completedEventIds && completedEventIds.length > 0) {
+          await supabaseAdmin
             .from('participants')
             .delete()
             .eq('status', 'pending') 
-            .in('event_id', idsToDelete);
-
-          if (cleanupError) {
-            console.error('Error cleaning up PENDING registrations:', cleanupError.message);
-          } else {
-            console.log(`Cleaned up PENDING registrations for ${idsToDelete.length} completed event(s).`);
-          }
+            .in('event_id', completedEventIds.map(e => e.id));
         }
       } catch (cleanupErr) {
         console.error('Exception during registration cleanup:', cleanupErr.message);
       }
       // --- End cleanup logic ---
 
-
-      let query = supabase
+      let query = supabaseAdmin
         .from('events')
         .select(`
           *, 
@@ -162,15 +142,10 @@ export async function GET(request) {
         `)
         .order('created_at', { ascending: false })
 
-      // Filter by active status
       if (params.active === 'true') {
-        // This parameter now *only* filters for publicly visible events
-        // (i.e., not drafts).
-        // The frontend will handle filtering for completed/active.
         query = query.eq('is_active', true)
       }
 
-      // Limit results
       if (params.limit) {
         query = query.limit(parseInt(params.limit))
       }
@@ -178,21 +153,15 @@ export async function GET(request) {
       const { data, error } = await query
 
       if (error) {
-        return NextResponse.json(
-          { success: false, error: error.message },
-          { status: 500, headers: corsHeaders }
-        )
+        return NextResponse.json({ success: false, error: error.message }, { status: 500, headers: corsHeaders })
       }
       
-      return NextResponse.json(
-        { success: true, events: data },
-        { headers: corsHeaders }
-      )
+      return NextResponse.json({ success: true, events: data }, { headers: corsHeaders })
     }
 
     // GET /api/events/:id - Get single event
     if (segments[0] === 'events' && segments[1]) {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseAdmin
         .from('events')
         .select(`
           *, 
@@ -203,16 +172,10 @@ export async function GET(request) {
         .single()
 
       if (error) {
-        return NextResponse.json(
-          { success: false, error: error.message },
-          { status: 404, headers: corsHeaders }
-        )
+        return NextResponse.json({ success: false, error: error.message }, { status: 404, headers: corsHeaders })
       }
       
-      return NextResponse.json(
-        { success: true, event: data },
-        { headers: corsHeaders }
-      )
+      return NextResponse.json({ success: true, event: data }, { headers: corsHeaders })
     }
     
     // GET /api/profile - Get current user profile
@@ -222,56 +185,44 @@ export async function GET(request) {
             return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401, headers: corsHeaders })
         }
         const token = authHeader.split(' ')[1]
+        
+        // We use a clean anon client just to decode/verify the token
         const userSupabase = createClient(supabaseUrl, supabaseAnonKey, {
             global: { headers: { 'Authorization': `Bearer ${token}` } },
         })
         const { data: { user }, error: authError } = await userSupabase.auth.getUser()
         
         if (!user) {
-            return NextResponse.json(
-                { success: false, error: authError?.message || 'Unauthorized' },
-                { status: 401, headers: corsHeaders }
-            )
+            return NextResponse.json({ success: false, error: authError?.message || 'Unauthorized' }, { status: 401, headers: corsHeaders })
         }
         
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
           .from('profiles')
           .select('name, phone_number, created_at, updated_at')
           .eq('id', user.id)
           .maybeSingle()
 
         if (error) {
-          return NextResponse.json(
-            { success: false, error: error.message },
-            { status: 500, headers: corsHeaders }
-          )
+          return NextResponse.json({ success: false, error: error.message }, { status: 500, headers: corsHeaders })
         }
         
-        // --- START OF CHANGE: Also return email ---
         return NextResponse.json(
           { success: true, profile: { ...(data || {}), email: user.email } },
           { headers: corsHeaders }
         )
-        // --- END OF CHANGE ---
     }
 
     // GET /api/participants/count - Get total participant count
     if (segments[0] === 'participants' && segments[1] === 'count') {
-      const { count, error } = await supabase
+      const { count, error } = await supabaseAdmin
         .from('participants')
         .select('*', { count: 'exact', head: true })
 
       if (error) {
-        return NextResponse.json(
-          { success: false, error: error.message },
-          { status: 500, headers: corsHeaders }
-        )
+        return NextResponse.json({ success: false, error: error.message }, { status: 500, headers: corsHeaders })
       }
 
-      return NextResponse.json(
-        { success: true, count },
-        { headers: corsHeaders }
-      )
+      return NextResponse.json({ success: true, count }, { headers: corsHeaders })
     }
 
     // GET /api/participants/pending - Get all pending registrations for admin
@@ -281,8 +232,7 @@ export async function GET(request) {
           return NextResponse.json({ success: false, error: adminError?.message || 'Unauthorized' }, { status: 401, headers: corsHeaders })
       }
       
-      // Build query based on role
-      let query = supabase
+      let query = supabaseAdmin
         .from('participants')
         .select(`
           *,
@@ -293,16 +243,12 @@ export async function GET(request) {
       
       // If not super_admin, only show pending for their own events
       if (role !== 'super_admin') {
-        const { data: adminEvents, error: eventsError } = await supabase
+        const { data: adminEvents } = await supabaseAdmin
           .from('events')
           .select('id')
           .eq('created_by', user.id);
         
-        if (eventsError) {
-          return NextResponse.json({ success: false, error: eventsError.message }, { status: 500, headers: corsHeaders })
-        }
-        
-        const eventIds = adminEvents.map(e => e.id);
+        const eventIds = adminEvents ? adminEvents.map(e => e.id) : [];
         if (eventIds.length === 0) {
           return NextResponse.json({ success: true, participants: [] }, { headers: corsHeaders })
         }
@@ -339,20 +285,17 @@ export async function GET(request) {
              return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403, headers: corsHeaders })
         }
         
-        // --- START OF CHANGE: Fetch all records for user, not just one ---
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from('participants')
             .select('*')
             .eq('event_id', eventId)
             .eq('user_id', user.id)
-            .order('created_at', { ascending: true }) // Order by date
+            .order('created_at', { ascending: true }) 
 
         if (error) {
             return NextResponse.json({ success: false, error: error.message }, { status: 500, headers: corsHeaders })
         }
-        // Return an array of participants
         return NextResponse.json({ success: true, participants: data }, { headers: corsHeaders })
-        // --- END OF CHANGE ---
         
       } else {
         // This is an ADMIN request for all participants
@@ -361,8 +304,7 @@ export async function GET(request) {
             return NextResponse.json({ success: false, error: adminError?.message || 'Unauthorized' }, { status: 401, headers: corsHeaders })
         }
         
-        // Check permissions: Must be super_admin or event owner
-        const { data: eventData, error: eventError } = await supabase
+        const { data: eventData, error: eventError } = await supabaseAdmin
             .from('events')
             .select('created_by')
             .eq('id', eventId)
@@ -378,8 +320,7 @@ export async function GET(request) {
             return NextResponse.json({ success: false, error: 'Forbidden: You do not own this event' }, { status: 403, headers: corsHeaders })
         }
         
-        // Permission granted, fetch participants
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from('participants')
             .select('*')
             .eq('event_id', eventId)
@@ -401,20 +342,16 @@ export async function GET(request) {
       )
     }
 
-    return NextResponse.json(
-      { success: false, error: 'Route not found' },
-      { status: 404, headers: corsHeaders }
-    )
+    return NextResponse.json({ success: false, error: 'Route not found' }, { status: 404, headers: corsHeaders })
   } catch (error) {
     console.error('GET Error:', error)
-    return NextResponse.json(
-      { success: false, error: error.message },
-      { status: 500, headers: corsHeaders }
-    )
+    return NextResponse.json({ success: false, error: error.message }, { status: 500, headers: corsHeaders })
   }
 }
 
-// POST Handler
+// =================================================================================
+// POST HANDLER
+// =================================================================================
 export async function POST(request) {
   try {
     const segments = getPathSegments(request)
@@ -424,6 +361,66 @@ export async function POST(request) {
     let token = null;
     if (authHeader && authHeader.startsWith('Bearer ')) {
       token = authHeader.split(' ')[1]
+    }
+
+    // --- MANUAL ADMIN AUTH MANAGEMENT ---
+    // POST /api/admin/users/:action
+    if (segments[0] === 'admin' && segments[1] === 'users') {
+        const { user, role, error: adminError } = await getAdminUser(request);
+        if (adminError || !user) {
+            return NextResponse.json({ success: false, error: adminError?.message || 'Unauthorized' }, { status: 401, headers: corsHeaders })
+        }
+        
+        // Ensure only super_admins can manage other users this way
+        if (role !== 'super_admin') {
+            return NextResponse.json({ success: false, error: 'Requires Super Admin privileges' }, { status: 403, headers: corsHeaders })
+        }
+
+        const action = segments[2];
+
+        // 1. Invite User
+        if (action === 'invite') {
+            const { email } = body;
+            const { data, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email);
+            if (error) throw error;
+            return NextResponse.json({ success: true, user: data.user }, { headers: corsHeaders });
+        }
+
+        // 2. Confirm User (Manually verify email)
+        if (action === 'confirm') {
+            const { user_id } = body;
+            const { data, error } = await supabaseAdmin.auth.admin.updateUserById(user_id, { email_confirm: true });
+            if (error) throw error;
+            return NextResponse.json({ success: true, user: data.user }, { headers: corsHeaders });
+        }
+
+        // 3. Generate Link (Magic Link, Recovery, Invite)
+        // Body: { type: 'magiclink' | 'recovery' | 'invite' | 'signup', email: '...' }
+        if (action === 'generate_link') {
+            const { type, email } = body;
+            const { data, error } = await supabaseAdmin.auth.admin.generateLink({
+                type: type, // e.g. "magiclink"
+                email: email
+            });
+            if (error) throw error;
+            
+            // Returns: { user, action_link, email_otp, hashed_token, ... }
+            return NextResponse.json({ 
+                success: true, 
+                link: data.properties, // Full properties object
+                url: data.properties.action_link // The specific URL to send to user
+            }, { headers: corsHeaders });
+        }
+
+        // 4. Update User Password (Manual Reset / Reauthentication)
+        if (action === 'update_password') {
+             const { user_id, password } = body;
+             const { data, error } = await supabaseAdmin.auth.admin.updateUserById(user_id, { password: password });
+             if (error) throw error;
+             return NextResponse.json({ success: true, user: data.user }, { headers: corsHeaders });
+        }
+        
+        return NextResponse.json({ success: false, error: 'Unknown admin action' }, { status: 404, headers: corsHeaders })
     }
 
     // POST /api/events - Create new event
@@ -443,7 +440,7 @@ export async function POST(request) {
         banner_url: body.banner_url,
         event_date: body.event_date || null,
         event_end_date: body.event_end_date || null,
-        is_active: body.is_active !== undefined ? body.is_active : false, // Default to false (draft)
+        is_active: body.is_active !== undefined ? body.is_active : false,
         registration_open: body.registration_open !== undefined ? body.registration_open : true,
         registration_start: body.registration_start || null,
         registration_end: body.registration_end || null,
@@ -451,24 +448,17 @@ export async function POST(request) {
         created_by: user.id, 
       }
 
-      // We use the admin client here to insert, as RLS policy checks 'get_admin_role()'
-      const { data, error } = await supabase 
+      const { data, error } = await supabaseAdmin
         .from('events')
         .insert([eventData])
         .select()
         .single()
 
       if (error) {
-        return NextResponse.json(
-          { success: false, error: error.message },
-          { status: 500, headers: corsHeaders }
-        )
+        return NextResponse.json({ success: false, error: error.message }, { status: 500, headers: corsHeaders })
       }
 
-      return NextResponse.json(
-        { success: true, event: data },
-        { headers: corsHeaders }
-      )
+      return NextResponse.json({ success: true, event: data }, { headers: corsHeaders })
     }
 
     // POST /api/participants - Create new participant registration
@@ -489,15 +479,13 @@ export async function POST(request) {
           return NextResponse.json({ success: false, error: 'Unauthorized: Missing user ID' }, { status: 401, headers: corsHeaders })
       }
       
-      // --- START OF CHANGE: Allow re-registration if rejected ---
-      // This logic now checks for *active* (pending or approved) registrations.
-      // If a user only has 'rejected' registrations, this check will pass.
-      const { data: existingReg } = await supabase
+      // Allow re-registration if rejected (check only for pending/approved)
+      const { data: existingReg } = await supabaseAdmin
         .from('participants')
         .select('id, status')
         .eq('event_id', body.event_id)
         .eq('user_id', participantUserId)
-        .in('status', ['pending', 'approved']) // Only check for active ones
+        .in('status', ['pending', 'approved']) 
         .maybeSingle();
       
       if (existingReg) {
@@ -506,44 +494,38 @@ export async function POST(request) {
           { status: 409, headers: corsHeaders }
         )
       }
-      // --- END OF CHANGE ---
       
       const participantData = {
         event_id: body.event_id,
         user_id: participantUserId, 
         responses: body.responses,
         status: 'pending', 
-        // rejection_reason will be null by default
       }
 
-      const { data, error } = await supabase
+      const { data, error } = await supabaseAdmin
         .from('participants')
         .insert([participantData])
         .select()
         .single()
 
       if (error) {
-        return NextResponse.json(
-          { success: false, error: error.message },
-          { status: 500, headers: corsHeaders }
-        )
+        return NextResponse.json({ success: false, error: error.message }, { status: 500, headers: corsHeaders })
       }
 
       try {
-        const { data: eventData } = await supabase
+        const { data: eventData } = await supabaseAdmin
           .from('events')
           .select('title, event_date, created_by')
           .eq('id', body.event_id)
           .single()
         
         if (eventData && eventData.created_by) {
-          const { data: { user: adminUser } } = await supabase.auth.admin.getUserById(eventData.created_by)
+          const { data: { user: adminUser } } = await supabaseAdmin.auth.admin.getUserById(eventData.created_by)
           
           if (adminUser?.email) {
             const participantName = body.responses?.['Name'] || body.responses?.['Full Name'] || body.responses?.['name'] || 'Participant'
             const participantEmail = body.responses?.['Email'] || body.responses?.['email'] || 'N/A'
             
-            const { sendAdminNotification } = await import('@/lib/email')
             await sendAdminNotification({
               to: adminUser.email,
               adminName: adminUser.user_metadata?.name || adminUser.email,
@@ -557,10 +539,7 @@ export async function POST(request) {
         console.error('Error sending admin notification email:', emailError)
       }
       
-      return NextResponse.json(
-        { success: true, participant: data },
-        { headers: corsHeaders }
-      )
+      return NextResponse.json({ success: true, participant: data }, { headers: corsHeaders })
     }
 
     // POST /api/contact - Submit contact form
@@ -571,20 +550,16 @@ export async function POST(request) {
         message: body.message,
       }
 
-      const { data, error } = await supabase
+      const { data, error } = await supabaseAdmin
         .from('contact_submissions')
         .insert([contactData])
         .select()
         .single()
 
       if (error) {
-        return NextResponse.json(
-          { success: false, error: error.message },
-          { status: 500, headers: corsHeaders }
-        )
+        return NextResponse.json({ success: false, error: error.message }, { status: 500, headers: corsHeaders })
       }
       
-      // --- START OF NEW CODE ---
       try {
         await sendContactEmailToAdmin({
           fromName: contactData.name,
@@ -593,30 +568,21 @@ export async function POST(request) {
         });
       } catch (emailError) {
         console.error("Error sending contact email to admin:", emailError);
-        // Don't fail the whole request if email fails, just log it.
       }
-      // --- END OF NEW CODE ---
 
-      return NextResponse.json(
-        { success: true, submission: data },
-        { headers: corsHeaders }
-      )
+      return NextResponse.json({ success: true, submission: data }, { headers: corsHeaders })
     }
 
-    return NextResponse.json(
-      { success: false, error: 'Route not found' },
-      { status: 404, headers: corsHeaders }
-    )
+    return NextResponse.json({ success: false, error: 'Route not found' }, { status: 404, headers: corsHeaders })
   } catch (error) {
     console.error('POST Error:', error)
-    return NextResponse.json(
-      { success: false, error: error.message },
-      { status: 500, headers: corsHeaders }
-    )
+    return NextResponse.json({ success: false, error: error.message }, { status: 500, headers: corsHeaders })
   }
 }
 
-// PUT Handler
+// =================================================================================
+// PUT HANDLER
+// =================================================================================
 export async function PUT(request) {
   try {
     const segments = getPathSegments(request)
@@ -635,10 +601,7 @@ export async function PUT(request) {
         const { data: { user }, error: authError } = await userSupabase.auth.getUser()
         
         if (!user) {
-            return NextResponse.json(
-                { success: false, error: authError?.message || 'Unauthorized' },
-                { status: 401, headers: corsHeaders }
-            )
+            return NextResponse.json({ success: false, error: authError?.message || 'Unauthorized' }, { status: 401, headers: corsHeaders })
         }
         
         const updateData = {
@@ -648,7 +611,7 @@ export async function PUT(request) {
             updated_at: new Date().toISOString()
         }
 
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from('profiles')
             .upsert(updateData)
             .select()
@@ -661,7 +624,6 @@ export async function PUT(request) {
         return NextResponse.json({ success: true, profile: data }, { headers: corsHeaders })
     }
 
-
     // PUT /api/events/:id - Update event
     if (segments[0] === 'events' && segments[1]) {
       const body = await request.json()
@@ -672,7 +634,7 @@ export async function PUT(request) {
           return NextResponse.json({ success: false, error: adminError?.message || 'Unauthorized' }, { status: 401, headers: corsHeaders })
       }
       
-      const { data: eventData, error: eventError } = await supabase
+      const { data: eventData, error: eventError } = await supabaseAdmin
           .from('events')
           .select('created_by')
           .eq('id', eventId)
@@ -701,7 +663,7 @@ export async function PUT(request) {
       if (body.form_fields !== undefined) updateData.form_fields = body.form_fields
       updateData.updated_at = new Date().toISOString()
 
-      const { data, error } = await supabase
+      const { data, error } = await supabaseAdmin
         .from('events')
         .update(updateData)
         .eq('id', eventId)
@@ -709,16 +671,10 @@ export async function PUT(request) {
         .single()
 
       if (error) {
-        return NextResponse.json(
-          { success: false, error: error.message },
-          { status: 500, headers: corsHeaders }
-        )
+        return NextResponse.json({ success: false, error: error.message }, { status: 500, headers: corsHeaders })
       }
 
-      return NextResponse.json(
-        { success: true, event: data },
-        { headers: corsHeaders }
-      )
+      return NextResponse.json({ success: true, event: data }, { headers: corsHeaders })
     }
 
     // PUT /api/participants/:id/approve - Approve participant registration
@@ -730,13 +686,11 @@ export async function PUT(request) {
           return NextResponse.json({ success: false, error: adminError?.message || 'Unauthorized' }, { status: 401, headers: corsHeaders })
       }
       
-      // --- START OF CHANGE: Fetch event_end_date ---
-      const { data: participant, error: participantError } = await supabase
+      const { data: participant, error: participantError } = await supabaseAdmin
         .from('participants')
         .select('*, event:events(id, title, created_by, event_date, event_end_date)') 
         .eq('id', participantId)
         .single();
-      // --- END OF CHANGE ---
       
       if (participantError || !participant) {
         return NextResponse.json({ success: false, error: 'Participant not found' }, { status: 404, headers: corsHeaders })
@@ -747,13 +701,13 @@ export async function PUT(request) {
         return NextResponse.json({ success: false, error: 'Forbidden: You do not own this event' }, { status: 403, headers: corsHeaders })
       }
       
-      const { data, error } = await supabase
+      const { data, error } = await supabaseAdmin
         .from('participants')
         .update({
           status: 'approved',
           reviewed_by: user.id,
           reviewed_at: new Date().toISOString(),
-          rejection_reason: null // Clear any previous rejection reason
+          rejection_reason: null
         })
         .eq('id', participantId)
         .select()
@@ -763,20 +717,17 @@ export async function PUT(request) {
         return NextResponse.json({ success: false, error: error.message }, { status: 500, headers: corsHeaders })
       }
       
-      // --- START OF CHANGE: Send 'from' email and dates ---
       try {
-        const { data: { user: participantUser } } = await supabase.auth.admin.getUserById(participant.user_id)
-        const { data: { user: adminUser } } = await supabase.auth.admin.getUserById(participant.event.created_by)
+        const { data: { user: participantUser } } = await supabaseAdmin.auth.admin.getUserById(participant.user_id)
+        const { data: { user: adminUser } } = await supabaseAdmin.auth.admin.getUserById(participant.event.created_by)
         
         if (participantUser?.email && adminUser?.email) {
           const participantName = participant.responses?.['Name'] || participant.responses?.['Full Name'] || participant.responses?.['name'] || 'Participant'
           
-          // Get admin's name and logo
-          const { data: adminProfile } = await supabase.from('admin_users').select('club_name, club_logo_url').eq('user_id', adminUser.id).single();
+          const { data: adminProfile } = await supabaseAdmin.from('admin_users').select('club_name, club_logo_url').eq('user_id', adminUser.id).single();
           const fromName = adminProfile?.club_name || participant.event.title;
           const clubLogoUrl = adminProfile?.club_logo_url || null;
           
-          const { sendApprovalEmail } = await import('@/lib/email')
           await sendApprovalEmail({
             to: participantUser.email,
             from: { name: fromName, email: adminUser.email },
@@ -790,7 +741,6 @@ export async function PUT(request) {
       } catch (emailError) {
         console.error('Error sending approval email:', emailError)
       }
-      // --- END OF CHANGE ---
       
       return NextResponse.json({ success: true, participant: data }, { headers: corsHeaders })
     }
@@ -807,13 +757,11 @@ export async function PUT(request) {
           return NextResponse.json({ success: false, error: adminError?.message || 'Unauthorized' }, { status: 401, headers: corsHeaders })
       }
       
-      // --- START OF CHANGE: Fetch event_end_date ---
-      const { data: participant, error: participantError } = await supabase
+      const { data: participant, error: participantError } = await supabaseAdmin
         .from('participants')
         .select('*, event:events(id, title, created_by, event_date, event_end_date)')
         .eq('id', participantId)
         .single();
-      // --- END OF CHANGE ---
       
       if (participantError || !participant) {
         return NextResponse.json({ success: false, error: 'Participant not found' }, { status: 404, headers: corsHeaders })
@@ -824,13 +772,13 @@ export async function PUT(request) {
         return NextResponse.json({ success: false, error: 'Forbidden: You do not own this event' }, { status: 403, headers: corsHeaders })
       }
       
-      const { data, error } = await supabase
+      const { data, error } = await supabaseAdmin
         .from('participants')
         .update({
           status: 'rejected',
           reviewed_by: user.id,
           reviewed_at: new Date().toISOString(),
-          rejection_reason: reason // Save the reason
+          rejection_reason: reason 
         })
         .eq('id', participantId)
         .select()
@@ -840,20 +788,17 @@ export async function PUT(request) {
         return NextResponse.json({ success: false, error: error.message }, { status: 500, headers: corsHeaders })
       }
       
-      // --- START OF CHANGE: Send 'from' email and dates ---
       try {
-        const { data: { user: participantUser } } = await supabase.auth.admin.getUserById(participant.user_id)
-        const { data: { user: adminUser } } = await supabase.auth.admin.getUserById(participant.event.created_by)
+        const { data: { user: participantUser } } = await supabaseAdmin.auth.admin.getUserById(participant.user_id)
+        const { data: { user: adminUser } } = await supabaseAdmin.auth.admin.getUserById(participant.event.created_by)
         
         if (participantUser?.email && adminUser?.email) {
           const participantName = participant.responses?.['Name'] || participant.responses?.['Full Name'] || participant.responses?.['name'] || 'Participant'
 
-          // Get admin's name and logo
-          const { data: adminProfile } = await supabase.from('admin_users').select('club_name, club_logo_url').eq('user_id', adminUser.id).single();
+          const { data: adminProfile } = await supabaseAdmin.from('admin_users').select('club_name, club_logo_url').eq('user_id', adminUser.id).single();
           const fromName = adminProfile?.club_name || participant.event.title;
           const clubLogoUrl = adminProfile?.club_logo_url || null;
           
-          const { sendRejectionEmail } = await import('@/lib/email')
           await sendRejectionEmail({
             to: participantUser.email,
             from: { name: fromName, email: adminUser.email },
@@ -868,28 +813,39 @@ export async function PUT(request) {
       } catch (emailError) {
         console.error('Error sending rejection email:', emailError)
       }
-      // --- END OF CHANGE ---
       
       return NextResponse.json({ success: true, participant: data }, { headers: corsHeaders })
     }
 
-    return NextResponse.json(
-      { success: false, error: 'Route not found' },
-      { status: 404, headers: corsHeaders }
-    )
+    return NextResponse.json({ success: false, error: 'Route not found' }, { status: 404, headers: corsHeaders })
   } catch (error) {
     console.error('PUT Error:', error)
-    return NextResponse.json(
-      { success: false, error: error.message },
-      { status: 500, headers: corsHeaders }
-    )
+    return NextResponse.json({ success: false, error: error.message }, { status: 500, headers: corsHeaders })
   }
 }
 
-// DELETE Handler
+// =================================================================================
+// DELETE HANDLER
+// =================================================================================
 export async function DELETE(request) {
   try {
     const segments = getPathSegments(request)
+
+    // DELETE /api/admin/users/delete
+    if (segments[0] === 'admin' && segments[1] === 'users' && segments[2] === 'delete') {
+        const body = await request.json();
+        const { role, error } = await getAdminUser(request);
+        if (error || role !== 'super_admin') {
+            return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 403, headers: corsHeaders })
+        }
+        
+        const { error: delError } = await supabaseAdmin.auth.admin.deleteUser(body.user_id);
+        if (delError) {
+            return NextResponse.json({ success: false, error: delError.message }, { status: 500, headers: corsHeaders })
+        }
+        
+        return NextResponse.json({ success: true, message: 'User deleted' }, { headers: corsHeaders });
+    }
 
     // DELETE /api/events/:id - Delete event
     if (segments[0] === 'events' && segments[1]) {
@@ -900,7 +856,7 @@ export async function DELETE(request) {
           return NextResponse.json({ success: false, error: adminError?.message || 'Unauthorized' }, { status: 401, headers: corsHeaders })
       }
       
-      const { data: eventData, error: eventError } = await supabase
+      const { data: eventData, error: eventError } = await supabaseAdmin
           .from('events')
           .select('created_by')
           .eq('id', eventId)
@@ -916,33 +872,21 @@ export async function DELETE(request) {
           return NextResponse.json({ success: false, error: 'Forbidden: You do not own this event' }, { status: 403, headers: corsHeaders })
       }
 
-      const { error } = await supabase
+      const { error } = await supabaseAdmin
         .from('events')
         .delete()
         .eq('id', eventId)
 
       if (error) {
-        return NextResponse.json(
-          { success: false, error: error.message },
-          { status: 500, headers: corsHeaders }
-        )
+        return NextResponse.json({ success: false, error: error.message }, { status: 500, headers: corsHeaders })
       }
 
-      return NextResponse.json(
-        { success: true, message: 'Event deleted successfully' },
-        { headers: corsHeaders }
-      )
+      return NextResponse.json({ success: true, message: 'Event deleted successfully' }, { headers: corsHeaders })
     }
 
-    return NextResponse.json(
-      { success: false, error: 'Route not found' },
-      { status: 404, headers: corsHeaders }
-    )
+    return NextResponse.json({ success: false, error: 'Route not found' }, { status: 404, headers: corsHeaders })
   } catch (error) {
     console.error('DELETE Error:', error)
-    return NextResponse.json(
-      { success: false, error: error.message },
-      { status: 500, headers: corsHeaders }
-    )
+    return NextResponse.json({ success: false, error: error.message }, { status: 500, headers: corsHeaders })
   }
 }
