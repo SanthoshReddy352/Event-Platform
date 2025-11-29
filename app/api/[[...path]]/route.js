@@ -4,8 +4,6 @@ import { supabaseAdmin } from '@/lib/supabase/server' // Uses your centralized a
 
 import { 
   sendAdminNotification, 
-  sendApprovalEmail, 
-  sendRejectionEmail,
   sendContactEmailToAdmin 
 } from '@/lib/email'
 
@@ -133,6 +131,7 @@ export async function GET(request) {
       }
       // --- End cleanup logic ---
 
+      // 1. Fetch Events
       let query = supabaseAdmin
         .from('events')
         .select(`
@@ -150,13 +149,39 @@ export async function GET(request) {
         query = query.limit(parseInt(params.limit))
       }
 
-      const { data, error } = await query
+      const { data: events, error } = await query
 
       if (error) {
         return NextResponse.json({ success: false, error: error.message }, { status: 500, headers: corsHeaders })
       }
+
+      // 2. Fetch Approved Participant Counts Manually
+      // We do this to ensure we ONLY count 'approved' participants, avoiding 'pending' or 'rejected'.
+      if (events && events.length > 0) {
+        const eventIds = events.map(e => e.id);
+        
+        // Fetch event_id for every approved participant in these events
+        const { data: participants } = await supabaseAdmin
+            .from('participants')
+            .select('event_id')
+            .eq('status', 'approved')
+            .in('event_id', eventIds);
+            
+        // Calculate counts per event
+        const counts = {};
+        if (participants) {
+            participants.forEach(p => {
+                counts[p.event_id] = (counts[p.event_id] || 0) + 1;
+            });
+        }
+        
+        // Attach approved_count to each event
+        events.forEach(e => {
+            e.approved_count = counts[e.id] || 0;
+        });
+      }
       
-      return NextResponse.json({ success: true, events: data }, { headers: corsHeaders })
+      return NextResponse.json({ success: true, events: events }, { headers: corsHeaders })
     }
 
     // GET /api/events/:id - Get single event
@@ -223,46 +248,6 @@ export async function GET(request) {
       }
 
       return NextResponse.json({ success: true, count }, { headers: corsHeaders })
-    }
-
-    // GET /api/participants/pending - Get all pending registrations for admin
-    if (segments[0] === 'participants' && segments[1] === 'pending') {
-      const { user, role, error: adminError } = await getAdminUser(request);
-      if (adminError || !user) {
-          return NextResponse.json({ success: false, error: adminError?.message || 'Unauthorized' }, { status: 401, headers: corsHeaders })
-      }
-      
-      let query = supabaseAdmin
-        .from('participants')
-        .select(`
-          *,
-          event:events(id, title, created_by, form_fields)
-        `)
-        .eq('status', 'pending')
-        .order('created_at', { ascending: false });
-      
-      // If not super_admin, only show pending for their own events
-      if (role !== 'super_admin') {
-        const { data: adminEvents } = await supabaseAdmin
-          .from('events')
-          .select('id')
-          .eq('created_by', user.id);
-        
-        const eventIds = adminEvents ? adminEvents.map(e => e.id) : [];
-        if (eventIds.length === 0) {
-          return NextResponse.json({ success: true, participants: [] }, { headers: corsHeaders })
-        }
-        
-        query = query.in('event_id', eventIds);
-      }
-      
-      const { data, error } = await query;
-      
-      if (error) {
-          return NextResponse.json({ success: false, error: error.message }, { status: 500, headers: corsHeaders })
-      }
-      
-      return NextResponse.json({ success: true, participants: data }, { headers: corsHeaders })
     }
 
     // GET /api/participants/:eventId - Get participants for an event
@@ -504,7 +489,7 @@ export async function POST(request) {
         event_id: body.event_id,
         user_id: participantUserId, 
         responses: body.responses,
-        status: 'pending', 
+        status: 'approved', // Auto-approve free events
       }
 
       const { data, error } = await supabaseAdmin
@@ -685,146 +670,6 @@ export async function PUT(request) {
       }
 
       return NextResponse.json({ success: true, event: data }, { headers: corsHeaders })
-    }
-
-    // PUT /api/participants/:id/approve - Approve participant registration
-    if (segments[0] === 'participants' && segments[1] && segments[2] === 'approve') {
-      const participantId = segments[1];
-      
-      const { user, role, error: adminError } = await getAdminUser(request);
-      if (adminError || !user) {
-          return NextResponse.json({ success: false, error: adminError?.message || 'Unauthorized' }, { status: 401, headers: corsHeaders })
-      }
-      
-      const { data: participant, error: participantError } = await supabaseAdmin
-        .from('participants')
-        .select('*, event:events(id, title, created_by, event_date, event_end_date)') 
-        .eq('id', participantId)
-        .single();
-      
-      if (participantError || !participant) {
-        return NextResponse.json({ success: false, error: 'Participant not found' }, { status: 404, headers: corsHeaders })
-      }
-      
-      const canManage = role === 'super_admin' || participant.event.created_by === user.id;
-      if (!canManage) {
-        return NextResponse.json({ success: false, error: 'Forbidden: You do not own this event' }, { status: 403, headers: corsHeaders })
-      }
-      
-      const { data, error } = await supabaseAdmin
-        .from('participants')
-        .update({
-          status: 'approved',
-          reviewed_by: user.id,
-          reviewed_at: new Date().toISOString(),
-          rejection_reason: null
-        })
-        .eq('id', participantId)
-        .select()
-        .single();
-      
-      if (error) {
-        return NextResponse.json({ success: false, error: error.message }, { status: 500, headers: corsHeaders })
-      }
-      
-      try {
-        const { data: { user: participantUser } } = await supabaseAdmin.auth.admin.getUserById(participant.user_id)
-        const { data: { user: adminUser } } = await supabaseAdmin.auth.admin.getUserById(participant.event.created_by)
-        
-        if (participantUser?.email && adminUser?.email) {
-          const participantName = participant.responses?.['Name'] || participant.responses?.['Full Name'] || participant.responses?.['name'] || 'Participant'
-          
-          const { data: adminProfile } = await supabaseAdmin.from('admin_users').select('club_name, club_logo_url').eq('user_id', adminUser.id).single();
-          const fromName = adminProfile?.club_name || participant.event.title;
-          const clubLogoUrl = adminProfile?.club_logo_url || null;
-          
-          await sendApprovalEmail({
-            to: participantUser.email,
-            from: { name: fromName, email: adminUser.email },
-            participantName,
-            eventTitle: participant.event.title,
-            eventStartDate: participant.event.event_date,
-            eventEndDate: participant.event.event_end_date,
-            clubLogoUrl: clubLogoUrl
-          })
-        }
-      } catch (emailError) {
-        console.error('Error sending approval email:', emailError)
-      }
-      
-      return NextResponse.json({ success: true, participant: data }, { headers: corsHeaders })
-    }
-
-    // PUT /api/participants/:id/reject - Reject participant registration
-    if (segments[0] === 'participants' && segments[1] && segments[2] === 'reject') {
-      const body = await request.json()
-      const reason = body.reason || null
-      
-      const participantId = segments[1];
-      
-      const { user, role, error: adminError } = await getAdminUser(request);
-      if (adminError || !user) {
-          return NextResponse.json({ success: false, error: adminError?.message || 'Unauthorized' }, { status: 401, headers: corsHeaders })
-      }
-      
-      const { data: participant, error: participantError } = await supabaseAdmin
-        .from('participants')
-        .select('*, event:events(id, title, created_by, event_date, event_end_date)')
-        .eq('id', participantId)
-        .single();
-      
-      if (participantError || !participant) {
-        return NextResponse.json({ success: false, error: 'Participant not found' }, { status: 404, headers: corsHeaders })
-      }
-      
-      const canManage = role === 'super_admin' || participant.event.created_by === user.id;
-      if (!canManage) {
-        return NextResponse.json({ success: false, error: 'Forbidden: You do not own this event' }, { status: 403, headers: corsHeaders })
-      }
-      
-      const { data, error } = await supabaseAdmin
-        .from('participants')
-        .update({
-          status: 'rejected',
-          reviewed_by: user.id,
-          reviewed_at: new Date().toISOString(),
-          rejection_reason: reason 
-        })
-        .eq('id', participantId)
-        .select()
-        .single();
-      
-      if (error) {
-        return NextResponse.json({ success: false, error: error.message }, { status: 500, headers: corsHeaders })
-      }
-      
-      try {
-        const { data: { user: participantUser } } = await supabaseAdmin.auth.admin.getUserById(participant.user_id)
-        const { data: { user: adminUser } } = await supabaseAdmin.auth.admin.getUserById(participant.event.created_by)
-        
-        if (participantUser?.email && adminUser?.email) {
-          const participantName = participant.responses?.['Name'] || participant.responses?.['Full Name'] || participant.responses?.['name'] || 'Participant'
-
-          const { data: adminProfile } = await supabaseAdmin.from('admin_users').select('club_name, club_logo_url').eq('user_id', adminUser.id).single();
-          const fromName = adminProfile?.club_name || participant.event.title;
-          const clubLogoUrl = adminProfile?.club_logo_url || null;
-          
-          await sendRejectionEmail({
-            to: participantUser.email,
-            from: { name: fromName, email: adminUser.email },
-            participantName,
-            eventTitle: participant.event.title,
-            reason: reason,
-            eventStartDate: participant.event.event_date,
-            eventEndDate: participant.event.event_end_date,
-            clubLogoUrl: clubLogoUrl
-          })
-        }
-      } catch (emailError) {
-        console.error('Error sending rejection email:', emailError)
-      }
-      
-      return NextResponse.json({ success: true, participant: data }, { headers: corsHeaders })
     }
 
     return NextResponse.json({ success: false, error: 'Route not found' }, { status: 404, headers: corsHeaders })

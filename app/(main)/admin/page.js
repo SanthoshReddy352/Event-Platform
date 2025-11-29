@@ -8,7 +8,7 @@ import GradientText from '@/components/GradientText'
 import { supabase } from '@/lib/supabase/client'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Calendar, Users, FileText, LogOut, AlertCircle, TrendingUp } from 'lucide-react'
+import { Calendar, Users, LogOut, TrendingUp } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 
 function AdminDashboardContent() {
@@ -18,7 +18,6 @@ function AdminDashboardContent() {
     totalEvents: 0,
     activeEvents: 0,
     totalParticipants: 0,
-    pendingApprovals: 0,
     myEvents: 0, // For normal admins
   })
   const [loading, setLoading] = useState(true)
@@ -45,8 +44,6 @@ function AdminDashboardContent() {
           ? allEvents 
           : allEvents.filter(e => e.created_by === user.id)
         
-        const myEventIds = myEvents.map(e => e.id)
-
         const now = new Date();
         const activeEventsList = myEvents.filter(e => {
           const eventEndDate = e.event_end_date ? new Date(e.event_end_date) : null;
@@ -54,31 +51,15 @@ function AdminDashboardContent() {
           return e.is_active && !isCompleted; 
         });
         
-        let totalParticipants = 0
-        let pendingApprovals = 0
-        
-        if (myEventIds.length > 0) {
-          const participantPromises = myEventIds.map(eventId =>
-            fetch(`/api/participants/${eventId}`, {
-              headers: { 'Authorization': `Bearer ${session.access_token}` }
-            }).then(res => res.json())
-          )
-          
-          const participantResults = await Promise.all(participantPromises)
-          
-          participantResults.forEach(result => {
-            if (result.success && result.participants) {
-              totalParticipants += result.participants.filter(p => p.status === 'approved').length;
-              pendingApprovals += result.participants.filter(p => p.status === 'pending').length;
-            }
-          })
-        }
+        // Sum the pre-calculated approved_count from the API
+        const totalParticipants = myEvents.reduce((acc, event) => {
+          return acc + (event.approved_count || 0);
+        }, 0);
 
         setStats({
           totalEvents: allEvents.length,
           activeEvents: activeEventsList.length,
           totalParticipants, 
-          pendingApprovals,
           myEvents: myEvents.length,
         })
       }
@@ -98,8 +79,8 @@ function AdminDashboardContent() {
     return (
       <div className="container mx-auto px-4 py-12">
         <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-brand-red"></div> {/* CHANGED */}
-          <p className="mt-4 text-gray-400">Loading dashboard...</p> {/* CHANGED */}
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-brand-red"></div>
+          <p className="mt-4 text-gray-400">Loading dashboard...</p>
         </div>
       </div>
     )
@@ -112,7 +93,7 @@ function AdminDashboardContent() {
           <h1 className="text-4xl font-bold" data-testid="admin-dashboard-title">
             <GradientText>{isSuperAdmin ? 'Super Admin Dashboard' : 'Admin Dashboard'}</GradientText>
           </h1>
-          <p className="text-gray-400 mt-2">Welcome back, {user?.email}</p> {/* CHANGED */}
+          <p className="text-gray-400 mt-2">Welcome back, {user?.email}</p>
           {isSuperAdmin && (
             <p className="text-sm text-brand-orange font-medium mt-1">You have full system access</p>
           )}
@@ -123,40 +104,17 @@ function AdminDashboardContent() {
         </Button>
       </div>
 
-      {stats.pendingApprovals > 0 && (
-        <Card className="mb-6 border-orange-500 bg-orange-900/20" data-testid="pending-approvals-alert"> {/* CHANGED */}
-          <CardContent className="py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <AlertCircle className="text-orange-400" size={24} /> {/* CHANGED */}
-                <div>
-                  <p className="font-semibold text-orange-200"> {/* CHANGED */}
-                    {stats.pendingApprovals} Registration{stats.pendingApprovals > 1 ? 's' : ''} Awaiting Approval
-                  </p>
-                  <p className="text-sm text-orange-300">Review and approve participant registrations</p> {/* CHANGED */}
-                </div>
-              </div>
-              <Link href="/admin/registrations">
-                <Button className="bg-orange-500 hover:bg-orange-600" data-testid="review-registrations-button"> {/* CHANGED */}
-                  Review Now
-                </Button>
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
         <Card data-testid="stat-my-events">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">
               {isSuperAdmin ? 'All Events' : 'My Events'}
             </CardTitle>
-            <Calendar className="text-brand-orange" size={20} /> {/* CHANGED */}
+            <Calendar className="text-brand-orange" size={20} />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">{stats.myEvents}</div>
-            <p className="text-xs text-gray-400 mt-1"> {/* CHANGED */}
+            <p className="text-xs text-gray-400 mt-1">
               {isSuperAdmin ? 'System-wide' : 'Created by you'}
             </p>
           </CardContent>
@@ -165,38 +123,27 @@ function AdminDashboardContent() {
         <Card data-testid="stat-active-events">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">Active Events</CardTitle>
-            <TrendingUp className="text-green-500" size={20} /> {/* CHANGED */}
+            <TrendingUp className="text-green-500" size={20} />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">{stats.activeEvents}</div>
-            <p className="text-xs text-gray-400 mt-1">Currently running</p> {/* CHANGED */}
+            <p className="text-xs text-gray-400 mt-1">Currently running</p>
           </CardContent>
         </Card>
 
         <Card data-testid="stat-total-participants">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">Total Registrations</CardTitle>
-            <Users className="text-purple-400" size={20} /> {/* CHANGED */}
+            <Users className="text-purple-400" size={20} />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">{stats.totalParticipants}</div>
-            <p className="text-xs text-gray-400 mt-1">Approved participants</p> {/* CHANGED */}
-          </CardContent>
-        </Card>
-
-        <Card data-testid="stat-pending-approvals" className={stats.pendingApprovals > 0 ? 'border-orange-500' : ''}>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Pending Approvals</CardTitle>
-            <AlertCircle className={stats.pendingApprovals > 0 ? 'text-orange-400' : 'text-gray-400'} size={20} /> {/* CHANGED */}
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{stats.pendingApprovals}</div>
-            <p className="text-xs text-gray-400 mt-1">Awaiting review</p> {/* CHANGED */}
+            <p className="text-xs text-gray-400 mt-1">Total participants</p>
           </CardContent>
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
         <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => router.push('/admin/events')} data-testid="manage-events-card">
           <CardHeader>
             <CardTitle>Manage Events</CardTitle>
@@ -206,28 +153,7 @@ function AdminDashboardContent() {
           </CardHeader>
           <CardContent>
             <Link href="/admin/events">
-              <Button className="bg-brand-gradient text-white font-semibold hover:opacity-90 transition-opacity" data-testid="go-to-events-button">Go to Events</Button> {/* CHANGED */}
-            </Link>
-          </CardContent>
-        </Card>
-
-        <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => router.push('/admin/registrations')} data-testid="review-registrations-card">
-          <CardHeader>
-            <CardTitle>Review Registrations</CardTitle>
-            <CardDescription>
-              Approve or reject pending participant registrations.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Link href="/admin/registrations">
-              <Button className="bg-brand-gradient text-white font-semibold hover:opacity-90 transition-opacity" data-testid="go-to-registrations-button"> {/* CHANGED */}
-                Review Registrations
-                {stats.pendingApprovals > 0 && (
-                  <span className="ml-2 bg-orange-500 text-white text-xs px-2 py-1 rounded-full"> {/* CHANGED */}
-                    {stats.pendingApprovals}
-                  </span>
-                )}
-              </Button>
+              <Button className="bg-brand-gradient text-white font-semibold hover:opacity-90 transition-opacity" data-testid="go-to-events-button">Go to Events</Button>
             </Link>
           </CardContent>
         </Card>
@@ -236,11 +162,11 @@ function AdminDashboardContent() {
           <CardHeader>
             <CardTitle>View Participants</CardTitle>
             <CardDescription>
-              See all *approved* registrations and export data to CSV.
+              See all registrations and export data to CSV.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-gray-400 mb-4"> {/* CHANGED */}
+            <p className="text-sm text-gray-400 mb-4">
               Select an event from the events page to view its participants
             </p>
             <Link href="/admin/events">

@@ -45,7 +45,7 @@ export async function POST(request) {
         user_id: userId, 
         // We store the responses (form data) here
         responses: responses || {},
-        status: 'pending', // Admins still approve paid events, or change to 'approved' if auto-approve
+        status: 'approved', // Auto-approve paid events
         
         // Payment Details
         payment_id: razorpay_payment_id,
