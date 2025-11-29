@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Calendar } from '@/components/ui/calendar'
-import { Calendar as CalendarIcon, Loader2 } from 'lucide-react'
+import { Calendar as CalendarIcon, Loader2, IndianRupee } from 'lucide-react'
 import { format } from 'date-fns'
 
 // Helper to check if a date is valid
@@ -26,6 +26,8 @@ export default function EventForm({ onSubmit, initialData = null, isSubmitting =
     registration_end: null,
     is_active: false,
     registration_open: false,
+    is_paid: false,
+    registration_fee: 0,
   })
 
   // When initialData is provided (for editing), populate the form state
@@ -42,6 +44,8 @@ export default function EventForm({ onSubmit, initialData = null, isSubmitting =
         registration_end: initialData.registration_end ? new Date(initialData.registration_end) : null,
         is_active: initialData.is_active || false,
         registration_open: initialData.registration_open || false,
+        is_paid: initialData.is_paid || false,
+        registration_fee: initialData.registration_fee || 0,
       })
     }
   }, [initialData])
@@ -78,6 +82,8 @@ export default function EventForm({ onSubmit, initialData = null, isSubmitting =
       event_end_date: isValidDate(formData.event_end_date) ? formData.event_end_date.toISOString() : null,
       registration_start: isValidDate(formData.registration_start) ? formData.registration_start.toISOString() : null,
       registration_end: isValidDate(formData.registration_end) ? formData.registration_end.toISOString() : null,
+      // Ensure fee is a number
+      registration_fee: formData.is_paid ? parseFloat(formData.registration_fee) : 0,
     }
     
     onSubmit(submissionData)
@@ -232,6 +238,36 @@ export default function EventForm({ onSubmit, initialData = null, isSubmitting =
                 </PopoverContent>
               </Popover>
             </div>
+          </div>
+
+          <div className="p-4 border rounded-lg bg-gray-50/10 space-y-4">
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="is_paid"
+                checked={formData.is_paid}
+                onCheckedChange={(checked) => handleSwitchChange('is_paid', checked)}
+              />
+              <Label htmlFor="is_paid" className="font-semibold text-brand-red">Is this a Paid Event?</Label>
+            </div>
+
+            {formData.is_paid && (
+              <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
+                <Label htmlFor="registration_fee">Registration Fee (INR)</Label>
+                <div className="relative">
+                  <IndianRupee className="absolute left-3 top-2.5 h-4 w-4 text-gray-500" />
+                  <Input
+                    id="registration_fee"
+                    name="registration_fee"
+                    type="number"
+                    min="0"
+                    className="pl-9"
+                    value={formData.registration_fee}
+                    onChange={handleChange}
+                    required={formData.is_paid}
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="flex items-center space-x-4">

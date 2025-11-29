@@ -5,12 +5,13 @@ import { useParams, useRouter } from 'next/navigation'
 import DynamicForm from '@/components/DynamicForm'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card' 
 import { Button } from '@/components/ui/button'
-import { Calendar, Clock, ArrowLeft, Loader2, FileClock, XCircle, CheckCircle } from 'lucide-react'
+import { Calendar, Clock, ArrowLeft, Loader2, FileClock, XCircle, CheckCircle, IndianRupee } from 'lucide-react'
 import { parseISO, format } from 'date-fns'; 
 import { formatInTimeZone } from 'date-fns-tz'; 
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client' 
 import { useAuth } from '@/context/AuthContext' 
+import Script from 'next/script' // Required for Razorpay
 
 // Helper function to format date ranges
 const formatEventDate = (start, end, timeZone) => {
@@ -82,10 +83,9 @@ function EventDetailContent() {
   const { user, loading: authLoading } = useAuth() 
   const [isRegistered, setIsRegistered] = useState(false) 
   const [registrationStatus, setRegistrationStatus] = useState(null)
-  const [regCheckLoading, setRegCheckLoading] = useState(true) // Start true
+  const [regCheckLoading, setRegCheckLoading] = useState(true) 
   const storageKey = `formData-${params.id}`;
   
-  // --- STATE FOR REJECTION HISTORY ---
   const [rejectionHistory, setRejectionHistory] = useState(null);
 
   const [formData, setFormData] = useState(() => {
@@ -104,31 +104,30 @@ function EventDetailContent() {
   const fetchEvent = useCallback(async () => {
     if (!params.id) return;
     
-    setLoading(true); // Ensure loading is true at the start
+    setLoading(true); 
     try {
       const response = await fetch(`/api/events/${params.id}`);
       const data = await response.json();
       if (data.success) {
         setEvent(data.event);
       } else {
-        setEvent(null); // Set event to null on error
+        setEvent(null); 
       }
     } catch (error) {
       console.error('Error fetching event:', error);
       setEvent(null);
     } finally {
-      setLoading(false); // Set loading to false after fetch
+      setLoading(false); 
     }
   }, [params.id]);
 
-  // --- UPDATED: checkRegistrationStatus fetches all records ---
   const checkRegistrationStatus = useCallback(async (userId, eventId) => {
     if (!userId || !eventId) {
       setRegCheckLoading(false);
       return;
     }
     setRegCheckLoading(true);
-    setRejectionHistory(null); // Reset history on check
+    setRejectionHistory(null); 
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
@@ -140,18 +139,15 @@ function EventDetailContent() {
       });
       const data = await response.json();
       
-      // data.participants is now an array
       if (data.success && data.participants && data.participants.length > 0) {
-        // Get the most recent registration
         const mostRecent = data.participants[data.participants.length - 1];
         
         setIsRegistered(true);
         setRegistrationStatus(mostRecent.status);
 
-        // Find the most recent *rejected* registration to show history
         const rejected = data.participants
           .filter(p => p.status === 'rejected')
-          .pop(); // Gets the last one
+          .pop(); 
 
         if (rejected) {
           setRejectionHistory(rejected);
@@ -185,17 +181,91 @@ function EventDetailContent() {
         setIsRegistered(false);
         setRegistrationStatus(null);
         setRegCheckLoading(false); 
-        setRejectionHistory(null); // Clear history if user logs out
+        setRejectionHistory(null); 
     }
-  // Depend on user.id and event.id
   }, [user?.id, event?.id, loading, authLoading, checkRegistrationStatus]); 
 
+  // --- UPDATED HANDLESUBMIT TO SUPPORT RAZORPAY ---
   const handleSubmit = async (submitData) => {
     if (!user) {
         alert('You must be logged in to register.');
         return;
     }
+
+    // 1. Check if Paid Event
+    if (event.is_paid && event.registration_fee > 0) {
+        try {
+            // A. Create Order
+            const res = await fetch("/api/razorpay/create-order", {
+                method: "POST",
+                body: JSON.stringify({ amount: event.registration_fee, eventId: event.id }),
+            });
+            const order = await res.json();
+            
+            if (!order.id) throw new Error("Failed to create order");
+
+            // B. Open Razorpay
+            const options = {
+                key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID, 
+                amount: order.amount,
+                currency: order.currency,
+                name: "Event Platform", // Replace with your App Name
+                description: `Registration for ${event.title}`,
+                order_id: order.id,
+                handler: async function (response) {
+                    // C. Payment Success - Verify & Register
+                    try {
+                        const verifyRes = await fetch("/api/razorpay/verify", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                razorpay_payment_id: response.razorpay_payment_id,
+                                razorpay_order_id: response.razorpay_order_id,
+                                razorpay_signature: response.razorpay_signature,
+                                eventId: event.id,
+                                userId: user.id,
+                                userDetails: { email: user.email }, // Can pass user details if needed
+                                responses: submitData // Pass the form answers
+                            }),
+                        });
+
+                        const result = await verifyRes.json();
+                        if (result.success) {
+                            setSubmitted(true);
+                            window.sessionStorage.removeItem(storageKey);
+                            alert("Payment Successful! You are registered.");
+                            // Refresh status
+                            checkRegistrationStatus(user.id, event.id);
+                        } else {
+                            alert("Payment verification failed. Please contact support.");
+                        }
+                    } catch (err) {
+                        console.error("Verification error", err);
+                        alert("Error during verification.");
+                    }
+                },
+                prefill: {
+                    email: user.email,
+                },
+                theme: {
+                    color: "#E11D48", // Brand Red
+                },
+            };
+
+            const rzp1 = new window.Razorpay(options);
+            rzp1.on('payment.failed', function (response){
+                    alert("Payment Failed: " + response.error.description);
+            });
+            rzp1.open();
+
+        } catch (error) {
+            console.error("Payment initiation error:", error);
+            alert("Could not start payment. Please try again.");
+        }
+        return; // Stop here, wait for Razorpay callback
+    }
     
+    // 2. Standard Free Registration
     try {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) {
@@ -219,7 +289,7 @@ function EventDetailContent() {
 
         if (data.success) {
             setSubmitted(true);
-            window.sessionStorage.removeItem(storageKey); // Clear saved form data
+            window.sessionStorage.removeItem(storageKey); 
         } else {
             alert(`Registration failed: ${data.error}`);
         }
@@ -266,7 +336,6 @@ function EventDetailContent() {
     )
   }
   
-  // Date/status logic
   const TIME_ZONE = 'Asia/Kolkata'; 
   const eventStartDate = event.event_date ? parseISO(event.event_date) : null;
   const eventEndDate = event.event_end_date ? parseISO(event.event_end_date) : null;
@@ -291,7 +360,6 @@ function EventDetailContent() {
       </span>
   );
   
-  // --- UPDATED: registrationContent function ---
   const registrationContent = () => {
       if (authLoading || regCheckLoading) {
           return (
@@ -316,7 +384,6 @@ function EventDetailContent() {
           )
       }
 
-      // --- THIS CARD SHOWS REJECTION HISTORY IF RE-APPLYING ---
       const rejectionHistoryCard = rejectionHistory && registrationStatus !== 'rejected' && (
         <Card className="border-red-500 mb-6">
           <CardHeader>
@@ -352,7 +419,7 @@ function EventDetailContent() {
           if (registrationStatus === 'pending') {
               return (
                   <>
-                    {rejectionHistoryCard} {/* Show history if it exists */}
+                    {rejectionHistoryCard} 
                     <Card className="border-orange-500">
                         <CardHeader>
                             <CardTitle className="text-orange-500">Registration Pending</CardTitle>
@@ -365,14 +432,9 @@ function EventDetailContent() {
                   </>
               )
           }
-           if (registrationStatus === 'rejected') {
-              // If rejected, show the rejection card AND the registration form below
-              // We don't return here, we fall through
-           }
       }
       
       if (!isRegistrationAvailable) {
-          // But if registration is closed AND they were rejected, just show rejection.
           if (registrationStatus === 'rejected' && rejectionHistory) {
              return (
                   <Card className="border-red-500">
@@ -390,7 +452,6 @@ function EventDetailContent() {
                   </Card>
               )
           }
-          // Otherwise, show the normal "Closed" card
           return (
               <Card>
                   <CardContent className="py-12 text-center text-gray-500">
@@ -434,7 +495,6 @@ function EventDetailContent() {
           )
       }
 
-      // --- THIS IS THE CARD FOR REJECTION + RE-APPLY ---
       const rejectedCard = registrationStatus === 'rejected' && rejectionHistory && (
          <Card className="border-red-500 mb-6">
             <CardHeader>
@@ -450,11 +510,10 @@ function EventDetailContent() {
         </Card>
       );
 
-      // 6. Show Form
       return (
           <>
-            {rejectedCard} {/* Show if last status was rejected */}
-            {rejectionHistoryCard} {/* Show if previous (but not last) was rejected */}
+            {rejectedCard} 
+            {rejectionHistoryCard} 
             <Card>
                 <CardHeader>
                     <CardTitle>Registration Form</CardTitle>
@@ -466,7 +525,9 @@ function EventDetailContent() {
                         onSubmit={handleSubmit}
                         eventId={params.id}
                         formData={formData} 
-                        onFormChange={setAndStoreFormData} 
+                        onFormChange={setAndStoreFormData}
+                        // Pass fee info to DynamicForm button (optional, handled in page but you can visualize it there)
+                        submitLabel={event.is_paid && event.registration_fee > 0 ? `Pay ₹${event.registration_fee} & Register` : 'Register Now'}
                     />
                 </CardContent>
             </Card>
@@ -476,6 +537,9 @@ function EventDetailContent() {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Import Razorpay SDK Script */}
+      <Script src="https://checkout.razorpay.com/v1/checkout.js" />
+      
       <div className="w-full h-64 bg-brand-gradient relative">
         {event?.banner_url && (
           <img
@@ -516,6 +580,13 @@ function EventDetailContent() {
                             <Clock size={16} className="mr-2 text-brand-red" />
                             <span>{formattedTime}</span>
                           </div>
+                        )}
+                        {/* Show Fee Tag */}
+                        {event.is_paid && (
+                            <div className="flex items-center text-green-400 font-semibold">
+                                <IndianRupee size={16} className="mr-1" />
+                                <span>{event.registration_fee > 0 ? `INR ${event.registration_fee}` : 'Free'}</span>
+                            </div>
                         )}
                       </div>
                     </div>
