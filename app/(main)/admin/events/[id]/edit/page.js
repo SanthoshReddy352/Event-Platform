@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect, useCallback, Suspense } from 'react'
-import { useRouter, useParams } from 'next/navigation'
+import { useState, useEffect, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -9,7 +9,8 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Upload, Link as LinkIcon, ArrowLeft, Loader2 } from 'lucide-react'
+import { Switch } from '@/components/ui/switch'
+import { Upload, Link as LinkIcon, ArrowLeft, Loader2, IndianRupee } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/context/AuthContext' 
@@ -20,12 +21,10 @@ const toISOString = (dateTimeLocalString) => {
     return new Date(dateTimeLocalString).toISOString();
 }
 
-// Helper to convert ISO string (from DB) to datetime-local string (for input)
-const fromISOString = (isoString) => {
-  if (!isoString) return '';
+// Helper to get current datetime-local string
+const getCurrentDateTimeLocal = () => {
   try {
-    const date = new Date(isoString);
-    // Adjust for local timezone for the input
+    const date = new Date();
     const localDate = new Date(date.getTime() - (date.getTimezoneOffset() * 60000));
     return localDate.toISOString().slice(0, 16);
   } catch {
@@ -33,43 +32,46 @@ const fromISOString = (isoString) => {
   }
 }
 
+const storageKey = 'newEventFormData';
+const bannerUrlStorageKey = 'newEventBannerUrl';
 
-function EditEventContent() {
+function NewEventContent() {
   const router = useRouter()
-  const params = useParams()
-  const { id } = params // Get the event ID from the URL
-
-  const storageKey = `editEventFormData-${id}`;
-  const bannerUrlStorageKey = `editEventBannerUrl-${id}`;
-
-  const defaultFormState = {
-    title: '',
-    description: '',
-    event_date: '',
-    event_end_date: '',
-    is_active: false,
-    registration_open: true,
-    registration_start: '',
-    registration_end: '',
-    banner_url: '', // This will be set from the fetched event
-  };
-
+  
   const [formData, setFormData] = useState(() => {
-    if (typeof window === 'undefined') return defaultFormState;
-    const saved = window.sessionStorage.getItem(storageKey);
-    return saved ? JSON.parse(saved) : defaultFormState;
+    if (typeof window !== 'undefined') {
+      const savedData = window.sessionStorage.getItem(storageKey);
+      if (savedData) {
+        return JSON.parse(savedData);
+      }
+    }
+    // Return default state if nothing is saved
+    return {
+      title: '',
+      description: '',
+      event_date: '',
+      event_end_date: '',
+      is_active: false,
+      registration_open: true,
+      registration_start: getCurrentDateTimeLocal(),
+      registration_end: '',
+      banner_url: '',
+      is_paid: false,
+      registration_fee: 0,
+    };
   });
   
   const [bannerMode, setBannerMode] = useState('url')
   
   const [bannerUrl, setBannerUrl] = useState(() => {
-    if (typeof window === 'undefined') return '';
-    return window.sessionStorage.getItem(bannerUrlStorageKey) || '';
+    if (typeof window !== 'undefined') {
+      return window.sessionStorage.getItem(bannerUrlStorageKey) || '';
+    }
+    return '';
   });
 
   const [bannerFile, setBannerFile] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [isLoading, setIsLoading] = useState(true) // For fetching data
   
   // --- START OF NEW PREVIEW CODE (1 of 3) ---
   const [previewUrl, setPreviewUrl] = useState('');
@@ -77,79 +79,13 @@ function EditEventContent() {
 
   const { loading: authLoading } = useAuth()
 
-  // --- MODIFICATION: Fetch existing event data ---
   useEffect(() => {
-    if (!id) return;
-
-    const fetchEvent = async () => {
-      setIsLoading(true);
-      try {
-        const response = await fetch(`/api/events/${id}`);
-        const data = await response.json();
-
-        if (data.success && data.event) {
-          const event = data.event;
-          
-          const savedData = window.sessionStorage.getItem(storageKey);
-          
-          if (!savedData) { 
-            const eventBannerUrl = event.banner_url || ''; // Get banner URL
-            setFormData({
-              title: event.title || '',
-              description: event.description || '',
-              event_date: fromISOString(event.event_date),
-              event_end_date: fromISOString(event.event_end_date),
-              is_active: event.is_active || false,
-              registration_open: event.registration_open || false,
-              registration_start: fromISOString(event.registration_start),
-              registration_end: fromISOString(event.registration_end),
-              banner_url: eventBannerUrl,
-            });
-            setBannerUrl(eventBannerUrl);
-            
-            // --- START OF NEW PREVIEW CODE (Modified) ---
-            setPreviewUrl(eventBannerUrl); // Set initial preview
-            // --- END OF NEW PREVIEW CODE (Modified) ---
-
-            if (eventBannerUrl) {
-              setBannerMode('url');
-            }
-          }
-          // --- START OF NEW PREVIEW CODE (Modified) ---
-          else {
-            // If there is saved data, check if we need to set preview from it
-            // This handles reloads while in 'url' mode
-            const savedBannerUrl = window.sessionStorage.getItem(bannerUrlStorageKey);
-            if (savedBannerUrl) {
-              setPreviewUrl(savedBannerUrl);
-            }
-          }
-          // --- END OF NEW PREVIEW CODE (Modified) ---
-
-        } else {
-          alert('Error: Could not find event data.');
-          router.push('/admin/events');
-        }
-      } catch (error) {
-        console.error('Failed to fetch event:', error);
-        alert('An error occurred while fetching event data.');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchEvent();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, router]);
-
-  // Save form data to session storage on change
-  useEffect(() => {
-    if (typeof window !== 'undefined' && !isLoading) { // Only save *after* initial load
+    if (typeof window !== 'undefined') {
       window.sessionStorage.setItem(storageKey, JSON.stringify(formData));
       window.sessionStorage.setItem(bannerUrlStorageKey, bannerUrl);
     }
-  }, [formData, bannerUrl, isLoading, storageKey, bannerUrlStorageKey]);
-  
+  }, [formData, bannerUrl]);
+
   // --- START OF NEW PREVIEW CODE (2 of 3) ---
   // Effect to update preview URL
   useEffect(() => {
@@ -161,12 +97,9 @@ function EditEventContent() {
       // Create a local URL for the selected file
       objectUrl = URL.createObjectURL(bannerFile);
       setPreviewUrl(objectUrl);
-    } else if (bannerMode === 'upload' && !bannerFile) {
-      // If in upload mode but no file is selected (e.g., after switching modes)
-      setPreviewUrl(''); // Clear preview
+    } else {
+      setPreviewUrl(''); // Clear preview if no file or URL
     }
-    // Note: We don't clear it if bannerMode is 'url' and bannerUrl is empty,
-    // because it might just be loading. The logic above handles it.
 
     // Cleanup function to revoke the object URL
     return () => {
@@ -176,7 +109,6 @@ function EditEventContent() {
     };
   }, [bannerUrl, bannerFile, bannerMode]); // Re-run when these change
   // --- END OF NEW PREVIEW CODE (2 of 3) ---
-
 
   const onDrop = useCallback((acceptedFiles) => {
     if (acceptedFiles.length > 0) {
@@ -213,7 +145,6 @@ function EditEventContent() {
     return publicUrl
   }
 
-  // --- MODIFICATION: Handle SUBMIT for UPDATE ---
   const handleSubmit = async (e) => {
     e.preventDefault()
 
@@ -231,32 +162,29 @@ function EditEventContent() {
     setIsSubmitting(true)
 
     try {
-      let finalBannerUrl = formData.banner_url; // Default to existing URL
+      let finalBannerUrl = ''
 
       if (bannerMode === 'upload' && bannerFile) {
-        // Upload new banner
         finalBannerUrl = await uploadBanner()
       } else if (bannerMode === 'url') {
-        // Use the URL from the text input
         finalBannerUrl = bannerUrl
       }
-      
+
       const eventData = {
-        title: formData.title,
-        description: formData.description,
+        ...formData,
         banner_url: finalBannerUrl,
         event_date: toISOString(formData.event_date),
         event_end_date: toISOString(formData.event_end_date),
         registration_start: toISOString(formData.registration_start),
         registration_end: toISOString(formData.registration_end),
-        is_active: formData.is_active,
-        registration_open: formData.registration_open,
+        registration_fee: formData.is_paid ? parseFloat(formData.registration_fee) : 0,
+        form_fields: [], // Initialize with empty form
       }
       
       const { data: { session } } = await supabase.auth.getSession();
       
-      const response = await fetch(`/api/events/${id}`, { // Use ID in URL
-        method: 'PUT', // Use PUT for update
+      const response = await fetch(`/api/events`, {
+        method: 'POST',
         headers: { 
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${session.access_token}`
@@ -266,7 +194,7 @@ function EditEventContent() {
 
       const data = await response.json()
       if (data.success) {
-        alert('Event updated successfully!')
+        alert('Event created successfully! (Saved as draft)')
         
         if (typeof window !== 'undefined') {
           window.sessionStorage.removeItem(storageKey);
@@ -275,22 +203,21 @@ function EditEventContent() {
 
         router.push('/admin/events')
       } else {
-        alert(`Failed to update event: ${data.error}`) 
+        alert(`Failed to create event: ${data.error}`) 
         console.error('API Error:', data.error);
       }
     } catch (error) {
-      console.error('Error updating event:', error)
+      console.error('Error creating event:', error)
       alert('An error occurred')
     } finally {
       setIsSubmitting(false)
     }
   }
 
-  if (authLoading || isLoading) {
+  if (authLoading) {
     return (
       <div className="text-center py-12">
-        <Loader2 className="inline-block animate-spin rounded-full h-12 w-12 text-brand-red" />
-        <p className="mt-4 text-gray-400">Loading Event Data...</p>
+        <Loader2 className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-brand-red" />
       </div>
     )
   }
@@ -306,7 +233,7 @@ function EditEventContent() {
         Back to Events
       </Button>
       
-      <h1 className="text-4xl font-bold mb-8">Edit Event</h1>
+      <h1 className="text-4xl font-bold mb-8">Create New Event</h1>
 
       <form onSubmit={handleSubmit}>
         <Card className="mb-6">
@@ -378,6 +305,36 @@ function EditEventContent() {
                   className="custom-date-icon"
                 />
               </div>
+            </div>
+            
+            {/* Payment Section */}
+            <div className="p-4 border rounded-lg bg-gray-50/10 space-y-4">
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="is_paid"
+                    checked={formData.is_paid}
+                    onCheckedChange={(checked) => setFormData({ ...formData, is_paid: checked })}
+                  />
+                  <Label htmlFor="is_paid" className="font-semibold text-brand-red">Is this a Paid Event?</Label>
+                </div>
+
+                {formData.is_paid && (
+                  <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
+                    <Label htmlFor="registration_fee">Registration Fee (INR)</Label>
+                    <div className="relative">
+                      <IndianRupee className="absolute left-3 top-2.5 h-4 w-4 text-gray-500" />
+                      <Input
+                        id="registration_fee"
+                        type="number"
+                        min="0"
+                        className="pl-9"
+                        value={formData.registration_fee}
+                        onChange={(e) => setFormData({ ...formData, registration_fee: e.target.value })}
+                        required={formData.is_paid}
+                      />
+                    </div>
+                  </div>
+                )}
             </div>
 
             <div className="flex items-center space-x-2">
@@ -493,10 +450,10 @@ function EditEventContent() {
             {isSubmitting ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Updating...
+                Creating...
               </>
             ) : (
-              'Update Event'
+              'Create Event'
             )}
           </Button>
         </div>
@@ -505,17 +462,10 @@ function EditEventContent() {
   )
 }
 
-// We must wrap the default export in Suspense to allow useParams()
-export default function EditEventPage() {
+export default function NewEventPage() {
   return (
     <ProtectedRoute>
-      <Suspense fallback={
-        <div className="text-center py-12">
-          <Loader2 className="inline-block animate-spin rounded-full h-12 w-12 text-brand-red" />
-        </div>
-      }>
-        <EditEventContent />
-      </Suspense>
+      <NewEventContent />
     </ProtectedRoute>
   )
 }

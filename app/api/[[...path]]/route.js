@@ -444,6 +444,11 @@ export async function POST(request) {
         registration_open: body.registration_open !== undefined ? body.registration_open : true,
         registration_start: body.registration_start || null,
         registration_end: body.registration_end || null,
+        
+        // NEW: Payment Fields
+        is_paid: body.is_paid !== undefined ? body.is_paid : false,
+        registration_fee: body.registration_fee !== undefined ? body.registration_fee : 0,
+
         form_fields: body.form_fields || [],
         created_by: user.id, 
       }
@@ -661,6 +666,11 @@ export async function PUT(request) {
       if (body.registration_start !== undefined) updateData.registration_start = body.registration_start
       if (body.registration_end !== undefined) updateData.registration_end = body.registration_end
       if (body.form_fields !== undefined) updateData.form_fields = body.form_fields
+      
+      // NEW: Payment Fields
+      if (body.is_paid !== undefined) updateData.is_paid = body.is_paid
+      if (body.registration_fee !== undefined) updateData.registration_fee = body.registration_fee
+
       updateData.updated_at = new Date().toISOString()
 
       const { data, error } = await supabaseAdmin

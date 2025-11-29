@@ -9,7 +9,8 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Upload, Link as LinkIcon, ArrowLeft, Loader2 } from 'lucide-react'
+import { Switch } from '@/components/ui/switch'
+import { Upload, Link as LinkIcon, ArrowLeft, Loader2, IndianRupee } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/context/AuthContext' 
@@ -55,6 +56,8 @@ function NewEventContent() {
       registration_start: getCurrentDateTimeLocal(),
       registration_end: '',
       banner_url: '',
+      is_paid: false,
+      registration_fee: 0,
     };
   });
   
@@ -174,6 +177,7 @@ function NewEventContent() {
         event_end_date: toISOString(formData.event_end_date),
         registration_start: toISOString(formData.registration_start),
         registration_end: toISOString(formData.registration_end),
+        registration_fee: formData.is_paid ? parseFloat(formData.registration_fee) : 0,
         form_fields: [], // Initialize with empty form
       }
       
@@ -301,6 +305,36 @@ function NewEventContent() {
                   className="custom-date-icon"
                 />
               </div>
+            </div>
+            
+            {/* Payment Section */}
+            <div className="p-4 border rounded-lg bg-gray-50/10 space-y-4">
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="is_paid"
+                    checked={formData.is_paid}
+                    onCheckedChange={(checked) => setFormData({ ...formData, is_paid: checked })}
+                  />
+                  <Label htmlFor="is_paid" className="font-semibold text-brand-red">Is this a Paid Event?</Label>
+                </div>
+
+                {formData.is_paid && (
+                  <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
+                    <Label htmlFor="registration_fee">Registration Fee (INR)</Label>
+                    <div className="relative">
+                      <IndianRupee className="absolute left-3 top-2.5 h-4 w-4 text-gray-500" />
+                      <Input
+                        id="registration_fee"
+                        type="number"
+                        min="0"
+                        className="pl-9"
+                        value={formData.registration_fee}
+                        onChange={(e) => setFormData({ ...formData, registration_fee: e.target.value })}
+                        required={formData.is_paid}
+                      />
+                    </div>
+                  </div>
+                )}
             </div>
 
             <div className="flex items-center space-x-2">

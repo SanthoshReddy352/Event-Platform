@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Search, X } from 'lucide-react' // Import X
 import { Button } from '@/components/ui/button' // Import Button
 import { parseISO } from 'date-fns' 
+import LastWordGradientText from '@/components/LastWordGradientText'
 
 // Wrap the main component in Suspense for useSearchParams
 export default function EventsPageWrapper() {
@@ -144,7 +145,7 @@ function EventsPage() {
     <div className="container mx-auto px-4 py-12">
       <div className="mb-8">
         <h1 className="text-4xl font-bold mb-4">
-          <GradientText>All Events</GradientText>
+          <LastWordGradientText>All Events</LastWordGradientText>
         </h1>
         <p className="text-gray-400">Browse and register for our hackathons and tech events</p>
       </div>
