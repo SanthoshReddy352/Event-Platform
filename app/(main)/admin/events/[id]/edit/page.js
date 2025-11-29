@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useParams } from 'next/navigation'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -21,98 +21,109 @@ const toISOString = (dateTimeLocalString) => {
     return new Date(dateTimeLocalString).toISOString();
 }
 
-// Helper to get current datetime-local string
-const getCurrentDateTimeLocal = () => {
-  try {
-    const date = new Date();
-    const localDate = new Date(date.getTime() - (date.getTimezoneOffset() * 60000));
-    return localDate.toISOString().slice(0, 16);
-  } catch {
-    return '';
-  }
+// Helper to convert ISO string (from DB) to datetime-local format for inputs
+const formatDateTimeLocal = (isoString) => {
+  if (!isoString) return '';
+  const date = new Date(isoString);
+  // Adjust for local timezone offset to display correctly in input
+  const localDate = new Date(date.getTime() - (date.getTimezoneOffset() * 60000));
+  return localDate.toISOString().slice(0, 16);
 }
 
-const storageKey = 'newEventFormData';
-const bannerUrlStorageKey = 'newEventBannerUrl';
-
-function NewEventContent() {
+function EditEventContent() {
   const router = useRouter()
+  const params = useParams()
+  const { id } = params
   
-  const [formData, setFormData] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const savedData = window.sessionStorage.getItem(storageKey);
-      if (savedData) {
-        return JSON.parse(savedData);
-      }
-    }
-    // Return default state if nothing is saved
-    return {
-      title: '',
-      description: '',
-      event_date: '',
-      event_end_date: '',
-      is_active: false,
-      registration_open: true,
-      registration_start: getCurrentDateTimeLocal(),
-      registration_end: '',
-      banner_url: '',
-      is_paid: false,
-      registration_fee: 0,
-    };
+  const [formData, setFormData] = useState({
+    title: '',
+    description: '',
+    event_date: '',
+    event_end_date: '',
+    is_active: false,
+    registration_open: true,
+    registration_start: '',
+    registration_end: '',
+    banner_url: '',
+    is_paid: false,
+    registration_fee: 0,
   });
   
   const [bannerMode, setBannerMode] = useState('url')
-  
-  const [bannerUrl, setBannerUrl] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return window.sessionStorage.getItem(bannerUrlStorageKey) || '';
-    }
-    return '';
-  });
-
+  const [bannerUrl, setBannerUrl] = useState('');
   const [bannerFile, setBannerFile] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  
-  // --- START OF NEW PREVIEW CODE (1 of 3) ---
+  const [loading, setLoading] = useState(true)
   const [previewUrl, setPreviewUrl] = useState('');
-  // --- END OF NEW PREVIEW CODE (1 of 3) ---
 
   const { loading: authLoading } = useAuth()
 
+  // Fetch Event Data
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      window.sessionStorage.setItem(storageKey, JSON.stringify(formData));
-      window.sessionStorage.setItem(bannerUrlStorageKey, bannerUrl);
-    }
-  }, [formData, bannerUrl]);
+    const fetchEvent = async () => {
+      if (!id) return;
+      
+      try {
+        const response = await fetch(`/api/events/${id}`);
+        const data = await response.json();
+        
+        if (data.success && data.event) {
+          const e = data.event;
+          setFormData({
+            title: e.title || '',
+            description: e.description || '',
+            event_date: formatDateTimeLocal(e.event_date),
+            event_end_date: formatDateTimeLocal(e.event_end_date),
+            is_active: e.is_active,
+            registration_open: e.registration_open,
+            registration_start: formatDateTimeLocal(e.registration_start),
+            registration_end: formatDateTimeLocal(e.registration_end),
+            banner_url: e.banner_url || '',
+            is_paid: e.is_paid || false,
+            registration_fee: e.registration_fee || 0,
+          });
+          
+          if (e.banner_url) {
+            setBannerUrl(e.banner_url);
+            setPreviewUrl(e.banner_url);
+            setBannerMode('url');
+          }
+        } else {
+            alert('Failed to fetch event details');
+            router.push('/admin/events');
+        }
+      } catch (error) {
+        console.error('Error fetching event:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  // --- START OF NEW PREVIEW CODE (2 of 3) ---
+    fetchEvent();
+  }, [id, router]);
+
   // Effect to update preview URL
   useEffect(() => {
-    let objectUrl = null; // To keep track of the object URL for cleanup
+    let objectUrl = null; 
 
     if (bannerMode === 'url') {
       setPreviewUrl(bannerUrl);
     } else if (bannerMode === 'upload' && bannerFile) {
-      // Create a local URL for the selected file
       objectUrl = URL.createObjectURL(bannerFile);
       setPreviewUrl(objectUrl);
-    } else {
-      setPreviewUrl(''); // Clear preview if no file or URL
-    }
+    } 
 
-    // Cleanup function to revoke the object URL
     return () => {
       if (objectUrl) {
         URL.revokeObjectURL(objectUrl);
       }
     };
-  }, [bannerUrl, bannerFile, bannerMode]); // Re-run when these change
-  // --- END OF NEW PREVIEW CODE (2 of 3) ---
+  }, [bannerUrl, bannerFile, bannerMode]);
 
   const onDrop = useCallback((acceptedFiles) => {
     if (acceptedFiles.length > 0) {
       setBannerFile(acceptedFiles[0])
+      setBannerMode('upload')
     }
   }, [])
 
@@ -162,7 +173,7 @@ function NewEventContent() {
     setIsSubmitting(true)
 
     try {
-      let finalBannerUrl = ''
+      let finalBannerUrl = formData.banner_url
 
       if (bannerMode === 'upload' && bannerFile) {
         finalBannerUrl = await uploadBanner()
@@ -178,13 +189,13 @@ function NewEventContent() {
         registration_start: toISOString(formData.registration_start),
         registration_end: toISOString(formData.registration_end),
         registration_fee: formData.is_paid ? parseFloat(formData.registration_fee) : 0,
-        form_fields: [], // Initialize with empty form
       }
       
       const { data: { session } } = await supabase.auth.getSession();
       
-      const response = await fetch(`/api/events`, {
-        method: 'POST',
+      // Changed method to PUT and URL to specific ID
+      const response = await fetch(`/api/events/${id}`, {
+        method: 'PUT',
         headers: { 
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${session.access_token}`
@@ -194,27 +205,21 @@ function NewEventContent() {
 
       const data = await response.json()
       if (data.success) {
-        alert('Event created successfully! (Saved as draft)')
-        
-        if (typeof window !== 'undefined') {
-          window.sessionStorage.removeItem(storageKey);
-          window.sessionStorage.removeItem(bannerUrlStorageKey);
-        }
-
+        alert('Event updated successfully!')
         router.push('/admin/events')
       } else {
-        alert(`Failed to create event: ${data.error}`) 
+        alert(`Failed to update event: ${data.error}`) 
         console.error('API Error:', data.error);
       }
     } catch (error) {
-      console.error('Error creating event:', error)
+      console.error('Error updating event:', error)
       alert('An error occurred')
     } finally {
       setIsSubmitting(false)
     }
   }
 
-  if (authLoading) {
+  if (authLoading || loading) {
     return (
       <div className="text-center py-12">
         <Loader2 className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-brand-red" />
@@ -233,7 +238,7 @@ function NewEventContent() {
         Back to Events
       </Button>
       
-      <h1 className="text-4xl font-bold mb-8">Create New Event</h1>
+      <h1 className="text-4xl font-bold mb-8">Edit Event</h1>
 
       <form onSubmit={handleSubmit}>
         <Card className="mb-6">
@@ -420,7 +425,6 @@ function NewEventContent() {
               </div>
             )}
 
-            {/* --- START OF NEW PREVIEW CODE (3 of 3) --- */}
             {previewUrl && (
               <div className="mt-4">
                 <Label>Banner Preview</Label>
@@ -433,7 +437,6 @@ function NewEventContent() {
                 </div>
               </div>
             )}
-            {/* --- END OF NEW PREVIEW CODE (3 of 3) --- */}
 
           </CardContent>
         </Card>
@@ -450,10 +453,10 @@ function NewEventContent() {
             {isSubmitting ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Creating...
+                Updating...
               </>
             ) : (
-              'Create Event'
+              'Update Event'
             )}
           </Button>
         </div>
@@ -462,10 +465,10 @@ function NewEventContent() {
   )
 }
 
-export default function NewEventPage() {
+export default function EditEventPage() {
   return (
     <ProtectedRoute>
-      <NewEventContent />
+      <EditEventContent />
     </ProtectedRoute>
   )
 }

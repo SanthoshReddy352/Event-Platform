@@ -185,7 +185,7 @@ function EventDetailContent() {
     }
   }, [user?.id, event?.id, loading, authLoading, checkRegistrationStatus]); 
 
-  // --- UPDATED HANDLESUBMIT TO SUPPORT RAZORPAY ---
+  // --- UPDATED HANDLESUBMIT FOR BETTER ERROR HANDLING ---
   const handleSubmit = async (submitData) => {
     if (!user) {
         alert('You must be logged in to register.');
@@ -195,21 +195,36 @@ function EventDetailContent() {
     // 1. Check if Paid Event
     if (event.is_paid && event.registration_fee > 0) {
         try {
+            // Check if Razorpay SDK is loaded
+            if (!window.Razorpay) {
+                alert("Razorpay SDK failed to load. Please check your internet connection or ad-blocker.");
+                return;
+            }
+
             // A. Create Order
             const res = await fetch("/api/razorpay/create-order", {
                 method: "POST",
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ amount: event.registration_fee, eventId: event.id }),
             });
+            
             const order = await res.json();
             
-            if (!order.id) throw new Error("Failed to create order");
+            // Explicitly handle server errors
+            if (!res.ok) {
+                throw new Error(order.error || `Server Error: ${res.status}`);
+            }
+
+            if (!order.id) {
+                throw new Error("Invalid response received from payment server");
+            }
 
             // B. Open Razorpay
             const options = {
                 key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID, 
                 amount: order.amount,
                 currency: order.currency,
-                name: "Event Platform", // Replace with your App Name
+                name: "Event Platform", 
                 description: `Registration for ${event.title}`,
                 order_id: order.id,
                 handler: async function (response) {
@@ -224,8 +239,8 @@ function EventDetailContent() {
                                 razorpay_signature: response.razorpay_signature,
                                 eventId: event.id,
                                 userId: user.id,
-                                userDetails: { email: user.email }, // Can pass user details if needed
-                                responses: submitData // Pass the form answers
+                                userDetails: { email: user.email }, 
+                                responses: submitData 
                             }),
                         });
 
@@ -237,14 +252,15 @@ function EventDetailContent() {
                             // Refresh status
                             checkRegistrationStatus(user.id, event.id);
                         } else {
-                            alert("Payment verification failed. Please contact support.");
+                            alert("Payment verification failed: " + (result.error || "Please contact support"));
                         }
                     } catch (err) {
                         console.error("Verification error", err);
-                        alert("Error during verification.");
+                        alert("Error during verification: " + err.message);
                     }
                 },
                 prefill: {
+                    name: user.user_metadata?.full_name || "",
                     email: user.email,
                 },
                 theme: {
@@ -260,7 +276,7 @@ function EventDetailContent() {
 
         } catch (error) {
             console.error("Payment initiation error:", error);
-            alert("Could not start payment. Please try again.");
+            alert(`Could not start payment: ${error.message}`);
         }
         return; // Stop here, wait for Razorpay callback
     }

@@ -16,10 +16,17 @@ export async function POST(request) {
 
     // Razorpay accepts amount in subunits (Paisa for INR)
     // 100 INR = 10000 Paisa
+    
+    // FIX: Truncate eventId to ensure receipt length <= 40 characters
+    // "rcpt_" (5 chars) + "_" (1 char) + Timestamp (10 chars) = 16 chars fixed.
+    // This leaves 24 chars max for eventId. We slice it to 20 to be safe.
+    const cleanEventId = eventId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 20);
+    const receiptId = `rcpt_${cleanEventId}_${Date.now().toString().slice(-10)}`;
+
     const options = {
       amount: Math.round(amount * 100), 
       currency: "INR",
-      receipt: `rcpt_${eventId}_${Date.now().toString().slice(-10)}`,
+      receipt: receiptId,
     };
 
     const order = await razorpay.orders.create(options);
