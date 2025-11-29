@@ -27,11 +27,13 @@ export default function UpdatePasswordPage() {
         setStatus('ready')
         setLoading(false)
       } else if (event === 'SIGNED_IN') {
-        // If they are already signed in normally, we can also allow it, 
-        // but typically we want to catch the recovery event.
-        // We'll check if it's a recovery flow by looking at the URL or just allow it.
-        setStatus('ready')
-        setLoading(false)
+        // FIX: Only reset to 'ready' if we are NOT already in 'success' state.
+        // This prevents the listener from overwriting the success message 
+        // when the session refreshes after a password update.
+        if (status !== 'success') {
+          setStatus('ready')
+          setLoading(false)
+        }
       } else if (event === 'SIGNED_OUT') {
         // If they aren't signed in, the link might be invalid or expired
         setLoading(false)
@@ -70,7 +72,7 @@ export default function UpdatePasswordPage() {
 
       setStatus('success')
       
-      // Optional: Redirect after a few seconds
+      // Redirect after 3 seconds
       setTimeout(() => {
         router.push('/auth')
       }, 3000)
