@@ -37,7 +37,7 @@ function ParticipantAuthPage({ finalRedirect }) {
   const [loginData, setLoginData] = useState({ email: '', password: '' })
   const [signupData, setSignupData] = useState({ email: '', password: '', confirmPassword: '' })
   const [error, setError] = useState('')
-  const [success, setSuccess] = useState('') // For success messages
+  const [success, setSuccess] = useState('') 
   const [currentTab, setCurrentTab] = useState('login')
 
   const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState(false)
@@ -54,11 +54,10 @@ function ParticipantAuthPage({ finalRedirect }) {
         setSessionLoading(false)
       }
     }
-  // Depend on the primitive user?.id
   }, [user?.id, authLoading, router, finalRedirect])
 
   const handleLogin = async (e) => {
-    e.preventDefault() // This prevents the page from reloading
+    e.preventDefault() 
     setError('')
     setSuccess('')
     setLoading(true)
@@ -71,7 +70,6 @@ function ParticipantAuthPage({ finalRedirect }) {
 
       if (loginError) throw loginError
 
-      // On success, the useEffect above will detect the 'user' change and redirect
     } catch (error) {
       setError(error.message)
     } finally {
@@ -79,7 +77,6 @@ function ParticipantAuthPage({ finalRedirect }) {
     }
   }
 
-  // --- OAUTH HANDLER ---
   const handleOAuth = async (provider) => {
     setError('')
     setLoading(true)
@@ -97,9 +94,8 @@ function ParticipantAuthPage({ finalRedirect }) {
     }
   }
 
-  // --- START OF FIX: Modified handleSignup ---
   const handleSignup = async (e) => {
-    e.preventDefault() // This prevents the page from reloading
+    e.preventDefault() 
     setError('')
     setSuccess('')
 
@@ -110,7 +106,6 @@ function ParticipantAuthPage({ finalRedirect }) {
 
     setLoading(true)
     try {
-      // Get both data and error from the signUp call
       const { data, error: signUpError } = await supabase.auth.signUp({
         email: signupData.email,
         password: signupData.password,
@@ -118,17 +113,15 @@ function ParticipantAuthPage({ finalRedirect }) {
 
       if (signUpError) throw signUpError
 
-      // NEW CHECK: Check if the user exists AND is already confirmed.
       if (data.user && data.user.email_confirmed_at) {
           setError("A user with this email already exists. Please log in.")
           setLoading(false)
-          return; // Stop execution
+          return; 
       }
 
-      // Show success message (for new users or unconfirmed users re-triggering email)
       setSuccess('Sign up successful! Please check your email to confirm your account.')
       setSignupData({ email: '', password: '', confirmPassword: '' })
-      setCurrentTab('login'); // Switch to login tab
+      setCurrentTab('login'); 
 
     } catch (error) {
       setError(error.message)
@@ -136,26 +129,33 @@ function ParticipantAuthPage({ finalRedirect }) {
       setLoading(false)
     }
   }
-  // --- END OF FIX ---
 
+  // --- UPDATED FOR OPTION 2: MAGIC LINK FLOW ---
   const handleForgotPassword = async (e) => {
-    e.preventDefault() // This prevents the page from reloading
+    e.preventDefault() 
     setIsResetting(true)
     setResetMessage('')
     try {
-      const { error: resetError } = await supabase.auth.resetPasswordForEmail(resetEmail, {
-        redirectTo: `${window.location.origin}/update_password`, // Full URL for the reset link
+      // We use signInWithOtp (Magic Link) instead of resetPasswordForEmail.
+      // This ensures the user is simply logged in when they click the link.
+      const { error: otpError } = await supabase.auth.signInWithOtp({
+        email: resetEmail,
+        options: {
+          // Redirect strictly to events page after login
+          emailRedirectTo: `${window.location.origin}/events`, 
+        },
       })
 
-      if (resetError) throw resetError
+      if (otpError) throw otpError
 
-      setResetMessage('Password reset link sent! Please check your email.')
+      setResetMessage('Login link sent! Check your email to sign in instantly.')
     } catch (error) {
       setResetMessage(`Error: ${error.message}`)
     } finally {
       setIsResetting(false)
     }
   }
+  // --- END UPDATE ---
 
   if (sessionLoading || authLoading) {
     return (
@@ -236,7 +236,7 @@ function ParticipantAuthPage({ finalRedirect }) {
                         setIsForgotPasswordOpen(true)
                       }}
                     >
-                      Forgot Password?
+                      Forgot Password / Login with Magic Link
                     </Button>
                   </div>
 
@@ -391,9 +391,9 @@ function ParticipantAuthPage({ finalRedirect }) {
       <Dialog open={isForgotPasswordOpen} onOpenChange={setIsForgotPasswordOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Reset Password</DialogTitle>
+            <DialogTitle>Instant Login Link</DialogTitle>
             <DialogDescription>
-              Enter the email address associated with your account. We will send a password reset link to that email.
+              Enter your email address. We will send you a secure link to log in instantly without a password.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleForgotPassword} className="space-y-4">
@@ -411,7 +411,7 @@ function ParticipantAuthPage({ finalRedirect }) {
                 onChange={(e) => setResetEmail(e.target.value)}
                 placeholder="participant@example.com"
                 required
-                disabled={isResetting || resetMessage.includes('Password reset link sent')}
+                disabled={isResetting || resetMessage.includes('Login link sent')}
               />
             </div>
             <DialogFooter>
@@ -426,9 +426,9 @@ function ParticipantAuthPage({ finalRedirect }) {
               <Button
                 type="submit"
                 className="bg-brand-gradient text-white font-semibold hover:opacity-90 transition-opacity"
-                disabled={isResetting || resetMessage.includes('Password reset link sent')}
+                disabled={isResetting || resetMessage.includes('Login link sent')}
               >
-                {isResetting ? 'Sending...' : 'Send Reset Link'}
+                {isResetting ? 'Sending...' : 'Send Magic Link'}
               </Button>
             </DialogFooter>
           </form>

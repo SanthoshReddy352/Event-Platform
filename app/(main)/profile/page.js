@@ -7,13 +7,18 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/context/AuthContext'
-import { Loader2 } from 'lucide-react'
+import { Loader2, ShieldCheck, KeyRound } from 'lucide-react' // Added Icons
 
 export default function ProfilePage() {
   const { user, loading: authLoading } = useAuth()
   const [loading, setLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   
+  // --- PASSWORD UPDATE STATE ---
+  const [passwordData, setPasswordData] = useState({ newPassword: '', confirmPassword: '' })
+  const [passwordStatus, setPasswordStatus] = useState({ type: '', message: '' })
+  const [isPasswordSubmitting, setIsPasswordSubmitting] = useState(false)
+
   // --- START OF DATA PERSISTENCE ---
   const storageKey = 'userProfileForm';
   const defaultState = { name: '', phone_number: '', email: '' };
@@ -33,7 +38,6 @@ export default function ProfilePage() {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) throw new Error('Not authenticated')
       
-      // Use the API route
       const response = await fetch('/api/profile', {
         headers: {
           'Authorization': `Bearer ${session.access_token}`
@@ -44,7 +48,6 @@ export default function ProfilePage() {
       
       if (data.success) {
         // --- START OF DATA PERSISTENCE ---
-        // Only set from DB if session storage is empty
         const savedData = window.sessionStorage.getItem(storageKey);
         if (!savedData) {
           setProfile({
@@ -69,7 +72,6 @@ export default function ProfilePage() {
   }, [fetchProfile])
 
   // --- START OF DATA PERSISTENCE ---
-  // Save form data to session storage on change
   useEffect(() => {
     if (typeof window !== 'undefined' && !loading) {
       window.sessionStorage.setItem(storageKey, JSON.stringify(profile));
@@ -84,6 +86,40 @@ export default function ProfilePage() {
       [name]: value,
     }))
   }
+
+  // --- PASSWORD HANDLERS ---
+  const handlePasswordChange = (e) => {
+    const { name, value } = e.target
+    setPasswordData(prev => ({ ...prev, [name]: value }))
+  }
+
+  const handlePasswordSubmit = async (e) => {
+    e.preventDefault()
+    setPasswordStatus({ type: '', message: '' })
+
+    if (passwordData.newPassword.length < 6) {
+        setPasswordStatus({ type: 'error', message: 'Password must be at least 6 characters.' })
+        return
+    }
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+        setPasswordStatus({ type: 'error', message: 'Passwords do not match.' })
+        return
+    }
+
+    setIsPasswordSubmitting(true)
+    try {
+        const { error } = await supabase.auth.updateUser({ password: passwordData.newPassword })
+        if (error) throw error
+
+        setPasswordStatus({ type: 'success', message: 'Password updated successfully!' })
+        setPasswordData({ newPassword: '', confirmPassword: '' }) // Clear fields
+    } catch (error) {
+        setPasswordStatus({ type: 'error', message: error.message })
+    } finally {
+        setIsPasswordSubmitting(false)
+    }
+  }
+  // -------------------------
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -136,7 +172,8 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-12 max-w-lg">
+    <div className="container mx-auto px-4 py-12 max-w-lg space-y-8">
+      {/* 1. Profile Details Card */}
       <form onSubmit={handleSubmit}>
         <Card>
           <CardHeader>
@@ -189,6 +226,69 @@ export default function ProfilePage() {
           </CardFooter>
         </Card>
       </form>
+
+      {/* 2. Security / Password Update Card */}
+      <Card className="border-t-4 border-t-brand-red/20">
+        <CardHeader>
+            <div className="flex items-center gap-2">
+                <ShieldCheck className="h-5 w-5 text-brand-red" />
+                <CardTitle className="text-xl">Account Security</CardTitle>
+            </div>
+            <CardDescription>Update your password to keep your account secure.</CardDescription>
+        </CardHeader>
+        <CardContent>
+            <form onSubmit={handlePasswordSubmit} className="space-y-4">
+                {passwordStatus.message && (
+                    <div className={`p-3 rounded text-sm ${passwordStatus.type === 'error' ? 'bg-red-900/20 text-red-300 border border-red-900' : 'bg-green-900/20 text-green-300 border border-green-900'}`}>
+                        {passwordStatus.message}
+                    </div>
+                )}
+                
+                <div className="space-y-2">
+                    <Label htmlFor="newPassword">New Password</Label>
+                    <div className="relative">
+                        <KeyRound className="absolute left-3 top-2.5 h-4 w-4 text-gray-500" />
+                        <Input
+                            id="newPassword"
+                            name="newPassword"
+                            type="password"
+                            value={passwordData.newPassword}
+                            onChange={handlePasswordChange}
+                            placeholder="••••••••"
+                            className="pl-9"
+                        />
+                    </div>
+                </div>
+                <div className="space-y-2">
+                    <Label htmlFor="confirmPassword">Confirm Password</Label>
+                    <div className="relative">
+                        <KeyRound className="absolute left-3 top-2.5 h-4 w-4 text-gray-500" />
+                        <Input
+                            id="confirmPassword"
+                            name="confirmPassword"
+                            type="password"
+                            value={passwordData.confirmPassword}
+                            onChange={handlePasswordChange}
+                            placeholder="••••••••"
+                            className="pl-9"
+                        />
+                    </div>
+                </div>
+
+                <Button
+                    type="submit"
+                    variant="outline"
+                    className="w-full border-brand-red/50 hover:bg-brand-red/10 text-brand-red hover:text-brand-red"
+                    disabled={isPasswordSubmitting}
+                >
+                    {isPasswordSubmitting ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : null}
+                    {isPasswordSubmitting ? 'Updating Password...' : 'Update Password'}
+                </Button>
+            </form>
+        </CardContent>
+      </Card>
     </div>
   )
 }

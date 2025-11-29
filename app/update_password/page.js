@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation' 
 import { supabase } from '@/lib/supabase/client'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { LockKeyhole, CheckCircle2, AlertCircle } from 'lucide-react'
+import { LockKeyhole, CheckCircle2, AlertCircle, ArrowRight } from 'lucide-react'
 import Link from 'next/link'
 
 export default function UpdatePasswordPage() {
@@ -17,40 +17,56 @@ export default function UpdatePasswordPage() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [status, setStatus] = useState('verifying') // 'verifying', 'ready', 'success', 'error'
+  const [status, setStatus] = useState('verifying') 
   const [errorMessage, setErrorMessage] = useState('')
-  
-  // Use a ref to track success state immediately to prevent race conditions
-  const isSuccessRef = useRef(false)
 
   useEffect(() => {
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      // CRITICAL: If success has already happened, ignore ALL auth events
-      // to prevent the UI from flickering or resetting.
-      if (isSuccessRef.current) return
-
-      if (event === 'PASSWORD_RECOVERY') {
-        setStatus('ready')
-        setLoading(false)
-      } else if (event === 'SIGNED_IN') {
-        // Only update status if we aren't already successful
-        if (status !== 'success') {
+    // 1. Manually handle the session check on mount
+    const checkSession = async () => {
+      try {
+        // Attempt to get the existing session
+        const { data: { session }, error } = await supabase.auth.getSession()
+        
+        if (session) {
           setStatus('ready')
           setLoading(false)
+          return
         }
-      } else if (event === 'SIGNED_OUT') {
-        setLoading(false)
-        if (status !== 'success') {
-            setStatus('error')
-            setErrorMessage('Invalid or expired reset link. Please request a new one.')
-        }
-      }
-    })
 
-    return () => {
-      authListener.subscription.unsubscribe()
+        // 2. If no session, check for a 'code' in URL (PKCE flow) and exchange it manually
+        // This fixes the issue where the library might miss the event
+        const params = new URLSearchParams(window.location.search)
+        const code = params.get('code')
+        
+        if (code) {
+          const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
+          if (!exchangeError && data.session) {
+            setStatus('ready')
+          } else {
+            setStatus('error')
+            setErrorMessage('Invalid or expired reset link.')
+          }
+        } else {
+            // Check for hash fragment (Implicit flow)
+            const hash = window.location.hash
+            if (hash && hash.includes('access_token')) {
+                setStatus('ready')
+            } else {
+                setStatus('error')
+                setErrorMessage('No authorization token found. Please use the link from your email.')
+            }
+        }
+      } catch (err) {
+        console.error(err)
+        setStatus('error')
+        setErrorMessage('An unexpected error occurred.')
+      } finally {
+        setLoading(false)
+      }
     }
-  }, [status])
+
+    checkSession()
+  }, [])
 
   const handlePasswordUpdate = async (e) => {
     e.preventDefault()
@@ -70,39 +86,31 @@ export default function UpdatePasswordPage() {
 
     try {
       const { error } = await supabase.auth.updateUser({ password: password })
-      
       if (error) throw error
 
-      // 1. Lock the success state
-      isSuccessRef.current = true
-      
-      // 2. Show Success Message
       setStatus('success')
       
-      // 3. Force Hard Redirect
-      // We use window.location.replace instead of router.replace.
-      // This ensures a hard navigation, reloading the app context 
-      // and preventing any "stuck" states.
+      // Auto-redirect attempt
       setTimeout(() => {
-        window.location.replace('/events')
+        window.location.href = '/events'
       }, 2000)
 
     } catch (error) {
-      console.error(error)
       setErrorMessage(error.message)
       setStatus('ready') 
-      isSuccessRef.current = false
     } finally {
       setIsSubmitting(false)
     }
   }
+
+  // --- Render Logic ---
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-red"></div>
-          <p className="text-gray-400 animate-pulse">Verifying security token...</p>
+          <p className="text-gray-400">Verifying security token...</p>
         </div>
       </div>
     )
@@ -123,7 +131,7 @@ export default function UpdatePasswordPage() {
             </CardTitle>
             <CardDescription className="text-center">
               {status === 'success' 
-                ? 'Redirecting to events...' 
+                ? 'Your password has been changed successfully.' 
                 : 'Enter your new password below.'}
             </CardDescription>
           </CardHeader>
@@ -144,13 +152,16 @@ export default function UpdatePasswordPage() {
                     <Alert className="bg-green-900/20 border-green-900 text-green-300">
                         <CheckCircle2 className="h-4 w-4" />
                         <AlertTitle>Success</AlertTitle>
-                        <AlertDescription>Your password has been updated successfully.</AlertDescription>
+                        <AlertDescription>Your password has been updated.</AlertDescription>
                     </Alert>
                     
-                    <div className="flex flex-col items-center justify-center gap-2">
-                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-brand-red"></div>
-                        <p className="text-sm text-gray-500">Taking you to events...</p>
-                    </div>
+                    {/* FAILSAFE BUTTON: If redirect fails, user can click this */}
+                    <Button 
+                        onClick={() => window.location.href = '/events'}
+                        className="w-full bg-brand-gradient h-12 text-lg"
+                    >
+                        Continue to Events <ArrowRight className="ml-2 h-5 w-5" />
+                    </Button>
                 </div>
             ) : (
                 <form onSubmit={handlePasswordUpdate} className="space-y-4">
