@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation' 
 import { supabase } from '@/lib/supabase/client'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -19,23 +19,26 @@ export default function UpdatePasswordPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [status, setStatus] = useState('verifying') // 'verifying', 'ready', 'success', 'error'
   const [errorMessage, setErrorMessage] = useState('')
+  
+  // Use a ref to track success state immediately to prevent race conditions
+  const isSuccessRef = useRef(false)
 
   useEffect(() => {
-    // Listen for the specific PASSWORD_RECOVERY event
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      // CRITICAL: If success has already happened, ignore ALL auth events
+      // to prevent the UI from flickering or resetting.
+      if (isSuccessRef.current) return
+
       if (event === 'PASSWORD_RECOVERY') {
         setStatus('ready')
         setLoading(false)
       } else if (event === 'SIGNED_IN') {
-        // FIX: Only reset to 'ready' if we are NOT already in 'success' state.
-        // This prevents the listener from overwriting the success message 
-        // when the session refreshes after a password update.
+        // Only update status if we aren't already successful
         if (status !== 'success') {
           setStatus('ready')
           setLoading(false)
         }
       } else if (event === 'SIGNED_OUT') {
-        // If they aren't signed in, the link might be invalid or expired
         setLoading(false)
         if (status !== 'success') {
             setStatus('error')
@@ -70,16 +73,25 @@ export default function UpdatePasswordPage() {
       
       if (error) throw error
 
+      // 1. Lock the success state
+      isSuccessRef.current = true
+      
+      // 2. Show Success Message
       setStatus('success')
       
-      // Redirect after 3 seconds
+      // 3. Force Hard Redirect
+      // We use window.location.replace instead of router.replace.
+      // This ensures a hard navigation, reloading the app context 
+      // and preventing any "stuck" states.
       setTimeout(() => {
-        router.push('/auth')
-      }, 3000)
+        window.location.replace('/events')
+      }, 2000)
 
     } catch (error) {
+      console.error(error)
       setErrorMessage(error.message)
-      setStatus('ready') // Allow them to try again
+      setStatus('ready') 
+      isSuccessRef.current = false
     } finally {
       setIsSubmitting(false)
     }
@@ -111,7 +123,7 @@ export default function UpdatePasswordPage() {
             </CardTitle>
             <CardDescription className="text-center">
               {status === 'success' 
-                ? 'Your password has been changed successfully.' 
+                ? 'Redirecting to events...' 
                 : 'Enter your new password below.'}
             </CardDescription>
           </CardHeader>
@@ -128,15 +140,17 @@ export default function UpdatePasswordPage() {
                  </Link>
                </div>
             ) : status === 'success' ? (
-                <div className="space-y-4">
+                <div className="space-y-6">
                     <Alert className="bg-green-900/20 border-green-900 text-green-300">
                         <CheckCircle2 className="h-4 w-4" />
                         <AlertTitle>Success</AlertTitle>
-                        <AlertDescription>You can now log in with your new password.</AlertDescription>
+                        <AlertDescription>Your password has been updated successfully.</AlertDescription>
                     </Alert>
-                    <Link href="/auth" className="block">
-                        <Button className="w-full bg-brand-gradient">Go to Login</Button>
-                    </Link>
+                    
+                    <div className="flex flex-col items-center justify-center gap-2">
+                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-brand-red"></div>
+                        <p className="text-sm text-gray-500">Taking you to events...</p>
+                    </div>
                 </div>
             ) : (
                 <form onSubmit={handlePasswordUpdate} className="space-y-4">
