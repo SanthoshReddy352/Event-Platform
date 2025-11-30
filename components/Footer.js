@@ -4,6 +4,7 @@ import Link from 'next/link'
 import GradientText from "@/components/GradientText";
 import { Facebook, Twitter, Linkedin, Instagram, Mail } from 'lucide-react'
 import { useAdminStatus } from '@/hooks/use-admin-status'
+import LastWordGradientText from './LastWordGradientText';
 
 export default function Footer() {
   const { user, isAdmin, loading: adminLoading } = useAdminStatus();
@@ -25,7 +26,7 @@ export default function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           {/* About */}
           <div>
-            <h3 className="font-bold text-lg mb-4">EventX</h3> {/* CHANGED */}
+            <h3 className="font-bold text-lg mb-4"><GradientText>EventX</GradientText></h3> {/* CHANGED */}
             <p className="text-gray-400 text-sm">
               Your central hub for all college events. Discover, register, and manage
               hackathons, workshops, and more.
@@ -34,7 +35,7 @@ export default function Footer() {
 
           {/* Quick Links */}
           <div>
-            <h3 className="font-bold text-lg mb-4">Quick Links</h3>
+            <h3 className="font-bold text-lg mb-4"><LastWordGradientText>Quick Links</LastWordGradientText></h3>
             <ul className="space-y-2 text-sm">
               <li>
                 <Link href="/" className="text-gray-400 hover:text-white transition-colors">
@@ -79,7 +80,7 @@ export default function Footer() {
 
           {/* Social Media */}
           <div>
-            <h3 className="font-bold text-lg mb-4">Follow Us</h3>
+            <h3 className="font-bold text-lg mb-4"><LastWordGradientText>Follow Us</LastWordGradientText></h3>
             <div className="flex space-x-4">
               <a href="#" className="text-gray-400 hover:text-white transition-colors">
                 <Facebook size={24} />

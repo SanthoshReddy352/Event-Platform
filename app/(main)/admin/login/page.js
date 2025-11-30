@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent } from '@/components/ui/tabs'
+import LastWordGradientText from '@/components/LastWordGradientText'
 
 export default function AdminLoginPage() {
   const router = useRouter()
@@ -66,7 +67,7 @@ export default function AdminLoginPage() {
           {/* --- START OF THEME CHANGE --- */}
           <img src="/logo.jpg" alt="EventX Logo" className="w-48 mx-auto mb-4" /> {/* CHANGED */}
           <h1 className="text-3xl font-bold">
-            <GradientText>Admin Portal</GradientText>
+            <LastWordGradientText>Admin Portal</LastWordGradientText>
           </h1>
           <p className="text-gray-400 mt-2">Manage events and participants. Contact a super-admin to get access.</p> {/* CHANGED */}
           {/* --- END OF THEME CHANGE --- */}

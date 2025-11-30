@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Loader2, Send } from 'lucide-react'
+import LastWordGradientText from '@/components/LastWordGradientText'
 
 export default function ContactPage() {
   
@@ -81,7 +82,7 @@ export default function ContactPage() {
   return (
     <div className="container mx-auto px-4 py-12 max-w-lg">
       <h1 className="text-4xl font-bold text-center mb-4">
-        <GradientText>Contact Us</GradientText>
+        <LastWordGradientText >Contact Us</LastWordGradientText>
       </h1>
       <p className="text-gray-400 text-center mb-8">
         Have a question or feedback? Let us know!
@@ -89,7 +90,7 @@ export default function ContactPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Send us a Message</CardTitle>
+          <CardTitle><LastWordGradientText>Send us a Message</LastWordGradientText></CardTitle>
           <CardDescription>
             We'll get back to you as soon as possible.
           </CardDescription>
@@ -106,7 +107,7 @@ export default function ContactPage() {
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="name">Name</Label>
+                <Label htmlFor="name"><LastWordGradientText>Name</LastWordGradientText></Label>
                 <Input
                   id="name"
                   name="name"
@@ -117,7 +118,7 @@ export default function ContactPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email"><LastWordGradientText>Email</LastWordGradientText></Label>
                 <Input
                   id="email"
                   name="email"
@@ -129,7 +130,7 @@ export default function ContactPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="message">Message</Label>
+                <Label htmlFor="message"><LastWordGradientText>Message</LastWordGradientText></Label>
                 <Textarea
                   id="message"
                   name="message"

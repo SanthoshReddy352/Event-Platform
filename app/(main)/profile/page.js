@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label'
 import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/context/AuthContext'
 import { Loader2, ShieldCheck, KeyRound } from 'lucide-react' // Added Icons
+import LastWordGradientText from '@/components/LastWordGradientText'
 
 export default function ProfilePage() {
   const { user, loading: authLoading } = useAuth()
@@ -177,12 +178,12 @@ export default function ProfilePage() {
       <form onSubmit={handleSubmit}>
         <Card>
           <CardHeader>
-            <CardTitle className="text-2xl">Your Profile</CardTitle>
+            <CardTitle className="text-2xl"><LastWordGradientText>Your Profile</LastWordGradientText></CardTitle>
             <CardDescription>Manage your account details.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email"><LastWordGradientText>Email</LastWordGradientText></Label>
               <Input
                 id="email"
                 type="email"
@@ -192,7 +193,7 @@ export default function ProfilePage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="name">Full Name</Label>
+              <Label htmlFor="name"><LastWordGradientText>Full Name</LastWordGradientText></Label>
               <Input
                 id="name"
                 name="name"
@@ -202,7 +203,7 @@ export default function ProfilePage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="phone_number">Phone Number</Label>
+              <Label htmlFor="phone_number"><LastWordGradientText>Phone Number</LastWordGradientText></Label>
               <Input
                 id="phone_number"
                 name="phone_number"
@@ -232,7 +233,7 @@ export default function ProfilePage() {
         <CardHeader>
             <div className="flex items-center gap-2">
                 <ShieldCheck className="h-5 w-5 text-brand-red" />
-                <CardTitle className="text-xl">Account Security</CardTitle>
+                <CardTitle className="text-xl"><LastWordGradientText>Account Security</LastWordGradientText></CardTitle>
             </div>
             <CardDescription>Update your password to keep your account secure.</CardDescription>
         </CardHeader>
@@ -245,7 +246,7 @@ export default function ProfilePage() {
                 )}
                 
                 <div className="space-y-2">
-                    <Label htmlFor="newPassword">New Password</Label>
+                    <Label htmlFor="newPassword"><LastWordGradientText>New Password</LastWordGradientText></Label>
                     <div className="relative">
                         <KeyRound className="absolute left-3 top-2.5 h-4 w-4 text-gray-500" />
                         <Input
@@ -260,7 +261,7 @@ export default function ProfilePage() {
                     </div>
                 </div>
                 <div className="space-y-2">
-                    <Label htmlFor="confirmPassword">Confirm Password</Label>
+                    <Label htmlFor="confirmPassword"><LastWordGradientText>Confirm Password</LastWordGradientText></Label>
                     <div className="relative">
                         <KeyRound className="absolute left-3 top-2.5 h-4 w-4 text-gray-500" />
                         <Input

@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Calendar, Users, LogOut, TrendingUp } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
+import LastWordGradientText from '@/components/LastWordGradientText'
 
 function AdminDashboardContent() {
   const router = useRouter()
@@ -91,7 +92,7 @@ function AdminDashboardContent() {
       <div className="flex justify-between items-center mb-8">
         <div>
           <h1 className="text-4xl font-bold" data-testid="admin-dashboard-title">
-            <GradientText>{isSuperAdmin ? 'Super Admin Dashboard' : 'Admin Dashboard'}</GradientText>
+            <LastWordGradientText>{isSuperAdmin ? 'Super Admin Dashboard' : 'Admin Dashboard'}</LastWordGradientText>
           </h1>
           <p className="text-gray-400 mt-2">Welcome back, {user?.email}</p>
           {isSuperAdmin && (
@@ -108,37 +109,37 @@ function AdminDashboardContent() {
         <Card data-testid="stat-my-events">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">
-              {isSuperAdmin ? 'All Events' : 'My Events'}
+              <LastWordGradientText>{isSuperAdmin ? 'All Events' : 'My Events'}</LastWordGradientText>
             </CardTitle>
             <Calendar className="text-brand-orange" size={20} />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">{stats.myEvents}</div>
             <p className="text-xs text-gray-400 mt-1">
-              {isSuperAdmin ? 'System-wide' : 'Created by you'}
+              <LastWordGradientText>{isSuperAdmin ? 'System-wide' : 'Created by you'}</LastWordGradientText>
             </p>
           </CardContent>
         </Card>
 
         <Card data-testid="stat-active-events">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Active Events</CardTitle>
+            <CardTitle className="text-sm font-medium"><LastWordGradientText>Active Events</LastWordGradientText></CardTitle>
             <TrendingUp className="text-green-500" size={20} />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">{stats.activeEvents}</div>
-            <p className="text-xs text-gray-400 mt-1">Currently running</p>
+            <p className="text-xs text-gray-400 mt-1"><LastWordGradientText>Currently running</LastWordGradientText></p>
           </CardContent>
         </Card>
 
         <Card data-testid="stat-total-participants">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Total Registrations</CardTitle>
+            <CardTitle className="text-sm font-medium"><LastWordGradientText>Total Registrations</LastWordGradientText></CardTitle>
             <Users className="text-purple-400" size={20} />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">{stats.totalParticipants}</div>
-            <p className="text-xs text-gray-400 mt-1">Total participants</p>
+            <p className="text-xs text-gray-400 mt-1"><LastWordGradientText>Total participants</LastWordGradientText></p>
           </CardContent>
         </Card>
       </div>
@@ -146,7 +147,7 @@ function AdminDashboardContent() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
         <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => router.push('/admin/events')} data-testid="manage-events-card">
           <CardHeader>
-            <CardTitle>Manage Events</CardTitle>
+            <CardTitle><LastWordGradientText>Manage Events</LastWordGradientText></CardTitle>
             <CardDescription>
               Create, edit, and delete events. Build custom registration forms.
             </CardDescription>
@@ -160,7 +161,7 @@ function AdminDashboardContent() {
 
         <Card className="hover:shadow-lg transition-shadow" data-testid="view-participants-card">
           <CardHeader>
-            <CardTitle>View Participants</CardTitle>
+            <CardTitle><LastWordGradientText>View Participants</LastWordGradientText></CardTitle>
             <CardDescription>
               See all registrations and export data to CSV.
             </CardDescription>

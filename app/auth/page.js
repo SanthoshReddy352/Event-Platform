@@ -16,6 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Separator } from '@/components/ui/separator'
 import { useAuth } from '@/context/AuthContext'
 import { Github } from 'lucide-react'
+import LastWordGradientText from '@/components/LastWordGradientText'
 
 // This component handles the ?redirect= search param
 function AuthPageWithSuspense() {
@@ -174,7 +175,7 @@ function ParticipantAuthPage({ finalRedirect }) {
         <div className="text-center mb-8">
           <img src="/logo.jpg" alt="EventX Logo" className="w-48 mx-auto mb-4" />
           <h1 className="text-3xl font-bold">
-            <GradientText>Participant Portal</GradientText>
+            <LastWordGradientText>Participant Portal</LastWordGradientText>
           </h1>
           <p className="text-gray-400 mt-2">Login or create an account to register for events</p>
         </div>

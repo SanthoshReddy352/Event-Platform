@@ -7,11 +7,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Upload, Link as LinkIcon, Loader2, AlertCircle } from 'lucide-react'
+import { Upload, Link as LinkIcon, Loader2, AlertCircle, CheckCircle } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/context/AuthContext'
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import LastWordGradientText from '@/components/LastWordGradientText'
 
 function ClubProfileContent() {
   const { user, loading: authLoading } = useAuth()
@@ -25,9 +26,9 @@ function ClubProfileContent() {
         clubName: '', 
         clubLogoUrl: '', 
         mode: 'url',
-        // API Keys (Replaces Bank Details)
+        // API Keys 
         razorpayKeyId: '',
-        razorpayKeySecret: ''
+        razorpayKeySecret: '' // Always empty initially for security
       };
     }
     const saved = window.sessionStorage.getItem(storageKey);
@@ -40,6 +41,8 @@ function ClubProfileContent() {
     };
   });
 
+  // Track if a secret is already saved in the DB (without fetching the secret itself)
+  const [isSecretSet, setIsSecretSet] = useState(false);
   const [uploadFile, setUploadFile] = useState(null);
   
   const [loading, setLoading] = useState(() => {
@@ -52,6 +55,7 @@ function ClubProfileContent() {
   const fetchProfile = useCallback(async () => {
     if (!user) return
     
+    // Only show loading spinner if we don't have cached data to show immediately
     if (!window.sessionStorage.getItem(storageKey)) {
         setLoading(true)
     }
@@ -66,16 +70,20 @@ function ClubProfileContent() {
       if (error) throw error
       
       if (data) {
-        // Only populate from DB if sessionStorage is empty to avoid overwriting unsaved edits
+        // Check if secret exists in DB (Value is not null/empty)
+        // We use this to show "Key is set" status without exposing the key
+        setIsSecretSet(!!data.razorpay_key_secret);
+
+        // Only populate from DB if sessionStorage is empty 
+        // to avoid overwriting unsaved edits
         const savedData = window.sessionStorage.getItem(storageKey);
         if (!savedData) {
           setFormData({
             clubName: data.club_name || '',
             clubLogoUrl: data.club_logo_url || '',
             mode: data.club_logo_url ? 'url' : 'upload',
-            // Fetch Keys from DB
             razorpayKeyId: data.razorpay_key_id || '',
-            razorpayKeySecret: data.razorpay_key_secret || '',
+            razorpayKeySecret: '', // SECURITY: Never load the secret into the form
           });
         }
       }
@@ -147,10 +155,14 @@ function ClubProfileContent() {
       const updates = {
         club_name: formData.clubName,
         club_logo_url: finalLogoUrl,
-        // Save Keys to DB
         razorpay_key_id: formData.razorpayKeyId,
-        razorpay_key_secret: formData.razorpayKeySecret,
         updated_at: new Date().toISOString(),
+      }
+      
+      // SECURITY: Only update the secret in DB if the user actually typed a new one.
+      // If the field is empty, we assume they want to keep the old one.
+      if (formData.razorpayKeySecret && formData.razorpayKeySecret.trim() !== '') {
+          updates.razorpay_key_secret = formData.razorpayKeySecret;
       }
       
       const { error } = await supabase
@@ -162,10 +174,25 @@ function ClubProfileContent() {
       
       alert('Profile updated successfully!')
       
-      if (typeof window !== 'undefined') {
-        window.sessionStorage.removeItem(storageKey);
+      // Update UI state to reflect that a secret is set
+      if (updates.razorpay_key_secret) {
+          setIsSecretSet(true);
       }
-      setUploadFile(null); 
+
+      // Clear the secret input field after save for security
+      setFormData(prev => ({ ...prev, razorpayKeySecret: '' }));
+      setUploadFile(null);
+      
+      // Update session storage (ensure secret is cleared there too)
+      if (typeof window !== 'undefined') {
+          const safeData = { 
+              ...formData, 
+              clubLogoUrl: finalLogoUrl, 
+              razorpayKeySecret: '' 
+          };
+          window.sessionStorage.setItem(storageKey, JSON.stringify(safeData));
+      }
+
     } catch (error) {
       console.error('Error updating profile:', error)
       alert(`Failed to update profile: ${error.message}`)
@@ -185,21 +212,21 @@ function ClubProfileContent() {
   return (
     <div className="container mx-auto px-4 py-12 max-w-2xl">
       <h1 className="text-4xl font-bold mb-8">
-        <GradientText>Club Profile & Payment Setup</GradientText>
+        <LastWordGradientText>Club Profile</LastWordGradientText> & <LastWordGradientText>Payment Setup</LastWordGradientText>
       </h1>
 
       <form onSubmit={handleSubmit} className="space-y-8">
         {/* SECTION 1: CLUB DETAILS */}
         <Card>
           <CardHeader>
-            <CardTitle>Club Identity</CardTitle>
+            <CardTitle><LastWordGradientText>Club Identity</LastWordGradientText></CardTitle>
             <CardDescription>
               Basic information shown on event pages.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="clubName">Club Name</Label>
+              <Label htmlFor="clubName"><LastWordGradientText>Club Name</LastWordGradientText></Label>
               <Input
                 id="clubName"
                 value={formData.clubName}
@@ -209,7 +236,7 @@ function ClubProfileContent() {
             </div>
 
             <div className="space-y-2">
-              <Label>Club Logo</Label>
+              <Label htmlFor="clubLogo"><LastWordGradientText>Club Logo</LastWordGradientText></Label>
               <div className="flex space-x-4 mb-4">
                 <Button
                   type="button"
@@ -233,7 +260,7 @@ function ClubProfileContent() {
 
               {formData.mode === 'url' ? (
                 <div className="space-y-2">
-                  <Label htmlFor="clubLogoUrl">Logo Image URL</Label>
+                  <Label htmlFor="clubLogoUrl">Logo <LastWordGradientText>Image</LastWordGradientText> <LastWordGradientText>URL</LastWordGradientText></Label>
                   <Input
                     id="clubLogoUrl"
                     value={formData.clubLogoUrl}
@@ -262,7 +289,7 @@ function ClubProfileContent() {
               
               {formData.clubLogoUrl && (
                 <div className="mt-4">
-                  <p className="text-sm text-gray-400 mb-2">Current Logo Preview:</p>
+                  <p className="text-sm text-gray-400 mb-2"><LastWordGradientText>Current Logo Preview:</LastWordGradientText></p>
                   <img src={formData.clubLogoUrl} alt="Club Logo" className="w-24 h-24 object-contain rounded-md border" />
                 </div>
               )}
@@ -273,14 +300,14 @@ function ClubProfileContent() {
         {/* SECTION 2: PAYMENT CREDENTIALS */}
         <Card>
           <CardHeader>
-            <CardTitle>Payment Gateway (Razorpay)</CardTitle>
+            <CardTitle>Payment <LastWordGradientText>Gateway</LastWordGradientText> <LastWordGradientText>(Razorpay)</LastWordGradientText></CardTitle>
             <CardDescription>
-              Enter your club's own Razorpay API Keys. Payment for your events will go directly to your Razorpay account.
+              Enter your club's own Razorpay API Keys. Payments will go directly to your Razorpay account.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="space-y-2">
-                <Label htmlFor="keyId">Key ID</Label>
+                <Label htmlFor="keyId"><LastWordGradientText>Key ID</LastWordGradientText></Label>
                 <Input
                   id="keyId"
                   value={formData.razorpayKeyId}
@@ -289,13 +316,22 @@ function ClubProfileContent() {
                 />
             </div>
             <div className="space-y-2">
-                <Label htmlFor="keySecret">Key Secret</Label>
+                <div className="flex items-center justify-between">
+                    <Label htmlFor="keySecret"><LastWordGradientText>Key Secret</LastWordGradientText></Label>
+                    {isSecretSet && (
+                        <span className="text-xs text-green-500 flex items-center font-medium">
+                            <CheckCircle size={12} className="mr-1" />
+                            Active Key Saved
+                        </span>
+                    )}
+                </div>
                 <Input
                   id="keySecret"
                   type="password"
                   value={formData.razorpayKeySecret}
                   onChange={(e) => setFormData(prev => ({ ...prev, razorpayKeySecret: e.target.value }))}
-                  placeholder="Enter your Key Secret"
+                  placeholder={isSecretSet ? "●●●●●●●● (Saved - Enter new value to update)" : "Enter your Key Secret"}
+                  className={isSecretSet && !formData.razorpayKeySecret ? "border-green-500/50 bg-green-500/5 placeholder:text-green-600/70" : ""}
                 />
             </div>
             
@@ -303,7 +339,7 @@ function ClubProfileContent() {
                 <AlertCircle className="h-4 w-4" />
                 <AlertTitle>How to get keys?</AlertTitle>
                 <AlertDescription>
-                    1. Log in to your <a href="https://dashboard.razorpay.com/" target="_blank" className="underline font-bold">Razorpay Dashboard</a>.<br/>
+                    1. Log in to your <a href="https://dashboard.razorpay.com/" target="_blank" rel="noopener noreferrer" className="underline font-bold">Razorpay Dashboard</a>.<br/>
                     2. Go to Settings &rarr; API Keys &rarr; Generate New Key.
                 </AlertDescription>
             </Alert>
@@ -317,7 +353,7 @@ function ClubProfileContent() {
             disabled={isSubmitting}
           >
             {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-            {isSubmitting ? 'Saving Changes...' : 'Save All Changes'}
+            {isSubmitting ? 'Save All Changes' : 'Save All Changes'}
           </Button>
         </div>
       </form>

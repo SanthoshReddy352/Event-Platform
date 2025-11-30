@@ -135,16 +135,32 @@ export default function Home() {
             viewport={{ once: true }}
           >
             {/* Split the title string and map over it */}
-            {"Welcome to EventX".split(" ").map((word, index) => (
-              <motion.span
-                key={index}
-                variants={heroTitleWordVariants}
-                // Add a small gap between animated words
-                style={{ display: "inline-block", marginRight: "0.5rem" }}
-              >
-                {word}
-              </motion.span>
-            ))}
+            {"Welcome to EventX".split(" ").map((word, index) => {
+              // If the word is "EventX", split it into "Event" + "X"
+              if (word === "EventX") {
+                return (
+                  <motion.span
+                    key={index}
+                    variants={heroTitleWordVariants}
+                    style={{ display: "inline-block", marginRight: "0.5rem" }}
+                  >
+                    Event
+                    <span style={{ color: "rgb(26, 22, 22)" }}>X</span>
+                  </motion.span>
+                );
+              }
+            
+              return (
+                <motion.span
+                  key={index}
+                  variants={heroTitleWordVariants}
+                  style={{ display: "inline-block", marginRight: "0.5rem" }}
+                >
+                  {word}
+                </motion.span>
+              );
+            })}
+
           </motion.h1>
 
           <motion.p
