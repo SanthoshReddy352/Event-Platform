@@ -1,27 +1,18 @@
 -- EventX Platform Database Schema
 -- Run this SQL in your Supabase SQL Editor to set up the complete database structure.
 
--- Enable UUID extension
+-- ====================================================================
+-- 1. INITIAL SETUP
+-- ====================================================================
+
+-- Enable UUID extension for generating unique IDs
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- ====================================================================
--- DROP TABLES (For a clean reset - Optional)
--- ====================================================================
--- Uncomment the lines below if you want to wipe the database and start fresh.
-/*
-DROP TABLE IF EXISTS participants CASCADE;
-DROP TABLE IF EXISTS admin_users CASCADE;
-DROP TABLE IF EXISTS profiles CASCADE;
-DROP TABLE IF EXISTS contact_submissions CASCADE;
-DROP TABLE IF EXISTS events CASCADE;
-DROP FUNCTION IF EXISTS public.get_admin_role() CASCADE;
-*/
-
--- ====================================================================
--- CORE TABLES
+-- 2. CORE TABLES
 -- ====================================================================
 
--- 1. Events Table
+-- A. Events Table
 -- Includes standard event details + Payment configuration fields
 CREATE TABLE IF NOT EXISTS events (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -38,7 +29,7 @@ CREATE TABLE IF NOT EXISTS events (
     registration_end TIMESTAMP WITH TIME ZONE,
     form_fields JSONB DEFAULT '[]'::jsonb,
     
-    -- Payment Gateway Fields (NEW)
+    -- Payment Gateway Fields
     is_paid BOOLEAN DEFAULT FALSE,
     registration_fee NUMERIC DEFAULT 0,
 
@@ -47,7 +38,7 @@ CREATE TABLE IF NOT EXISTS events (
     created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL
 );
 
--- 2. Participants Table
+-- B. Participants Table
 -- Tracks user registrations + Payment Status
 CREATE TABLE IF NOT EXISTS participants (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -56,7 +47,7 @@ CREATE TABLE IF NOT EXISTS participants (
     responses JSONB NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending', -- 'pending', 'approved', 'rejected'
     
-    -- Payment Transaction Details (NEW)
+    -- Payment Transaction Details
     payment_id TEXT,               -- Razorpay Payment ID
     order_id TEXT,                 -- Razorpay Order ID
     payment_status TEXT DEFAULT 'pending', -- 'pending', 'paid', 'failed'
@@ -70,7 +61,7 @@ CREATE TABLE IF NOT EXISTS participants (
     CONSTRAINT participant_status_check CHECK (status IN ('pending', 'approved', 'rejected'))
 );
 
--- 3. Contact Submissions Table
+-- C. Contact Submissions Table
 CREATE TABLE IF NOT EXISTS contact_submissions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name TEXT NOT NULL,
@@ -79,8 +70,8 @@ CREATE TABLE IF NOT EXISTS contact_submissions (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 4. Admin Users Table
--- Stores Admin roles, Club details, and Bank Accounts for settlements
+-- D. Admin Users Table (UPDATED)
+-- Stores Admin roles, Club details, Bank Accounts, and Razorpay Linkage
 CREATE TABLE IF NOT EXISTS admin_users (
     user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     role TEXT NOT NULL DEFAULT 'admin', -- 'admin' or 'super_admin'
@@ -89,18 +80,22 @@ CREATE TABLE IF NOT EXISTS admin_users (
     club_name TEXT,
     club_logo_url TEXT,
     
-    -- Bank Details for Payouts (NEW)
+    -- Bank Details for Payouts (Required for Razorpay Route)
     bank_account_no TEXT,
     bank_ifsc TEXT,
     bank_holder_name TEXT,
     bank_name TEXT,
     account_type TEXT, -- 'savings' or 'current'
 
+    -- Razorpay Route (Split Payments)
+    razorpay_account_id TEXT, -- Stores the linked account ID (e.g., acc_IZW4...)
+
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     CONSTRAINT admin_role_check CHECK (role IN ('admin', 'super_admin'))
 );
 
--- 5. Profiles Table (General Users)
+-- E. Profiles Table (General Users)
 CREATE TABLE IF NOT EXISTS profiles (
     id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     name TEXT,
@@ -110,10 +105,10 @@ CREATE TABLE IF NOT EXISTS profiles (
 );
 
 -- ====================================================================
--- HELPER FUNCTION
+-- 3. HELPER FUNCTIONS
 -- ====================================================================
 
--- Helper function to get the current authenticated user's admin role
+-- Function to get the current authenticated user's admin role
 CREATE OR REPLACE FUNCTION public.get_admin_role()
 RETURNS TEXT AS $$
 DECLARE
@@ -127,9 +122,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-
 -- ====================================================================
--- RLS SETUP (Row Level Security)
+-- 4. ROW LEVEL SECURITY (RLS) POLICIES
 -- ====================================================================
 
 -- Enable RLS on all tables
@@ -139,7 +133,7 @@ ALTER TABLE contact_submissions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE admin_users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 
--- Drop existing policies (to ensure clean slate if running on existing DB)
+-- CLEANUP: Drop existing policies to avoid conflicts during re-runs
 DROP POLICY IF EXISTS "Events are viewable by everyone" ON events;
 DROP POLICY IF EXISTS "Admins can create events" ON events;
 DROP POLICY IF EXISTS "Event owners or super admins can update events" ON events;
@@ -155,8 +149,7 @@ DROP POLICY IF EXISTS "Super admins can manage admin users" ON admin_users;
 DROP POLICY IF EXISTS "Users can view their own profile" ON profiles;
 DROP POLICY IF EXISTS "Users can create and update their own profile" ON profiles;
 
-
--- 1. Events Policies
+-- A. Events Policies
 CREATE POLICY "Events are viewable by everyone"
     ON events FOR SELECT
     USING (true);
@@ -173,9 +166,7 @@ CREATE POLICY "Event owners or super admins can delete events"
     ON events FOR DELETE
     USING (public.get_admin_role() = 'super_admin' OR created_by = auth.uid());
 
--- 2. Participants Policies
--- Note: Payment Verification API (Server-side) bypasses RLS using Service Role, 
--- so this INSERT policy covers the client-side initiation or free events.
+-- B. Participants Policies
 CREATE POLICY "Participants can be created by authenticated users"
     ON participants FOR INSERT
     WITH CHECK (auth.uid() IS NOT NULL);
@@ -204,7 +195,7 @@ CREATE POLICY "Admins can update participants for events they own"
         ))
     );
 
--- 3. Contact Submissions Policies
+-- C. Contact Submissions Policies
 CREATE POLICY "Contact submissions can be created by anyone"
     ON contact_submissions FOR INSERT
     WITH CHECK (true);
@@ -213,18 +204,19 @@ CREATE POLICY "Contact submissions are viewable by admins"
     ON contact_submissions FOR SELECT
     USING (public.get_admin_role() IS NOT NULL);
 
--- 4. Admin Users Policies
+-- D. Admin Users Policies
+-- Users can see their own admin profile (needed to check if they are an admin)
 CREATE POLICY "Authenticated users can read their own admin status"
     ON admin_users FOR SELECT
     USING (auth.uid() = user_id);
 
--- Admins can update their own profile (including bank details), Super Admins can manage all.
-CREATE POLICY "Super admins can manage admin users"
-    ON admin_users FOR ALL
-    USING (public.get_admin_role() = 'super_admin' OR auth.uid() = user_id) 
+-- Admins can update their own profile (Club details, Bank details), Super Admins manage all
+CREATE POLICY "Admins can update their own profile"
+    ON admin_users FOR UPDATE
+    USING (public.get_admin_role() = 'super_admin' OR auth.uid() = user_id)
     WITH CHECK (public.get_admin_role() = 'super_admin' OR auth.uid() = user_id);
 
--- 5. Profiles Policies
+-- E. Profiles Policies
 CREATE POLICY "Users can view their own profile"
     ON profiles FOR SELECT
     USING (auth.uid() = id);
@@ -235,14 +227,14 @@ CREATE POLICY "Users can create and update their own profile"
     WITH CHECK (auth.uid() = id);
 
 -- ====================================================================
--- STORAGE BUCKETS
+-- 5. STORAGE BUCKETS
 -- ====================================================================
 
--- Create storage buckets
+-- Create storage buckets if they don't exist
 INSERT INTO storage.buckets (id, name, public) VALUES ('event-banners', 'event-banners', true) ON CONFLICT (id) DO NOTHING;
 INSERT INTO storage.buckets (id, name, public) VALUES ('club-logos', 'club-logos', true) ON CONFLICT (id) DO NOTHING;
 
--- Drop existing storage policies
+-- Drop existing storage policies to avoid conflicts
 DROP POLICY IF EXISTS "Public Access Banners" ON storage.objects;
 DROP POLICY IF EXISTS "Admin Upload Banners" ON storage.objects;
 DROP POLICY IF EXISTS "Admin Update Banners" ON storage.objects;
@@ -265,15 +257,17 @@ CREATE POLICY "Admin Update Logos" ON storage.objects FOR UPDATE USING (bucket_i
 CREATE POLICY "Admin Delete Logos" ON storage.objects FOR DELETE USING (bucket_id = 'club-logos' AND public.get_admin_role() IS NOT NULL);
 
 -- ====================================================================
--- INDEXES
+-- 6. INDEXES FOR PERFORMANCE
 -- ====================================================================
 
 CREATE INDEX IF NOT EXISTS idx_events_is_active ON events(is_active);
-CREATE INDEX IF NOT EXISTS idx_participants_event_id ON participants(event_id);
 CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_events_created_by ON events(created_by);
+CREATE INDEX IF NOT EXISTS idx_participants_event_id ON participants(event_id);
 CREATE INDEX IF NOT EXISTS idx_participants_user_id ON participants(user_id);
 CREATE INDEX IF NOT EXISTS idx_participants_status ON participants(status);
-CREATE INDEX IF NOT EXISTS idx_participants_reviewed_by ON participants(reviewed_by);
 
+
+ALTER TABLE admin_users 
+ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
 -- End of Setup File
