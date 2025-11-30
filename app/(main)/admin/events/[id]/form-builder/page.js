@@ -11,6 +11,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { ArrowLeft, Loader2, Save } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
 import { toast } from 'sonner' // Assuming you have sonner or use alert
+import LastWordGradientText from '@/components/LastWordGradientText'
 
 function FormBuilderContent() {
   const router = useRouter()
@@ -123,7 +124,7 @@ function FormBuilderContent() {
                 <ArrowLeft size={20} />
              </Link>
              <h1 className="text-3xl font-bold">
-               <GradientText>Form Builder</GradientText>
+               <LastWordGradientText>Form Builder</LastWordGradientText>
              </h1>
           </div>
           <p className="text-gray-400">

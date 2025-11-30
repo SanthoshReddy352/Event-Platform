@@ -12,6 +12,7 @@ import { Plus, Edit, Trash2, Users, FileEdit } from 'lucide-react'
 import { format } from 'date-fns'
 import { useAuth } from '@/context/AuthContext' 
 import { supabase } from '@/lib/supabase/client' 
+import LastWordGradientText from '@/components/LastWordGradientText'
 
 function AdminEventsContent() {
   const router = useRouter()
@@ -89,7 +90,7 @@ function AdminEventsContent() {
       <div className="flex justify-between items-center mb-8">
         <div>
           <h1 className="text-4xl font-bold">
-            <GradientText>Manage Events</GradientText>
+            <LastWordGradientText>Manage Events</LastWordGradientText>
           </h1>
           <p className="text-gray-400 mt-2">Create and manage hackathon events</p> {/* CHANGED */}
         </div>

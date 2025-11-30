@@ -14,6 +14,7 @@ import { Upload, Link as LinkIcon, ArrowLeft, Loader2, IndianRupee } from 'lucid
 import { useDropzone } from 'react-dropzone'
 import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/context/AuthContext' 
+import LastWordGradientText from '@/components/LastWordGradientText'
 
 // Helper to convert datetime-local string (from input) to ISO format (UTC)
 const toISOString = (dateTimeLocalString) => {
@@ -238,7 +239,7 @@ function EditEventContent() {
         Back to Events
       </Button>
       
-      <h1 className="text-4xl font-bold mb-8">Edit Event</h1>
+      <h1 className="text-4xl font-bold mb-8"><LastWordGradientText>Edit Event</LastWordGradientText></h1>
 
       <form onSubmit={handleSubmit}>
         <Card className="mb-6">
