@@ -185,7 +185,7 @@ function EventDetailContent() {
     }
   }, [user?.id, event?.id, loading, authLoading, checkRegistrationStatus]); 
 
-  // --- UPDATED HANDLESUBMIT FOR BETTER ERROR HANDLING ---
+  // --- UPDATED HANDLESUBMIT FOR DYNAMIC KEYS ---
   const handleSubmit = async (submitData) => {
     if (!user) {
         alert('You must be logged in to register.');
@@ -219,9 +219,9 @@ function EventDetailContent() {
                 throw new Error("Invalid response received from payment server");
             }
 
-            // B. Open Razorpay
+            // B. Open Razorpay using the Club's Key ID returned from backend
             const options = {
-                key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID, 
+                key: order.key_id, // <--- DYNAMIC KEY FROM BACKEND
                 amount: order.amount,
                 currency: order.currency,
                 name: "Event Platform", 

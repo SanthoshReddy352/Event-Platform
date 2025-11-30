@@ -3,8 +3,6 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 // Initialize Supabase Admin Client
-// We use SERVICE_ROLE_KEY to ensure we can write to the participants table
-// regardless of RLS, as this is a server-side verified transaction.
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -22,10 +20,29 @@ export async function POST(request) {
       responses
     } = await request.json();
 
-    // 1. Verify Signature
+    // 1. Fetch the Event Creator to get the correct Secret Key
+    const { data: eventData } = await supabase
+        .from("events")
+        .select("created_by")
+        .eq("id", eventId)
+        .single();
+        
+    if (!eventData) throw new Error("Event not found");
+
+    const { data: adminData } = await supabase
+        .from("admin_users")
+        .select("razorpay_key_secret")
+        .eq("user_id", eventData.created_by)
+        .single();
+
+    if (!adminData || !adminData.razorpay_key_secret) {
+        throw new Error("Payment configuration missing");
+    }
+
+    // 2. Verify Signature using the CLUB'S Secret
     const body = razorpay_order_id + "|" + razorpay_payment_id;
     const expectedSignature = crypto
-      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+      .createHmac("sha256", adminData.razorpay_key_secret)
       .update(body.toString())
       .digest("hex");
 
@@ -38,12 +55,11 @@ export async function POST(request) {
         );
     }
 
-    // 2. Add to Participants Table
+    // 3. Add to Participants Table
     const { error } = await supabase.from("participants").insert([
       {
         event_id: eventId,
         user_id: userId, 
-        // We store the responses (form data) here
         responses: responses || {},
         status: 'approved', // Auto-approve paid events
         

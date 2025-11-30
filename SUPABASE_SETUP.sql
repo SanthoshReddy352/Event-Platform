@@ -70,8 +70,8 @@ CREATE TABLE IF NOT EXISTS contact_submissions (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- D. Admin Users Table (UPDATED)
--- Stores Admin roles, Club details, Bank Accounts, and Razorpay Linkage
+-- D. Admin Users Table (UPDATED FOR DIRECT PAYMENTS)
+-- Stores Admin roles, Club details, and Club's OWN Razorpay Keys
 CREATE TABLE IF NOT EXISTS admin_users (
     user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     role TEXT NOT NULL DEFAULT 'admin', -- 'admin' or 'super_admin'
@@ -80,15 +80,10 @@ CREATE TABLE IF NOT EXISTS admin_users (
     club_name TEXT,
     club_logo_url TEXT,
     
-    -- Bank Details for Payouts (Required for Razorpay Route)
-    bank_account_no TEXT,
-    bank_ifsc TEXT,
-    bank_holder_name TEXT,
-    bank_name TEXT,
-    account_type TEXT, -- 'savings' or 'current'
-
-    -- Razorpay Route (Split Payments)
-    razorpay_account_id TEXT, -- Stores the linked account ID (e.g., acc_IZW4...)
+    -- Razorpay API Keys (The Club's Own Keys)
+    -- This allows payments to go directly to the club, not the platform.
+    razorpay_key_id TEXT, 
+    razorpay_key_secret TEXT,
 
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -210,7 +205,7 @@ CREATE POLICY "Authenticated users can read their own admin status"
     ON admin_users FOR SELECT
     USING (auth.uid() = user_id);
 
--- Admins can update their own profile (Club details, Bank details), Super Admins manage all
+-- Admins can update their own profile (Club details, API Keys), Super Admins manage all
 CREATE POLICY "Admins can update their own profile"
     ON admin_users FOR UPDATE
     USING (public.get_admin_role() = 'super_admin' OR auth.uid() = user_id)
@@ -266,8 +261,3 @@ CREATE INDEX IF NOT EXISTS idx_events_created_by ON events(created_by);
 CREATE INDEX IF NOT EXISTS idx_participants_event_id ON participants(event_id);
 CREATE INDEX IF NOT EXISTS idx_participants_user_id ON participants(user_id);
 CREATE INDEX IF NOT EXISTS idx_participants_status ON participants(status);
-
-
-ALTER TABLE admin_users 
-ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
--- End of Setup File

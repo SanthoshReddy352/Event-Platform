@@ -2,12 +2,6 @@ import Razorpay from "razorpay";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-// Initialize Razorpay
-const razorpay = new Razorpay({
-  key_id: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET,
-});
-
 // Initialize Supabase Admin Client (to read admin_users table securely)
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -22,8 +16,7 @@ export async function POST(request) {
       return NextResponse.json({ error: "Amount and Event ID required" }, { status: 400 });
     }
 
-    // 1. Fetch Event and Admin Details to find the destination account
-    // We join events -> created_by (user_id) -> admin_users (razorpay_account_id)
+    // 1. Fetch Event Creator to find the correct Razorpay Keys
     const { data: eventData, error: eventError } = await supabase
       .from("events")
       .select("created_by")
@@ -34,50 +27,48 @@ export async function POST(request) {
       throw new Error("Event not found");
     }
 
+    // 2. Fetch the Club's Razorpay Keys
     const { data: adminData, error: adminError } = await supabase
       .from("admin_users")
-      .select("razorpay_account_id")
+      .select("razorpay_key_id, razorpay_key_secret")
       .eq("user_id", eventData.created_by)
       .single();
 
-    // 2. Prepare Receipt ID
+    if (adminError || !adminData || !adminData.razorpay_key_id || !adminData.razorpay_key_secret) {
+        return NextResponse.json({ 
+            error: "Payment is not set up for this event. Please contact the organizer." 
+        }, { status: 400 });
+    }
+
+    // 3. Initialize Razorpay instance with the CLUB'S credentials
+    const razorpay = new Razorpay({
+      key_id: adminData.razorpay_key_id,
+      key_secret: adminData.razorpay_key_secret,
+    });
+
+    // 4. Create Order
     const cleanEventId = eventId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 20);
     const receiptId = `rcpt_${cleanEventId}_${Date.now().toString().slice(-10)}`;
-
     const amountInPaisa = Math.round(amount * 100);
 
     const options = {
       amount: amountInPaisa,
       currency: "INR",
       receipt: receiptId,
+      notes: {
+          event_id: eventId 
+      }
     };
-
-    // 3. Add Transfer Logic (Automated Split)
-    // Only if the admin has a linked account ID, otherwise money stays in your main account
-    if (adminData && adminData.razorpay_account_id) {
-      options.transfers = [
-        {
-          account: adminData.razorpay_account_id, // The Linked Account ID (e.g., acc_12345678)
-          amount: amountInPaisa, // Transfer full amount
-          currency: "INR",
-          notes: {
-            event_id: eventId, // Useful for tracking
-          },
-          linked_account_notes: [
-            "event_id" // Passes this note to the linked account's dashboard
-          ],
-          on_hold: 0, // 1 = settle manually later, 0 = settle immediately
-        },
-      ];
-      
-      // OPTIONAL: If you want to keep a platform fee (e.g., 5%)
-      // const platformFee = Math.round(amountInPaisa * 0.05);
-      // options.transfers[0].amount = amountInPaisa - platformFee;
-    }
 
     const order = await razorpay.orders.create(options);
 
-    return NextResponse.json(order);
+    // 5. Return Order details AND the correct Key ID to the frontend
+    // The frontend needs the Key ID to open the payment modal.
+    return NextResponse.json({
+        ...order,
+        key_id: adminData.razorpay_key_id 
+    });
+
   } catch (error) {
     console.error("Razorpay Order Error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });

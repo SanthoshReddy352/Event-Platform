@@ -7,12 +7,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Upload, Link as LinkIcon, Loader2, CheckCircle, AlertCircle } from 'lucide-react'
+import { Upload, Link as LinkIcon, Loader2, AlertCircle } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/context/AuthContext'
-import { Separator } from '@/components/ui/separator'
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 
 function ClubProfileContent() {
@@ -27,12 +25,9 @@ function ClubProfileContent() {
         clubName: '', 
         clubLogoUrl: '', 
         mode: 'url',
-        // Bank Details
-        bankAccountNo: '',
-        bankIfsc: '',
-        bankHolderName: '',
-        bankName: '',
-        accountType: 'savings'
+        // API Keys (Replaces Bank Details)
+        razorpayKeyId: '',
+        razorpayKeySecret: ''
       };
     }
     const saved = window.sessionStorage.getItem(storageKey);
@@ -40,34 +35,23 @@ function ClubProfileContent() {
       clubName: '', 
       clubLogoUrl: '', 
       mode: 'url',
-      bankAccountNo: '',
-      bankIfsc: '',
-      bankHolderName: '',
-      bankName: '',
-      accountType: 'savings'
+      razorpayKeyId: '',
+      razorpayKeySecret: ''
     };
   });
 
   const [uploadFile, setUploadFile] = useState(null);
   
-  // FIX: Initialize loading based on whether we have data. 
-  // If we have cached data, we don't show the spinner.
   const [loading, setLoading] = useState(() => {
     if (typeof window === 'undefined') return true;
     return !window.sessionStorage.getItem(storageKey);
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false)
-  
-  // Razorpay Specific State
-  const [razorpayAccountId, setRazorpayAccountId] = useState(null)
-  const [isConnecting, setIsConnecting] = useState(false)
 
   const fetchProfile = useCallback(async () => {
     if (!user) return
     
-    // FIX: Only set loading to true if we don't have any data to show yet.
-    // This prevents the "flash" of the spinner on revisit.
     if (!window.sessionStorage.getItem(storageKey)) {
         setLoading(true)
     }
@@ -82,8 +66,6 @@ function ClubProfileContent() {
       if (error) throw error
       
       if (data) {
-        setRazorpayAccountId(data.razorpay_account_id);
-        
         // Only populate from DB if sessionStorage is empty to avoid overwriting unsaved edits
         const savedData = window.sessionStorage.getItem(storageKey);
         if (!savedData) {
@@ -91,11 +73,9 @@ function ClubProfileContent() {
             clubName: data.club_name || '',
             clubLogoUrl: data.club_logo_url || '',
             mode: data.club_logo_url ? 'url' : 'upload',
-            bankAccountNo: data.bank_account_no || '',
-            bankIfsc: data.bank_ifsc || '',
-            bankHolderName: data.bank_holder_name || '',
-            bankName: data.bank_name || '',
-            accountType: data.account_type || 'savings',
+            // Fetch Keys from DB
+            razorpayKeyId: data.razorpay_key_id || '',
+            razorpayKeySecret: data.razorpay_key_secret || '',
           });
         }
       }
@@ -151,7 +131,7 @@ function ClubProfileContent() {
     return data.publicUrl
   }
 
-  // --- SAVE PROFILE (Club + Bank Details) ---
+  // --- SAVE PROFILE (Club + API Keys) ---
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!user) return
@@ -167,12 +147,9 @@ function ClubProfileContent() {
       const updates = {
         club_name: formData.clubName,
         club_logo_url: finalLogoUrl,
-        // Bank Details
-        bank_account_no: formData.bankAccountNo,
-        bank_ifsc: formData.bankIfsc,
-        bank_holder_name: formData.bankHolderName,
-        bank_name: formData.bankName,
-        account_type: formData.accountType,
+        // Save Keys to DB
+        razorpay_key_id: formData.razorpayKeyId,
+        razorpay_key_secret: formData.razorpayKeySecret,
         updated_at: new Date().toISOString(),
       }
       
@@ -197,42 +174,6 @@ function ClubProfileContent() {
     }
   }
 
-  // --- CONNECT RAZORPAY ---
-  const handleConnectRazorpay = async () => {
-    if (!user) return;
-    
-    // Validation
-    if (!formData.bankAccountNo || !formData.bankIfsc || !formData.bankHolderName) {
-      alert("Please fill in and SAVE your bank details first.");
-      return;
-    }
-
-    setIsConnecting(true);
-    try {
-      const res = await fetch("/api/razorpay/onboard-club", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: user.id }),
-      });
-
-      const data = await res.json();
-      
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to connect");
-      }
-
-      if (data.success) {
-        alert("Payouts connected successfully!");
-        setRazorpayAccountId(data.accountId); // Update state immediately
-      }
-    } catch (err) {
-      console.error(err);
-      alert(`Error: ${err.message}`);
-    } finally {
-      setIsConnecting(false);
-    }
-  };
-
   if (loading || authLoading) {
     return (
       <div className="text-center py-12">
@@ -244,7 +185,7 @@ function ClubProfileContent() {
   return (
     <div className="container mx-auto px-4 py-12 max-w-2xl">
       <h1 className="text-4xl font-bold mb-8">
-        <GradientText>Club Profile & Payouts</GradientText>
+        <GradientText>Club Profile & Payment Setup</GradientText>
       </h1>
 
       <form onSubmit={handleSubmit} className="space-y-8">
@@ -329,69 +270,43 @@ function ClubProfileContent() {
           </CardContent>
         </Card>
 
-        {/* SECTION 2: BANK DETAILS */}
+        {/* SECTION 2: PAYMENT CREDENTIALS */}
         <Card>
           <CardHeader>
-            <CardTitle>Bank Details</CardTitle>
+            <CardTitle>Payment Gateway (Razorpay)</CardTitle>
             <CardDescription>
-              Required for receiving payouts from paid events.
+              Enter your club's own Razorpay API Keys. Payment for your events will go directly to your Razorpay account.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="bankHolderName">Account Holder Name</Label>
+            <div className="space-y-2">
+                <Label htmlFor="keyId">Key ID</Label>
                 <Input
-                  id="bankHolderName"
-                  value={formData.bankHolderName}
-                  onChange={(e) => setFormData(prev => ({ ...prev, bankHolderName: e.target.value }))}
-                  placeholder="As per bank records"
+                  id="keyId"
+                  value={formData.razorpayKeyId}
+                  onChange={(e) => setFormData(prev => ({ ...prev, razorpayKeyId: e.target.value }))}
+                  placeholder="rzp_live_..."
                 />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="bankAccountNo">Account Number</Label>
-                <Input
-                  id="bankAccountNo"
-                  type="password"
-                  value={formData.bankAccountNo}
-                  onChange={(e) => setFormData(prev => ({ ...prev, bankAccountNo: e.target.value }))}
-                  placeholder="Enter Account Number"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="bankIfsc">IFSC Code</Label>
-                <Input
-                  id="bankIfsc"
-                  value={formData.bankIfsc}
-                  onChange={(e) => setFormData(prev => ({ ...prev, bankIfsc: e.target.value.toUpperCase() }))}
-                  placeholder="e.g. HDFC0001234"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="bankName">Bank Name</Label>
-                <Input
-                  id="bankName"
-                  value={formData.bankName}
-                  onChange={(e) => setFormData(prev => ({ ...prev, bankName: e.target.value }))}
-                  placeholder="e.g. HDFC Bank"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="accountType">Account Type</Label>
-                <Select
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, accountType: value }))}
-                  value={formData.accountType}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="savings">Savings</SelectItem>
-                    <SelectItem value="current">Current</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
             </div>
+            <div className="space-y-2">
+                <Label htmlFor="keySecret">Key Secret</Label>
+                <Input
+                  id="keySecret"
+                  type="password"
+                  value={formData.razorpayKeySecret}
+                  onChange={(e) => setFormData(prev => ({ ...prev, razorpayKeySecret: e.target.value }))}
+                  placeholder="Enter your Key Secret"
+                />
+            </div>
+            
+            <Alert className="bg-blue-500/10 border-blue-500 text-blue-600">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>How to get keys?</AlertTitle>
+                <AlertDescription>
+                    1. Log in to your <a href="https://dashboard.razorpay.com/" target="_blank" className="underline font-bold">Razorpay Dashboard</a>.<br/>
+                    2. Go to Settings &rarr; API Keys &rarr; Generate New Key.
+                </AlertDescription>
+            </Alert>
           </CardContent>
         </Card>
 
@@ -406,49 +321,6 @@ function ClubProfileContent() {
           </Button>
         </div>
       </form>
-
-      <Separator className="my-8" />
-
-      {/* SECTION 3: RAZORPAY STATUS */}
-      <Card className="border-brand-primary/20 bg-brand-primary/5">
-        <CardHeader>
-          <CardTitle>Payouts Configuration</CardTitle>
-          <CardDescription>
-            Connect your bank account to Razorpay to receive automatic settlements.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {razorpayAccountId ? (
-            <Alert className="bg-green-500/10 border-green-500 text-green-600">
-              <CheckCircle className="h-4 w-4" />
-              <AlertTitle>Active & Connected</AlertTitle>
-              <AlertDescription>
-                Your account is linked with Razorpay (ID: {razorpayAccountId}). Payments will settle automatically to your saved bank account.
-              </AlertDescription>
-            </Alert>
-          ) : (
-            <div className="space-y-4">
-              <Alert className="bg-yellow-500/10 border-yellow-500 text-yellow-600">
-                <AlertCircle className="h-4 w-4" />
-                <AlertTitle>Not Connected</AlertTitle>
-                <AlertDescription>
-                  You must link your account to enable split payments. Ensure your bank details above are saved first.
-                </AlertDescription>
-              </Alert>
-              
-              <Button 
-                onClick={handleConnectRazorpay} 
-                disabled={isConnecting || !formData.bankAccountNo}
-                variant="default"
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-              >
-                {isConnecting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Connect Payouts via Razorpay
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
     </div>
   )
 }
