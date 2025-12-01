@@ -310,16 +310,23 @@ CREATE POLICY "Users can create and update their own profile"
 -- Create storage buckets if they don't exist
 INSERT INTO storage.buckets (id, name, public) VALUES ('event-banners', 'event-banners', true) ON CONFLICT (id) DO NOTHING;
 INSERT INTO storage.buckets (id, name, public) VALUES ('club-logos', 'club-logos', true) ON CONFLICT (id) DO NOTHING;
+INSERT INTO storage.buckets (id, name, public) VALUES ('ppt-templates', 'ppt-templates', true) ON CONFLICT (id) DO NOTHING;
 
--- Drop existing storage policies to avoid conflicts
+-- Drop existing storage policies to avoid conflicts (Cleanup)
 DROP POLICY IF EXISTS "Public Access Banners" ON storage.objects;
 DROP POLICY IF EXISTS "Admin Upload Banners" ON storage.objects;
 DROP POLICY IF EXISTS "Admin Update Banners" ON storage.objects;
 DROP POLICY IF EXISTS "Admin Delete Banners" ON storage.objects;
+
 DROP POLICY IF EXISTS "Public Access Logos" ON storage.objects;
 DROP POLICY IF EXISTS "Admin Upload Logos" ON storage.objects;
 DROP POLICY IF EXISTS "Admin Update Logos" ON storage.objects;
 DROP POLICY IF EXISTS "Admin Delete Logos" ON storage.objects;
+
+DROP POLICY IF EXISTS "Public Access PPT" ON storage.objects;
+DROP POLICY IF EXISTS "Admin Upload PPT" ON storage.objects;
+DROP POLICY IF EXISTS "Admin Update PPT" ON storage.objects;
+DROP POLICY IF EXISTS "Admin Delete PPT" ON storage.objects;
 
 -- Policies for event-banners
 CREATE POLICY "Public Access Banners" ON storage.objects FOR SELECT USING (bucket_id = 'event-banners');
@@ -333,6 +340,12 @@ CREATE POLICY "Admin Upload Logos" ON storage.objects FOR INSERT WITH CHECK (buc
 CREATE POLICY "Admin Update Logos" ON storage.objects FOR UPDATE USING (bucket_id = 'club-logos' AND public.get_admin_role() IS NOT NULL);
 CREATE POLICY "Admin Delete Logos" ON storage.objects FOR DELETE USING (bucket_id = 'club-logos' AND public.get_admin_role() IS NOT NULL);
 
+-- Policies for ppt-templates
+CREATE POLICY "Public Access PPT" ON storage.objects FOR SELECT USING (bucket_id = 'ppt-templates');
+CREATE POLICY "Admin Upload PPT" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'ppt-templates' AND public.get_admin_role() IS NOT NULL);
+CREATE POLICY "Admin Update PPT" ON storage.objects FOR UPDATE USING (bucket_id = 'ppt-templates' AND public.get_admin_role() IS NOT NULL);
+CREATE POLICY "Admin Delete PPT" ON storage.objects FOR DELETE USING (bucket_id = 'ppt-templates' AND public.get_admin_role() IS NOT NULL);
+
 -- ====================================================================
 -- 6. INDEXES FOR PERFORMANCE
 -- ====================================================================
@@ -343,5 +356,4 @@ CREATE INDEX IF NOT EXISTS idx_events_created_by ON events(created_by);
 CREATE INDEX IF NOT EXISTS idx_participants_event_id ON participants(event_id);
 CREATE INDEX IF NOT EXISTS idx_participants_user_id ON participants(user_id);
 CREATE INDEX IF NOT EXISTS idx_participants_status ON participants(status);
--- New index for hackathon scope performance
 CREATE INDEX IF NOT EXISTS idx_problem_statements_event_id ON problem_statements(event_id);
