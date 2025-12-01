@@ -24,21 +24,31 @@ export default function ProblemSelectionPage() {
   const [selecting, setSelecting] = useState(false)
   const [error, setError] = useState(null)
   const [selectedProblemDetails, setSelectedProblemDetails] = useState(null)
+  
+  // Track previous status to detect changes and show notifications
+  const prevStatusRef = useRef(null)
 
   const fetchData = useCallback(async () => {
     if (!user || !params.id) return
     
     try {
-      setLoading(true)
+      // Only show loading spinner on initial load
+      if (!scopeStatus) setLoading(true)
+      
       const { data: { session } } = await supabase.auth.getSession()
       
       if (!session) {
         throw new Error('Please log in')
       }
 
-      // Fetch scope status
-      const scopeRes = await fetch(`/api/events/${params.id}/scope-status`, {
-        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      // Fetch scope status with cache-busting
+      const scopeRes = await fetch(`/api/events/${params.id}/scope-status?t=${Date.now()}`, {
+        headers: { 
+          'Authorization': `Bearer ${session.access_token}`,
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
+        },
+        cache: 'no-store'
       })
       
       const scopeData = await scopeRes.json()
