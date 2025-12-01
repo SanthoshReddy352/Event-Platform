@@ -12,7 +12,7 @@ import {
 import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/context/AuthContext'
 import { toast } from 'sonner'
-import { isWithinInterval } from 'date-fns' // Added import for time checking
+import { isWithinInterval } from 'date-fns'
 
 export default function ProblemSelectionPage() {
   const params = useParams()
@@ -21,20 +21,18 @@ export default function ProblemSelectionPage() {
   
   const [loading, setLoading] = useState(true)
   const [problems, setProblems] = useState([])
-  const [event, setEvent] = useState(null) // Added event state
+  const [event, setEvent] = useState(null)
   const [scopeStatus, setScopeStatus] = useState(null)
   const [selecting, setSelecting] = useState(false)
   const [error, setError] = useState(null)
   const [selectedProblemDetails, setSelectedProblemDetails] = useState(null)
   
-  // Track previous status to detect changes and show notifications
   const prevStatusRef = useRef(null)
 
   const fetchData = useCallback(async () => {
     if (!user || !params.id) return
     
     try {
-      // Only show loading spinner on initial load
       if (!scopeStatus) setLoading(true)
       
       const { data: { session } } = await supabase.auth.getSession()
@@ -43,7 +41,7 @@ export default function ProblemSelectionPage() {
         throw new Error('Please log in')
       }
 
-      // 1. Fetch event details (Added to get start/end times)
+      // 1. Fetch event details
       const eventRes = await fetch(`/api/events/${params.id}?t=${Date.now()}`, {
         cache: 'no-store'
       })
@@ -54,7 +52,7 @@ export default function ProblemSelectionPage() {
       }
       setEvent(eventData.event)
 
-      // 2. Fetch scope status with cache-busting
+      // 2. Fetch scope status
       const scopeRes = await fetch(`/api/events/${params.id}/scope-status?t=${Date.now()}`, {
         headers: { 
           'Authorization': `Bearer ${session.access_token}`,
@@ -71,24 +69,13 @@ export default function ProblemSelectionPage() {
         return
       }
       
-      // Detect status changes and notify user (non-disruptive)
+      // Notify phase changes (optional since polling is removed, but good for initial load check)
       if (prevStatusRef.current && scopeData.phases) {
         const prev = prevStatusRef.current.phases
         const curr = scopeData.phases
         
-        // Notify when problem selection window opens
         if (!prev.problem_selection && curr.problem_selection) {
-          toast.success('Problem selection window is now open!', {
-            description: 'You can now select your problem statement.',
-            duration: 5000
-          })
-        }
-        
-        // Notify when problem selection window closes
-        if (prev.problem_selection && !curr.problem_selection) {
-          toast.warning('Problem selection window has closed.', {
-            duration: 5000
-          })
+          toast.success('Problem selection window is now open!')
         }
       }
       
@@ -111,7 +98,6 @@ export default function ProblemSelectionPage() {
         .eq('event_id', params.id)
         .not('selected_problem_id', 'is', null)
 
-      // Count selections per problem
       const selectionCounts = {}
       if (participants) {
         participants.forEach(p => {
@@ -119,7 +105,6 @@ export default function ProblemSelectionPage() {
         })
       }
 
-      // Add count to each problem
       const problemsWithCounts = problemsData.map(p => ({
         ...p,
         current_selections: selectionCounts[p.id] || 0,
@@ -128,8 +113,6 @@ export default function ProblemSelectionPage() {
 
       setProblems(problemsWithCounts)
 
-      // If user has already selected, fetch details
-      // FIXED: Added optional chaining to prevent crash
       if (scopeData.participant?.selected_problem_id) {
         const selected = problemsWithCounts.find(p => p.id === scopeData.participant.selected_problem_id)
         setSelectedProblemDetails(selected)
@@ -137,21 +120,16 @@ export default function ProblemSelectionPage() {
 
     } catch (err) {
       console.error('Error fetching data:', err)
-      // Only set error on initial load
       if (!scopeStatus) setError(err.message)
     } finally {
       setLoading(false)
     }
   }, [user?.id, params.id]) 
 
+  // Initial fetch only - NO setInterval
   useEffect(() => {
     if (!authLoading) {
       fetchData()
-      
-      // Silent background polling every 30 seconds
-      const intervalId = setInterval(fetchData, 30000)
-      
-      return () => clearInterval(intervalId)
     }
   }, [authLoading, fetchData])
 
@@ -180,7 +158,7 @@ export default function ProblemSelectionPage() {
         router.push(`/events/${params.id}/scope`)
       } else {
         alert(`Failed to select: ${data.error}`)
-        fetchData() // Refresh to show updated counts
+        fetchData() 
       }
     } catch (err) {
       console.error('Selection error:', err)
@@ -222,9 +200,9 @@ export default function ProblemSelectionPage() {
     )
   }
 
-  // FIXED: Optional chaining and local time calculation
   const alreadySelected = scopeStatus?.participant?.selected_problem_id
   
+  // Local time check
   const selectionOpen = event?.problem_selection_start && event?.problem_selection_end
   ? isWithinInterval(new Date(), {
       start: new Date(event.problem_selection_start),
@@ -331,7 +309,6 @@ export default function ProblemSelectionPage() {
             <h2 className="text-xl font-semibold">Available Problem Statements ({problems.length})</h2>
             
             {problems.map((problem, index) => {
-              // FIXED: Optional chaining here as well
               const isSelected = problem.id === scopeStatus?.participant?.selected_problem_id
               const isFull = problem.is_full && !isSelected
               const canSelect = selectionOpen && !alreadySelected && !isFull

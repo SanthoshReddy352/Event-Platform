@@ -25,7 +25,7 @@ export default function HackathonScopePage() {
   const [scopeStatus, setScopeStatus] = useState(null)
   const [error, setError] = useState(null)
   
-  // State to force re-render for time checks every minute
+  // State to force re-render for time checks every minute (UI only, no data fetch)
   const [now, setNow] = useState(new Date())
   
   const prevStatusRef = useRef(null)
@@ -114,13 +114,10 @@ export default function HackathonScopePage() {
     }
   }, [user?.id, params.id, router]) 
 
-  // Initial fetch and polling
+  // Initial fetch ONLY (No polling)
   useEffect(() => {
     if (!authLoading) {
       fetchScopeStatus()
-      // Poll every 30 seconds for status updates
-      const intervalId = setInterval(fetchScopeStatus, 30000)
-      return () => clearInterval(intervalId)
     }
   }, [authLoading, fetchScopeStatus])
 
@@ -189,6 +186,7 @@ export default function HackathonScopePage() {
 
   if (!event || !scopeStatus) return null
 
+  // SAFE ACCESS: Use optional chaining or default object
   const participant = scopeStatus.participant || {};
   
   // Calculated States
@@ -323,7 +321,7 @@ export default function HackathonScopePage() {
           </CardContent>
         </Card>
 
-        {/* Action Cards with Logic for Admin-Set Times */}
+        {/* Action Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           
           {/* Problem Selection Action */}
@@ -346,7 +344,6 @@ export default function HackathonScopePage() {
               </p>
               
               <Link href={problemSelectionOpen && !participant.selected_problem_id ? `/events/${params.id}/scope/problems` : '#'}>
-                <br></br>
                 <Button 
                     className="w-full bg-brand-gradient"
                     disabled={!problemSelectionOpen || participant.selected_problem_id}
@@ -379,7 +376,7 @@ export default function HackathonScopePage() {
                  }
               </p>
 
-              {scopeStatus.event.ppt_template_url ? (
+              {scopeStatus.event?.ppt_template_url ? (
                   <a 
                     href={pptAvailable ? scopeStatus.event.ppt_template_url : '#'} 
                     target={pptAvailable ? "_blank" : undefined} 
@@ -420,8 +417,6 @@ export default function HackathonScopePage() {
               </p>
 
               <Link href={submissionOpen && !participant.has_submitted ? `/events/${params.id}/scope/submit` : '#'}>
-                
-                <br></br>
                 <Button 
                     className="w-full bg-orange-600 hover:bg-orange-700"
                     disabled={!submissionOpen || participant.has_submitted}

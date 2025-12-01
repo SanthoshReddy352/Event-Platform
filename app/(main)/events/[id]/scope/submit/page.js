@@ -12,7 +12,7 @@ import {
 import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/context/AuthContext'
 import { toast } from 'sonner'
-import { isWithinInterval } from 'date-fns' // Added import for time checking
+import { isWithinInterval } from 'date-fns'
 
 export default function ProjectSubmissionPage() {
   const params = useParams()
@@ -26,7 +26,6 @@ export default function ProjectSubmissionPage() {
   const [error, setError] = useState(null)
   const [submitted, setSubmitted] = useState(false)
   
-  // Track previous status to detect changes and show notifications
   const prevStatusRef = useRef(null)
 
   const storageKey = `hackathonSubmission-${params.id}`
@@ -49,7 +48,6 @@ export default function ProjectSubmissionPage() {
     if (!user || !params.id) return
     
     try {
-      // Only show loading spinner on initial load
       if (!scopeStatus) setLoading(true)
       
       const { data: { session } } = await supabase.auth.getSession()
@@ -58,7 +56,7 @@ export default function ProjectSubmissionPage() {
         throw new Error('Please log in')
       }
 
-      // Fetch event with cache-busting
+      // 1. Fetch event details
       const eventRes = await fetch(`/api/events/${params.id}?t=${Date.now()}`, {
         cache: 'no-store'
       })
@@ -67,10 +65,9 @@ export default function ProjectSubmissionPage() {
       if (!eventData.success) {
         throw new Error('Event not found')
       }
-      
       setEvent(eventData.event)
 
-      // Fetch scope status with cache-busting
+      // 2. Fetch scope status
       const scopeRes = await fetch(`/api/events/${params.id}/scope-status?t=${Date.now()}`, {
         headers: { 
           'Authorization': `Bearer ${session.access_token}`,
@@ -87,61 +84,25 @@ export default function ProjectSubmissionPage() {
         return
       }
       
-      // Detect status changes and notify user (non-disruptive)
-      if (prevStatusRef.current && scopeData.phases) {
-        const prev = prevStatusRef.current.phases
-        const curr = scopeData.phases
-        
-        // Notify when submission window opens
-        if (!prev.submission_open && curr.submission_open) {
-          toast.success('Submission window is now open!', {
-            description: 'You can now submit your project.',
-            duration: 5000
-          })
-        }
-        
-        // Notify when submission window closes
-        if (prev.submission_open && !curr.submission_open) {
-          toast.warning('Submission window has closed.', {
-            duration: 5000
-          })
-        }
-        
-        // Notify when PPT template becomes available
-        if (!prev.ppt_available && curr.ppt_available) {
-          toast.info('PPT template is now available!', {
-            description: 'Download it from the hackathon scope page.',
-            duration: 5000
-          })
-        }
-      }
-      
       prevStatusRef.current = scopeData
       setScopeStatus(scopeData)
 
-      // Check if already submitted
       if (scopeData.participant?.has_submitted) {
         setSubmitted(true)
       }
 
     } catch (err) {
       console.error('Error fetching data:', err)
-      // Only set error on initial load
       if (!scopeStatus) setError(err.message)
     } finally {
       setLoading(false)
     }
-  }, [user?.id, params.id]) // Use user.id to prevent unnecessary re-fetches
+  }, [user?.id, params.id]) 
 
+  // Initial fetch only - NO setInterval
   useEffect(() => {
     if (!authLoading) {
       fetchData()
-      
-      // Silent background polling every 30 seconds to auto-update status
-      // This updates React state without page reload - non-disruptive!
-      const intervalId = setInterval(fetchData, 30000)
-      
-      return () => clearInterval(intervalId)
     }
   }, [authLoading, fetchData])
 
@@ -219,8 +180,7 @@ export default function ProjectSubmissionPage() {
     return null
   }
 
-  // FIXED: Calculate submissionOpen using local time comparison with event dates
-  // This ensures consistency with the Scope Page and prevents "Closed" errors when it should be open
+  // Local time check
   const submissionOpen = event?.submission_start && event?.submission_end
     ? isWithinInterval(new Date(), {
         start: new Date(event.submission_start),
