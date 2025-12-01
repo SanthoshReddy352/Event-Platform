@@ -100,7 +100,7 @@ function AdminEventsContent() {
                 <CardHeader>
                   <div className="flex justify-between items-start mb-2">
                     {/* Link to Dashboard */}
-                    <Link href={`/admin/events/${event.id}`} className="hover:underline">
+                    <Link href={`/admin/events/${event.id}/dashboard`} className="hover:underline">
                         <CardTitle className="text-lg">{event.title}</CardTitle>
                     </Link>
                     <div className="flex gap-2">
