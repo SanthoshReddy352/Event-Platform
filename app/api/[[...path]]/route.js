@@ -305,20 +305,27 @@ export async function GET(request) {
         submission_open: false
       }
       
-      if (event.problem_selection_start && event.problem_selection_end) {
+      // --- FIX: Logic updated to allow optional end dates ---
+      
+      // 1. Problem Selection: Open if start time passed AND (no end time defined OR currently before end time)
+      if (event.problem_selection_start) {
         const start = new Date(event.problem_selection_start)
-        const end = new Date(event.problem_selection_end)
-        phases.problem_selection = now >= start && now <= end
+        const end = event.problem_selection_end ? new Date(event.problem_selection_end) : null
+        
+        phases.problem_selection = now >= start && (!end || now <= end)
       }
       
+      // 2. PPT: Open if release time passed
       if (event.ppt_release_time) {
         phases.ppt_available = now >= new Date(event.ppt_release_time)
       }
       
-      if (event.submission_start && event.submission_end) {
+      // 3. Submission: Open if start time passed AND (no end time defined OR currently before end time)
+      if (event.submission_start) {
         const start = new Date(event.submission_start)
-        const end = new Date(event.submission_end)
-        phases.submission_open = now >= start && now <= end
+        const end = event.submission_end ? new Date(event.submission_end) : null
+        
+        phases.submission_open = now >= start && (!end || now <= end)
       }
       
       return NextResponse.json({ 

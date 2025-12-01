@@ -28,7 +28,9 @@ export default function HackathonScopePage() {
     if (!user || !params.id) return
     
     try {
-      setLoading(true)
+      // Only show full loading state if we don't have data yet to prevent flashing
+      if (!scopeStatus) setLoading(true)
+      
       const { data: { session } } = await supabase.auth.getSession()
       
       if (!session) {
@@ -87,7 +89,8 @@ export default function HackathonScopePage() {
     } finally {
       setLoading(false)
     }
-  }, [user, params.id, router])
+  // FIX: Depend on user?.id instead of user object to prevent re-fetching on tab focus
+  }, [user?.id, params.id, router]) 
 
   useEffect(() => {
     if (!authLoading) {
@@ -127,7 +130,7 @@ export default function HackathonScopePage() {
     )
   }
 
-  // --- FIX: Ensure scopeStatus exists and has required properties ---
+  // Ensure scopeStatus exists and has required properties
   if (!event || !scopeStatus) {
     return null
   }
