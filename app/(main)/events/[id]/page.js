@@ -76,20 +76,35 @@ const getEventStatus = (event) => {
 function EventDetailContent() {
   const params = useParams()
   const router = useRouter()
-  const [event, setEvent] = useState(null)
-  const [loading, setLoading] = useState(true) 
-  const [submitted, setSubmitted] = useState(false)
-  const { user, loading: authLoading } = useAuth() 
-  const [isRegistered, setIsRegistered] = useState(false) 
-  const [registrationStatus, setRegistrationStatus] = useState(null)
-  const [regCheckLoading, setRegCheckLoading] = useState(true) 
-  const storageKey = `formData-${params.id}`;
   
-  const [rejectionHistory, setRejectionHistory] = useState(null);
+  const { user, loading: authLoading } = useAuth() 
+  
+  // --- 1. SETUP PERSISTENCE KEYS ---
+  const EVENT_STORAGE_KEY = `event_page_data_${params.id}`;
+  
+  // --- 2. INITIALIZE STATE FROM STORAGE ---
+  const getCachedData = () => {
+    if (typeof window === 'undefined') return null;
+    const saved = window.sessionStorage.getItem(EVENT_STORAGE_KEY);
+    return saved ? JSON.parse(saved) : null;
+  };
+  
+  const cached = getCachedData();
 
+  const [loading, setLoading] = useState(!cached); // If cached data exists, don't show loading spinner
+  const [event, setEvent] = useState(cached?.event || null);
+  const [submitted, setSubmitted] = useState(false);
+  
+  // Registration state
+  const [isRegistered, setIsRegistered] = useState(cached?.isRegistered || false);
+  const [registrationStatus, setRegistrationStatus] = useState(cached?.registrationStatus || null);
+  const [rejectionHistory, setRejectionHistory] = useState(cached?.rejectionHistory || null);
+
+  // Form Data Persistence (Already existed, kept as is)
+  const formStorageKey = `formData-${params.id}`;
   const [formData, setFormData] = useState(() => {
      if (typeof window !== 'undefined') {
-      const saved = window.sessionStorage.getItem(storageKey);
+      const saved = window.sessionStorage.getItem(formStorageKey);
       return saved ? JSON.parse(saved) : {};
     }
     return {};
@@ -97,92 +112,125 @@ function EventDetailContent() {
 
   const setAndStoreFormData = (newData) => {
     setFormData(newData);
-    window.sessionStorage.setItem(storageKey, JSON.stringify(newData));
+    window.sessionStorage.setItem(formStorageKey, JSON.stringify(newData));
   };
 
-  const fetchEvent = useCallback(async () => {
-    if (!params.id) return;
-    
-    setLoading(true); 
-    try {
-      const response = await fetch(`/api/events/${params.id}`);
-      const data = await response.json();
-      if (data.success) {
-        setEvent(data.event);
-      } else {
-        setEvent(null); 
-      }
-    } catch (error) {
-      console.error('Error fetching event:', error);
-      setEvent(null);
-    } finally {
-      setLoading(false); 
-    }
-  }, [params.id]);
+  // --- 3. UNIFIED DATA FETCHING (UPDATED) ---
+  useEffect(() => {
+    let mounted = true;
 
-  const checkRegistrationStatus = useCallback(async (userId, eventId) => {
-    if (!userId || !eventId) {
-      setRegCheckLoading(false);
-      return;
-    }
-    setRegCheckLoading(true);
-    setRejectionHistory(null); 
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-         throw new Error("No active session");
-      }
+    async function loadPageData() {
+        if (authLoading) return;
 
-      const response = await fetch(`/api/participants/${eventId}?userId=${userId}`, {
-        headers: { 'Authorization': `Bearer ${session.access_token}` }
-      });
-      const data = await response.json();
-      
-      if (data.success && data.participants && data.participants.length > 0) {
-        const mostRecent = data.participants[data.participants.length - 1];
-        
-        setIsRegistered(true);
-        setRegistrationStatus(mostRecent.status);
-
-        const rejected = data.participants
-          .filter(p => p.status === 'rejected')
-          .pop(); 
-
-        if (rejected) {
-          setRejectionHistory(rejected);
+        // ONLY show spinner if we don't have event data yet
+        if (!event) {
+            setLoading(true);
         }
 
-      } else {
-        setIsRegistered(false);
-        setRegistrationStatus(null);
-        setRejectionHistory(null);
-      }
-    } catch (error) {
-      console.error("Error checking registration:", error);
-      setIsRegistered(false);
-      setRegistrationStatus(null);
-      setRejectionHistory(null);
-    } finally {
-      setRegCheckLoading(false);
-    }
-  }, []); 
+        try {
+            const fetchEventPromise = fetch(`/api/events/${params.id}`).then(res => res.json());
+            
+            let fetchParticipantPromise = Promise.resolve(null);
+            
+            if (user) {
+                const { data: { session } } = await supabase.auth.getSession();
+                if (session) {
+                    fetchParticipantPromise = fetch(`/api/participants/${params.id}?userId=${user.id}`, {
+                        headers: { 'Authorization': `Bearer ${session.access_token}` }
+                    }).then(res => res.json());
+                }
+            }
 
-  useEffect(() => {
-    fetchEvent();
-  }, [fetchEvent]); 
+            const [eventData, participantData] = await Promise.all([fetchEventPromise, fetchParticipantPromise]);
+
+            if (!mounted) return;
+
+            // Prepare new state objects
+            let newEvent = null;
+            let newIsRegistered = false;
+            let newRegistrationStatus = null;
+            let newRejectionHistory = null;
+
+            if (eventData.success) {
+                newEvent = eventData.event;
+                setEvent(newEvent);
+            } else {
+                setEvent(null);
+            }
+
+            if (participantData && participantData.success && participantData.participants.length > 0) {
+                const mostRecent = participantData.participants[participantData.participants.length - 1];
+                newIsRegistered = true;
+                newRegistrationStatus = mostRecent.status;
+                
+                const rejected = participantData.participants
+                    .filter(p => p.status === 'rejected')
+                    .pop();
+                newRejectionHistory = rejected || null;
+
+                setIsRegistered(newIsRegistered);
+                setRegistrationStatus(newRegistrationStatus);
+                setRejectionHistory(newRejectionHistory);
+            } else {
+                setIsRegistered(false);
+                setRegistrationStatus(null);
+                setRejectionHistory(null);
+            }
+
+            // --- 4. SAVE TO STORAGE ---
+            // Only save if we successfully fetched the event
+            if (newEvent) {
+                const cacheData = {
+                    event: newEvent,
+                    isRegistered: newIsRegistered,
+                    registrationStatus: newRegistrationStatus,
+                    rejectionHistory: newRejectionHistory,
+                    timestamp: Date.now()
+                };
+                window.sessionStorage.setItem(EVENT_STORAGE_KEY, JSON.stringify(cacheData));
+            }
+
+        } catch (error) {
+            console.error("Error loading page data:", error);
+            if (mounted && !event) setEvent(null);
+        } finally {
+            if (mounted) setLoading(false);
+        }
+    }
+
+    loadPageData();
+
+    return () => { mounted = false; };
+  }, [params.id, authLoading, user]); // Removed 'event' from deps to avoid loops, though strict mode might trigger twice.
+
+  const checkRegistrationStatus = useCallback(async (userId, eventId) => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
   
-  useEffect(() => {
-    if (loading || authLoading || !event?.id) return; 
-
-    if (user?.id) {
-        checkRegistrationStatus(user.id, event.id);
-    } else {
-        setIsRegistered(false);
-        setRegistrationStatus(null);
-        setRegCheckLoading(false); 
-        setRejectionHistory(null); 
-    }
-  }, [user?.id, event?.id, loading, authLoading, checkRegistrationStatus]); 
+        const response = await fetch(`/api/participants/${eventId}?userId=${userId}`, {
+          headers: { 'Authorization': `Bearer ${session.access_token}` }
+        });
+        const data = await response.json();
+        
+        if (data.success && data.participants && data.participants.length > 0) {
+          const mostRecent = data.participants[data.participants.length - 1];
+          setIsRegistered(true);
+          setRegistrationStatus(mostRecent.status);
+          
+          // Update cache on re-check
+          const currentCache = JSON.parse(window.sessionStorage.getItem(EVENT_STORAGE_KEY) || '{}');
+          const updatedCache = {
+              ...currentCache,
+              isRegistered: true,
+              registrationStatus: mostRecent.status
+          };
+          window.sessionStorage.setItem(EVENT_STORAGE_KEY, JSON.stringify(updatedCache));
+        } 
+      } catch (error) {
+        console.error("Error re-checking registration:", error);
+      }
+    }, [EVENT_STORAGE_KEY]);
 
   const handleSubmit = async (submitData) => {
     if (!user) {
@@ -190,7 +238,6 @@ function EventDetailContent() {
         return;
     }
 
-    // 1. Check if Paid Event
     if (event.is_paid && event.registration_fee > 0) {
         try {
             if (!window.Razorpay) {
@@ -240,7 +287,7 @@ function EventDetailContent() {
                         const result = await verifyRes.json();
                         if (result.success) {
                             setSubmitted(true);
-                            window.sessionStorage.removeItem(storageKey);
+                            window.sessionStorage.removeItem(formStorageKey);
                             alert("Payment Successful! You are registered.");
                             checkRegistrationStatus(user.id, event.id);
                         } else {
@@ -273,7 +320,6 @@ function EventDetailContent() {
         return; 
     }
     
-    // 2. Standard Free Registration
     try {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) {
@@ -297,7 +343,8 @@ function EventDetailContent() {
 
         if (data.success) {
             setSubmitted(true);
-            window.sessionStorage.removeItem(storageKey); 
+            window.sessionStorage.removeItem(formStorageKey); 
+            // Update cache to reflect pending status immediately if needed, or just let re-check handle it
         } else {
             alert(`Registration failed: ${data.error}`);
         }
@@ -307,6 +354,7 @@ function EventDetailContent() {
     }
   }
 
+  // Combined Loading Screen
   if (loading || (authLoading && !event)) {
      return (
         <div className="min-h-screen flex items-center justify-center">
@@ -369,17 +417,6 @@ function EventDetailContent() {
   );
   
   const registrationContent = () => {
-      if (authLoading || regCheckLoading) {
-          return (
-              <Card>
-                  <CardContent className="py-12 text-center">
-                      <Loader2 className="mx-auto h-8 w-8 animate-spin text-brand-red" />
-                      <p className="mt-4 text-gray-400">Checking your status...</p>
-                  </CardContent>
-              </Card>
-          )
-      }
-      
       if (isCompleted) {
            return (
               <Card>
@@ -412,17 +449,13 @@ function EventDetailContent() {
       
       if (isRegistered) {
           if (registrationStatus === 'approved') {
-              // --- START OF FIX: Scope Logic ---
               const isHackathon = event.event_type === 'hackathon';
               const now = new Date();
-              // Use problem_selection_start as the start time for the scope
-              // If not set, fallback to event_date
               const scopeStartTime = event.problem_selection_start 
                   ? parseISO(event.problem_selection_start) 
                   : (event.event_date ? parseISO(event.event_date) : null);
               
               const isScopeOpen = scopeStartTime && now >= scopeStartTime;
-              // --- END OF FIX ---
 
               return (
                   <Card className="border-green-500">
@@ -433,7 +466,6 @@ function EventDetailContent() {
                       <CardContent>
                           <p className="text-gray-300">We look forward to seeing you at the event. You will receive further details via email.</p>
                           
-                          {/* --- START OF FIX: Enter Workspace Button --- */}
                           {isHackathon && (
                             <div className="mt-6 pt-4 border-t border-border">
                                 {isScopeOpen ? (
@@ -457,7 +489,6 @@ function EventDetailContent() {
                                 )}
                             </div>
                           )}
-                          {/* --- END OF FIX --- */}
                       </CardContent>
                   </Card>
               )
@@ -572,7 +603,6 @@ function EventDetailContent() {
                         eventId={params.id}
                         formData={formData} 
                         onFormChange={setAndStoreFormData} 
-                        // Pass fee info to DynamicForm button
                         submitLabel={event.is_paid && event.registration_fee > 0 ? `Pay ₹${event.registration_fee} & Register` : 'Register Now'}
                     />
                 </CardContent>
@@ -616,9 +646,7 @@ function EventDetailContent() {
                     <div>
                       <CardTitle className="text-3xl mb-2">{event.title}</CardTitle>
                       
-                      {/* NEW: Metadata Row with Event Type */}
                       <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-gray-400">
-                        {/* Event Type */}
                         <div className="flex items-center">
                           <Tag size={16} className="mr-2 text-brand-red" />
                           <span className="capitalize">{event.event_type?.replace('_', ' ') || 'Event'}</span>
@@ -634,7 +662,6 @@ function EventDetailContent() {
                             <span>{formattedTime}</span>
                           </div>
                         )}
-                         {/* Fee Tag */}
                          {event.is_paid && (
                             <div className="flex items-center text-green-400 font-semibold">
                                 <IndianRupee size={16} className="mr-1" />
@@ -679,7 +706,6 @@ function EventDetailContent() {
   )
 }
 
-// We wrap the default export in Suspense to allow useParams()
 export default function EventDetailPage() {
   return (
     <Suspense fallback={

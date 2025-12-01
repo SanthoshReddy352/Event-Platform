@@ -1,5 +1,3 @@
-// app/auth/page.js
-
 'use client'
 
 import { useState, useEffect, Suspense } from 'react'
@@ -18,11 +16,9 @@ import { useAuth } from '@/context/AuthContext'
 import { Github } from 'lucide-react'
 import LastWordGradientText from '@/components/LastWordGradientText'
 
-// This component handles the ?redirect= search param
 function AuthPageWithSuspense() {
   const searchParams = useSearchParams()
   const redirectEventId = searchParams.get('redirect')
-  // If a redirect URL is provided, use it. Otherwise, default to /events.
   const finalRedirect = redirectEventId ? `/events/${redirectEventId}` : '/events';
 
   return <ParticipantAuthPage finalRedirect={finalRedirect} />
@@ -35,8 +31,37 @@ function ParticipantAuthPage({ finalRedirect }) {
   const [loading, setLoading] = useState(false)
   const [sessionLoading, setSessionLoading] = useState(true)
 
-  const [loginData, setLoginData] = useState({ email: '', password: '' })
-  const [signupData, setSignupData] = useState({ email: '', password: '', confirmPassword: '' })
+  // --- PERSISTENCE ---
+  const LOGIN_KEY = 'auth_login_email';
+  const SIGNUP_KEY = 'auth_signup_email';
+
+  const [loginData, setLoginData] = useState(() => {
+    if (typeof window !== 'undefined') {
+        return { email: window.sessionStorage.getItem(LOGIN_KEY) || '', password: '' };
+    }
+    return { email: '', password: '' };
+  })
+  
+  const [signupData, setSignupData] = useState(() => {
+    if (typeof window !== 'undefined') {
+        return { email: window.sessionStorage.getItem(SIGNUP_KEY) || '', password: '', confirmPassword: '' };
+    }
+    return { email: '', password: '', confirmPassword: '' };
+  })
+
+  // Save emails to storage
+  useEffect(() => {
+      if (typeof window !== 'undefined') {
+          window.sessionStorage.setItem(LOGIN_KEY, loginData.email);
+      }
+  }, [loginData.email]);
+
+  useEffect(() => {
+      if (typeof window !== 'undefined') {
+          window.sessionStorage.setItem(SIGNUP_KEY, signupData.email);
+      }
+  }, [signupData.email]);
+
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('') 
   const [currentTab, setCurrentTab] = useState('login')
@@ -46,7 +71,6 @@ function ParticipantAuthPage({ finalRedirect }) {
   const [resetMessage, setResetMessage] = useState('')
   const [isResetting, setIsResetting] = useState(false)
 
-  // This useEffect redirects the user if they are already logged in
   useEffect(() => {
     if (!authLoading) {
       if (user) {
@@ -70,6 +94,11 @@ function ParticipantAuthPage({ finalRedirect }) {
       })
 
       if (loginError) throw loginError
+
+      // Clear persistence on success
+      if (typeof window !== 'undefined') {
+          window.sessionStorage.removeItem(LOGIN_KEY);
+      }
 
     } catch (error) {
       setError(error.message)
@@ -121,6 +150,11 @@ function ParticipantAuthPage({ finalRedirect }) {
       }
 
       setSuccess('Sign up successful! Please check your email to confirm your account.')
+      
+      // Clear persistence on success
+      if (typeof window !== 'undefined') {
+          window.sessionStorage.removeItem(SIGNUP_KEY);
+      }
       setSignupData({ email: '', password: '', confirmPassword: '' })
       setCurrentTab('login'); 
 
@@ -131,18 +165,14 @@ function ParticipantAuthPage({ finalRedirect }) {
     }
   }
 
-  // --- UPDATED FOR OPTION 2: MAGIC LINK FLOW ---
   const handleForgotPassword = async (e) => {
     e.preventDefault() 
     setIsResetting(true)
     setResetMessage('')
     try {
-      // We use signInWithOtp (Magic Link) instead of resetPasswordForEmail.
-      // This ensures the user is simply logged in when they click the link.
       const { error: otpError } = await supabase.auth.signInWithOtp({
         email: resetEmail,
         options: {
-          // Redirect strictly to events page after login
           emailRedirectTo: `${window.location.origin}/events`, 
         },
       })
@@ -156,7 +186,6 @@ function ParticipantAuthPage({ finalRedirect }) {
       setIsResetting(false)
     }
   }
-  // --- END UPDATE ---
 
   if (sessionLoading || authLoading) {
     return (
@@ -439,7 +468,6 @@ function ParticipantAuthPage({ finalRedirect }) {
   )
 }
 
-// We wrap the default export in Suspense to allow useSearchParams()
 export default function AuthPage() {
   return (
     <Suspense fallback={

@@ -1,4 +1,3 @@
-// app/(main)/admin/events/[id]/edit/page.js
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -18,6 +17,8 @@ function EditEventContent() {
   const [eventData, setEventData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  
+  const STORAGE_KEY = `editEventForm-${id}`;
 
   // Fetch Event Data
   useEffect(() => {
@@ -25,7 +26,6 @@ function EditEventContent() {
       if (!id) return;
       
       try {
-        // Fetch specific fields or * for all
         const response = await fetch(`/api/events/${id}`);
         const data = await response.json();
         
@@ -62,6 +62,10 @@ function EditEventContent() {
 
       const data = await response.json()
       if (data.success) {
+        // Clear storage on successful update
+        if (typeof window !== 'undefined') {
+            window.sessionStorage.removeItem(STORAGE_KEY);
+        }
         alert('Event updated successfully!')
         router.push('/admin/events')
       } else {
@@ -99,7 +103,8 @@ function EditEventContent() {
       <EventForm 
         initialData={eventData} 
         onSubmit={handleSubmit} 
-        isSubmitting={isSubmitting} 
+        isSubmitting={isSubmitting}
+        storageKey={STORAGE_KEY} 
       />
     </div>
   )

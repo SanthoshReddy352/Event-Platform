@@ -11,6 +11,7 @@ import { supabase } from '@/lib/supabase/client'
 function NewEventContent() {
   const router = useRouter()
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const STORAGE_KEY = 'newEventForm';
 
   const handleSubmit = async (formData) => {
     setIsSubmitting(true)
@@ -28,6 +29,10 @@ function NewEventContent() {
 
       const data = await response.json()
       if (data.success) {
+        // Clear storage on successful creation
+        if (typeof window !== 'undefined') {
+            window.sessionStorage.removeItem(STORAGE_KEY);
+        }
         // Redirect to the Dashboard so they can add problems immediately
         router.push(`/admin/events/${data.event.id}`) 
       } else {
@@ -48,7 +53,11 @@ function NewEventContent() {
         Back to Events
       </Button>
       
-      <EventForm onSubmit={handleSubmit} isSubmitting={isSubmitting} />
+      <EventForm 
+        onSubmit={handleSubmit} 
+        isSubmitting={isSubmitting}
+        storageKey={STORAGE_KEY} 
+      />
     </div>
   )
 }

@@ -7,20 +7,17 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/context/AuthContext'
-import { Loader2, ShieldCheck, KeyRound } from 'lucide-react' // Added Icons
+import { Loader2, ShieldCheck, KeyRound } from 'lucide-react'
 import LastWordGradientText from '@/components/LastWordGradientText'
 
 export default function ProfilePage() {
   const { user, loading: authLoading } = useAuth()
-  const [loading, setLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   
-  // --- PASSWORD UPDATE STATE ---
   const [passwordData, setPasswordData] = useState({ newPassword: '', confirmPassword: '' })
   const [passwordStatus, setPasswordStatus] = useState({ type: '', message: '' })
   const [isPasswordSubmitting, setIsPasswordSubmitting] = useState(false)
 
-  // --- START OF DATA PERSISTENCE ---
   const storageKey = 'userProfileForm';
   const defaultState = { name: '', phone_number: '', email: '' };
 
@@ -29,12 +26,19 @@ export default function ProfilePage() {
     const saved = window.sessionStorage.getItem(storageKey);
     return saved ? JSON.parse(saved) : defaultState;
   });
-  // --- END OF DATA PERSISTENCE ---
+
+  // 1. Initialize loading to false if we have data in storage
+  const [loading, setLoading] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    return !window.sessionStorage.getItem(storageKey);
+  });
 
   const fetchProfile = useCallback(async () => {
     if (!user) return
     
-    setLoading(true)
+    // 2. REMOVED: setLoading(true)
+    // This allows the cached profile to remain visible while we update in the background.
+    
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) throw new Error('Not authenticated')
@@ -48,16 +52,12 @@ export default function ProfilePage() {
       const data = await response.json()
       
       if (data.success) {
-        // --- START OF DATA PERSISTENCE ---
-        const savedData = window.sessionStorage.getItem(storageKey);
-        if (!savedData) {
-          setProfile({
+        // Only update if data changed (React handles this efficiently usually, but good to note)
+        setProfile({
             name: data.profile.name || '',
             phone_number: data.profile.phone_number || '',
             email: data.profile.email || '',
-          });
-        }
-        // --- END OF DATA PERSISTENCE ---
+        });
       } else {
         throw new Error(data.error)
       }
@@ -72,13 +72,11 @@ export default function ProfilePage() {
     fetchProfile()
   }, [fetchProfile])
 
-  // --- START OF DATA PERSISTENCE ---
   useEffect(() => {
     if (typeof window !== 'undefined' && !loading) {
       window.sessionStorage.setItem(storageKey, JSON.stringify(profile));
     }
   }, [profile, loading]);
-  // --- END OF DATA PERSISTENCE ---
 
   const handleChange = (e) => {
     const { name, value } = e.target
@@ -88,7 +86,6 @@ export default function ProfilePage() {
     }))
   }
 
-  // --- PASSWORD HANDLERS ---
   const handlePasswordChange = (e) => {
     const { name, value } = e.target
     setPasswordData(prev => ({ ...prev, [name]: value }))
@@ -113,14 +110,13 @@ export default function ProfilePage() {
         if (error) throw error
 
         setPasswordStatus({ type: 'success', message: 'Password updated successfully!' })
-        setPasswordData({ newPassword: '', confirmPassword: '' }) // Clear fields
+        setPasswordData({ newPassword: '', confirmPassword: '' })
     } catch (error) {
         setPasswordStatus({ type: 'error', message: error.message })
     } finally {
         setIsPasswordSubmitting(false)
     }
   }
-  // -------------------------
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -146,13 +142,8 @@ export default function ProfilePage() {
       
       if (data.success) {
         alert('Profile updated successfully!')
-        
-        // --- START OF DATA PERSISTENCE ---
-        if (typeof window !== 'undefined') {
-          window.sessionStorage.removeItem(storageKey);
-        }
-        // --- END OF DATA PERSISTENCE ---
-
+        // We generally want to KEEP the storage, not remove it, so the user can navigate back and forth.
+        // I removed the logic that deletes the storage key on submit.
       } else {
         throw new Error(data.error)
       }

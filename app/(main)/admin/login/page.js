@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import GradientText from '@/components/GradientText'
@@ -14,7 +14,23 @@ import LastWordGradientText from '@/components/LastWordGradientText'
 export default function AdminLoginPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
-  const [loginData, setLoginData] = useState({ email: '', password: '' })
+  
+  // --- PERSISTENCE ---
+  const STORAGE_KEY = 'admin_login_email';
+  const [loginData, setLoginData] = useState(() => {
+     if (typeof window !== 'undefined') {
+        return { email: window.sessionStorage.getItem(STORAGE_KEY) || '', password: '' };
+     }
+     return { email: '', password: '' };
+  })
+
+  // Save email to storage
+  useEffect(() => {
+      if (typeof window !== 'undefined') {
+          window.sessionStorage.setItem(STORAGE_KEY, loginData.email);
+      }
+  }, [loginData.email]);
+
   const [error, setError] = useState('')
 
   const handleLogin = async (e) => {
@@ -47,6 +63,10 @@ export default function AdminLoginPage() {
       const isAdmin = userRole === 'admin' || userRole === 'super_admin';
       
       if (isAdmin) {
+          // Clear storage on success
+          if (typeof window !== 'undefined') {
+              window.sessionStorage.removeItem(STORAGE_KEY);
+          }
           router.push('/admin')
       } else {
           await supabase.auth.signOut() 
@@ -61,19 +81,16 @@ export default function AdminLoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background py-12 px-4"> {/* CHANGED */}
+    <div className="min-h-screen flex items-center justify-center bg-background py-12 px-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          {/* --- START OF THEME CHANGE --- */}
-          <img src="/logo.jpg" alt="EventX Logo" className="w-48 mx-auto mb-4" /> {/* CHANGED */}
+          <img src="/logo.jpg" alt="EventX Logo" className="w-48 mx-auto mb-4" />
           <h1 className="text-3xl font-bold">
             <LastWordGradientText>Admin Portal</LastWordGradientText>
           </h1>
-          <p className="text-gray-400 mt-2">Manage events and participants. Contact a super-admin to get access.</p> {/* CHANGED */}
-          {/* --- END OF THEME CHANGE --- */}
+          <p className="text-gray-400 mt-2">Manage events and participants. Contact a super-admin to get access.</p>
         </div>
 
-        {/* Keeping Tabs structure simple for single form */}
         <Tabs defaultValue="login" className="w-full">
           <TabsContent value="login">
             <Card>
@@ -84,7 +101,7 @@ export default function AdminLoginPage() {
               <CardContent>
                 <form onSubmit={handleLogin} className="space-y-4">
                   {error && (
-                    <div className="bg-red-900/50 border border-red-700 text-red-300 px-4 py-3 rounded"> {/* CHANGED */}
+                    <div className="bg-red-900/50 border border-red-700 text-red-300 px-4 py-3 rounded">
                       {error}
                     </div>
                   )}
@@ -109,15 +126,13 @@ export default function AdminLoginPage() {
                       required
                     />
                   </div>
-                  {/* --- START OF THEME CHANGE --- */}
                   <Button
                     type="submit"
-                    className="w-full bg-brand-gradient text-white font-semibold hover:opacity-90 transition-opacity" // CHANGED
+                    className="w-full bg-brand-gradient text-white font-semibold hover:opacity-90 transition-opacity"
                     disabled={loading}
                   >
                     {loading ? 'Logging in...' : 'Login'}
                   </Button>
-                  {/* --- END OF THEME CHANGE --- */}
                 </form>
               </CardContent>
             </Card>

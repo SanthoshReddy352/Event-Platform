@@ -30,8 +30,32 @@ const toDateTimeLocal = (date) => {
   );
 };
 
-export default function EventForm({ onSubmit, initialData = null, isSubmitting = false }) {
-  const [formData, setFormData] = useState({
+// Helper to map DB data to Form State
+const mapDataToForm = (data) => ({
+    title: data.title || '',
+    description: data.description || '',
+    banner_url: data.banner_url || '',
+    
+    event_date: data.event_date ? new Date(data.event_date) : null,
+    event_end_date: data.event_end_date ? new Date(data.event_end_date) : null,
+    registration_start: data.registration_start ? new Date(data.registration_start) : null,
+    registration_end: data.registration_end ? new Date(data.registration_end) : null,
+    
+    is_active: data.is_active || false,
+    registration_open: data.registration_open || false,
+    is_paid: data.is_paid || false,
+    registration_fee: data.registration_fee || 0,
+    
+    event_type: data.event_type || 'other',
+    problem_selection_start: data.problem_selection_start ? new Date(data.problem_selection_start) : null,
+    problem_selection_end: data.problem_selection_end ? new Date(data.problem_selection_end) : null,
+    ppt_template_url: data.ppt_template_url || '',
+    ppt_release_time: data.ppt_release_time ? new Date(data.ppt_release_time) : null,
+    submission_start: data.submission_start ? new Date(data.submission_start) : null,
+    submission_end: data.submission_end ? new Date(data.submission_end) : null,
+});
+
+const defaultFormState = {
     title: '',
     description: '',
     banner_url: '',
@@ -43,47 +67,62 @@ export default function EventForm({ onSubmit, initialData = null, isSubmitting =
     registration_open: false,
     is_paid: false,
     registration_fee: 0,
-    // Scope Fields
     event_type: 'other',
-    // Hackathon Specifics
     problem_selection_start: null,
     problem_selection_end: null,
     ppt_template_url: '',
     ppt_release_time: null,
     submission_start: null,
     submission_end: null,
-  })
+};
 
-  // When initialData is provided (for editing), populate the form state
+export default function EventForm({ onSubmit, initialData = null, isSubmitting = false, storageKey }) {
+  
+  const [formData, setFormData] = useState(() => {
+    // 1. Try to load from storage first (Persistence)
+    if (typeof window !== 'undefined' && storageKey) {
+        const saved = window.sessionStorage.getItem(storageKey);
+        if (saved) {
+            const parsed = JSON.parse(saved);
+            // Rehydrate date strings back to Date objects
+            const dateFields = [
+                'event_date', 'event_end_date', 'registration_start', 'registration_end',
+                'problem_selection_start', 'problem_selection_end', 'ppt_release_time',
+                'submission_start', 'submission_end'
+            ];
+            dateFields.forEach(field => {
+                if (parsed[field]) parsed[field] = new Date(parsed[field]);
+            });
+            return { ...defaultFormState, ...parsed };
+        }
+    }
+
+    // 2. If no storage, use initialData (Fix for Edit Page)
+    if (initialData) {
+        return mapDataToForm(initialData);
+    }
+
+    // 3. Fallback to default
+    return defaultFormState;
+  });
+
+  // Save to storage on every change
+  useEffect(() => {
+    if (typeof window !== 'undefined' && storageKey) {
+        window.sessionStorage.setItem(storageKey, JSON.stringify(formData));
+    }
+  }, [formData, storageKey]);
+
+  // Handle case where initialData loads *after* mount (unlikely given parent loader, but safe to keep)
   useEffect(() => {
     if (initialData) {
-      setFormData({
-        title: initialData.title || '',
-        description: initialData.description || '',
-        banner_url: initialData.banner_url || '',
-        
-        // Convert ISO strings to Date objects
-        event_date: initialData.event_date ? new Date(initialData.event_date) : null,
-        event_end_date: initialData.event_end_date ? new Date(initialData.event_end_date) : null,
-        registration_start: initialData.registration_start ? new Date(initialData.registration_start) : null,
-        registration_end: initialData.registration_end ? new Date(initialData.registration_end) : null,
-        
-        is_active: initialData.is_active || false,
-        registration_open: initialData.registration_open || false,
-        is_paid: initialData.is_paid || false,
-        registration_fee: initialData.registration_fee || 0,
-        
-        // New Fields
-        event_type: initialData.event_type || 'other',
-        problem_selection_start: initialData.problem_selection_start ? new Date(initialData.problem_selection_start) : null,
-        problem_selection_end: initialData.problem_selection_end ? new Date(initialData.problem_selection_end) : null,
-        ppt_template_url: initialData.ppt_template_url || '',
-        ppt_release_time: initialData.ppt_release_time ? new Date(initialData.ppt_release_time) : null,
-        submission_start: initialData.submission_start ? new Date(initialData.submission_start) : null,
-        submission_end: initialData.submission_end ? new Date(initialData.submission_end) : null,
-      })
+      const hasSavedData = typeof window !== 'undefined' && storageKey && window.sessionStorage.getItem(storageKey);
+      // Only overwrite if we don't have saved work in progress
+      if (!hasSavedData) {
+        setFormData(mapDataToForm(initialData));
+      }
     }
-  }, [initialData])
+  }, [initialData, storageKey]);
 
   const handleChange = (e) => {
     const { name, value } = e.target
@@ -100,7 +139,6 @@ export default function EventForm({ onSubmit, initialData = null, isSubmitting =
     }))
   }
 
-  // Handle datetime-local input changes
   const handleDateTimeLocalChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({
@@ -138,7 +176,6 @@ export default function EventForm({ onSubmit, initialData = null, isSubmitting =
       return false;
     }
 
-    // Registration should generally end before the event ends
     if (registration_end && event_end_date && registration_end > event_end_date) {
       alert("Registration cannot end after the event has ended.");
       return false;
@@ -163,7 +200,6 @@ export default function EventForm({ onSubmit, initialData = null, isSubmitting =
     
     if (!validateForm()) return;
 
-    // Convert Date objects back to ISO strings for the database
     const submissionData = {
       ...formData,
       event_date: isValidDate(formData.event_date) ? formData.event_date.toISOString() : null,
@@ -171,14 +207,12 @@ export default function EventForm({ onSubmit, initialData = null, isSubmitting =
       registration_start: isValidDate(formData.registration_start) ? formData.registration_start.toISOString() : null,
       registration_end: isValidDate(formData.registration_end) ? formData.registration_end.toISOString() : null,
       
-      // Hackathon Dates
       problem_selection_start: isValidDate(formData.problem_selection_start) ? formData.problem_selection_start.toISOString() : null,
       problem_selection_end: isValidDate(formData.problem_selection_end) ? formData.problem_selection_end.toISOString() : null,
       ppt_release_time: isValidDate(formData.ppt_release_time) ? formData.ppt_release_time.toISOString() : null,
       submission_start: isValidDate(formData.submission_start) ? formData.submission_start.toISOString() : null,
       submission_end: isValidDate(formData.submission_end) ? formData.submission_end.toISOString() : null,
 
-      // Ensure fee is a number
       registration_fee: formData.is_paid ? parseFloat(formData.registration_fee) : 0,
     }
     

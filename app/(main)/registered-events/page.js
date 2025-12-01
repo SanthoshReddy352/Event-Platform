@@ -1,4 +1,3 @@
-// app/(main)/registered-events/page.js
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -11,13 +10,29 @@ import { useAuth } from '@/context/AuthContext'
 import { supabase } from '@/lib/supabase/client'
 
 export default function RegisteredEventsPage() {
-  const [events, setEvents] = useState([])
-  const [loading, setLoading] = useState(true)
+  const STORAGE_KEY = 'registeredEvents';
+
+  // 1. Initialize events from sessionStorage if available
+  const [events, setEvents] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = sessionStorage.getItem(STORAGE_KEY);
+      if (saved) return JSON.parse(saved);
+    }
+    return [];
+  });
+
+  // 2. Only show loading initially if we DON'T have data in storage
+  const [loading, setLoading] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return !sessionStorage.getItem(STORAGE_KEY);
+    }
+    return true;
+  });
+
   const { user, loading: authLoading } = useAuth()
   const router = useRouter()
 
   useEffect(() => {
-    // Redirect if not logged in and auth check is done
     if (!authLoading && !user) {
       router.push('/auth')
     }
@@ -27,9 +42,10 @@ export default function RegisteredEventsPage() {
     async function fetchRegisteredEvents() {
       if (!user) return;
       
-      setLoading(true)
+      // Note: We DO NOT set loading(true) here. 
+      // This allows the cached data to show while we fetch updates in the background.
+      
       try {
-        // 1. Get IDs of events the user is participating in
         const { data: participations, error: partError } = await supabase
           .from('participants')
           .select('event_id')
@@ -39,23 +55,21 @@ export default function RegisteredEventsPage() {
 
         if (!participations || participations.length === 0) {
           setEvents([]);
+          sessionStorage.setItem(STORAGE_KEY, JSON.stringify([])); // Save empty state
           setLoading(false);
           return;
         }
 
         const eventIds = participations.map(p => p.event_id);
 
-        // 2. Fetch the actual event details
         const { data: eventsData, error: eventsError } = await supabase
           .from('events')
           .select('*')
           .in('id', eventIds)
-          .order('event_date', { ascending: true }); // Show upcoming first
+          .order('event_date', { ascending: true });
 
         if (eventsError) throw eventsError;
 
-        // 3. Fetch club details (creators) manually to populate the EventCard 'club' prop
-        // The 'events' table links to 'admin_users' via 'created_by' = 'user_id'
         const creatorIds = [...new Set(eventsData.map(e => e.created_by))];
         
         const { data: clubsData, error: clubsError } = await supabase
@@ -65,13 +79,14 @@ export default function RegisteredEventsPage() {
 
         if (clubsError) throw clubsError;
 
-        // 4. Merge club data into events
         const mergedEvents = eventsData.map(event => {
             const club = clubsData.find(c => c.user_id === event.created_by);
             return { ...event, club };
         });
 
         setEvents(mergedEvents);
+        // 3. Save the fresh data to sessionStorage
+        sessionStorage.setItem(STORAGE_KEY, JSON.stringify(mergedEvents));
 
       } catch (error) {
         console.error('Error fetching registered events:', error.message);
