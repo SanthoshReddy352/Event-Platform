@@ -4,11 +4,10 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import ProtectedRoute from '@/components/ProtectedRoute'
-import GradientText from '@/components/GradientText'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Plus, Edit, Trash2, Users, FileEdit } from 'lucide-react'
+import { Plus, Edit, Trash2, Users, FileEdit, LayoutDashboard } from 'lucide-react'
 import { format } from 'date-fns'
 import { useAuth } from '@/context/AuthContext' 
 import { supabase } from '@/lib/supabase/client' 
@@ -24,7 +23,6 @@ function AdminEventsContent() {
     if (user) {
       fetchEvents()
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, isSuperAdmin]) 
 
   const fetchEvents = async () => {
@@ -34,9 +32,8 @@ function AdminEventsContent() {
       if (data.success) {
         const allEvents = data.events;
         if (isSuperAdmin) {
-          setEvents(allEvents); // Super admin sees all events
+          setEvents(allEvents)
         } else {
-          // Normal admin sees only their own events
           const myEvents = allEvents.filter(event => event.created_by === user.id);
           setEvents(myEvents);
         }
@@ -52,111 +49,79 @@ function AdminEventsContent() {
     if (!confirm('Are you sure you want to delete this event?')) return
 
     try {
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError || !session) {
-        alert('Authentication error. Please log in again.');
-        return;
-      }
-
+      const { data: { session } } = await supabase.auth.getSession();
       const response = await fetch(`/api/events/${id}`, {
         method: 'DELETE',
-        headers: {
-            'Authorization': `Bearer ${session.access_token}`
-        }
+        headers: { 'Authorization': `Bearer ${session.access_token}` }
       })
 
-      const data = await response.json()
-      if (data.success) {
+      if (await response.json().then(d => d.success)) {
         fetchEvents()
       } else {
-        alert(`Failed to delete event: ${data.error}`)
+        alert('Failed to delete event')
       }
     } catch (error) {
-      console.error('Error deleting event:', error)
-      alert('An error occurred')
+      console.error('Error deleting:', error)
     }
   }
 
-  if (loading) {
-    return (
-      <div className="text-center py-12">
-        <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-brand-red"></div> {/* CHANGED */}
-      </div>
-    )
-  }
+  if (loading) return <div className="text-center py-12">Loading...</div>
 
   return (
     <div className="container mx-auto px-4 py-12">
       <div className="flex justify-between items-center mb-8">
         <div>
-          <h1 className="text-4xl font-bold">
-            <LastWordGradientText>Manage Events</LastWordGradientText>
-          </h1>
-          <p className="text-gray-400 mt-2">Create and manage hackathon events</p> {/* CHANGED */}
+          <h1 className="text-4xl font-bold"><LastWordGradientText>Manage Events</LastWordGradientText></h1>
+          <p className="text-gray-400 mt-2">Create and manage hackathon events</p>
         </div>
         <Link href="/admin/events/new">
-          {/* --- START OF THEME CHANGE --- */}
-          <Button className="bg-brand-gradient text-white font-semibold hover:opacity-90 transition-opacity"> {/* CHANGED */}
+          <Button className="bg-brand-gradient text-white">
             <Plus size={20} className="mr-2" />
             Create Event
           </Button>
-          {/* --- END OF THEME CHANGE --- */}
         </Link>
       </div>
 
       {events.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
-            <p className="text-gray-400 mb-4"> {/* CHANGED */}
-              {isSuperAdmin ? "No events found in the system." : "You have not created any events yet."}
-            </p>
-            <Link href="/admin/events/new">
-              {/* --- START OF THEME CHANGE --- */}
-              <Button className="bg-brand-gradient text-white font-semibold hover:opacity-90 transition-opacity"> {/* CHANGED */}
-                Create Your First Event
-              </Button>
-              {/* --- END OF THEME CHANGE --- */}
-            </Link>
+            <p className="text-gray-400 mb-4">No events found.</p>
+            <Link href="/admin/events/new"><Button>Create Your First Event</Button></Link>
           </CardContent>
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {events.map((event) => {
-            // (Logic unchanged)
             const canManage = isSuperAdmin || (user && event.created_by === user.id);
-            const now = new Date();
-            const eventEndDate = event.event_end_date ? new Date(event.event_end_date) : null;
-            const isCompleted = eventEndDate && now > eventEndDate;
+            const isCompleted = event.event_end_date && new Date() > new Date(event.event_end_date);
             
             return (
-              <Card key={event.id} className="flex flex-col">
+              <Card key={event.id} className="flex flex-col hover:border-brand-red/50 transition-colors">
                 <CardHeader>
                   <div className="flex justify-between items-start mb-2">
-                    <CardTitle className="text-lg">{event.title}</CardTitle>
+                    {/* Link to Dashboard */}
+                    <Link href={`/admin/events/${event.id}`} className="hover:underline">
+                        <CardTitle className="text-lg">{event.title}</CardTitle>
+                    </Link>
                     <div className="flex gap-2">
-                      {isCompleted ? (
-                        <Badge className="bg-gray-500">Completed</Badge>
-                      ) : event.is_active ? (
-                        <Badge className="bg-green-500">Active</Badge>
-                      ) : (
-                        <Badge variant="outline">Inactive</Badge>
-                      )}
-                      
-                      {!isCompleted && event.registration_open && (
-                        <Badge className="bg-blue-500">Open</Badge>
-                      )}
+                       {event.event_type === 'hackathon' && <Badge variant="secondary">Hackathon</Badge>}
+                       {event.is_active ? <Badge className="bg-green-500">Active</Badge> : <Badge variant="outline">Inactive</Badge>}
                     </div>
                   </div>
-                  <CardDescription className="line-clamp-2">
-                    {event.description || 'No description'}
-                  </CardDescription>
-                  {event.event_date && (
-                    <p className="text-sm text-gray-500 mt-2">
-                      {format(new Date(event.event_date), 'MMMM dd, yyyy')}
-                    </p>
-                  )}
+                  <CardDescription className="line-clamp-2">{event.description || 'No description'}</CardDescription>
+                  {event.event_date && <p className="text-sm text-gray-500 mt-2">{format(new Date(event.event_date), 'MMM dd, yyyy')}</p>}
                 </CardHeader>
+                
                 <CardFooter className="mt-auto flex flex-col gap-2">
+                  {/* Dashboard Link - Added at top */}
+                  <Link href={`/admin/events/${event.id}`} className="w-full">
+                    <Button className="w-full bg-slate-900 text-white hover:bg-slate-800" disabled={!canManage}>
+                        <LayoutDashboard size={16} className="mr-2" />
+                        Open Dashboard
+                    </Button>
+                  </Link>
+
+                  {/* Original 4-button Grid restored below */}
                   <div className="grid grid-cols-2 gap-2 w-full">
                     <Link href={`/admin/events/${event.id}/edit`} className="w-full">
                       <Button variant="outline" className="w-full" size="sm" disabled={!canManage}>
@@ -202,9 +167,5 @@ function AdminEventsContent() {
 }
 
 export default function AdminEventsPage() {
-  return (
-    <ProtectedRoute>
-      <AdminEventsContent />
-    </ProtectedRoute>
-  )
+  return <ProtectedRoute><AdminEventsContent /></ProtectedRoute>
 }

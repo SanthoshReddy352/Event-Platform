@@ -13,7 +13,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- ====================================================================
 
 -- A. Events Table
--- Includes standard event details + Payment configuration fields
+-- Includes standard details, Payment config, and Hackathon Scope fields
 CREATE TABLE IF NOT EXISTS events (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     title TEXT NOT NULL,
@@ -22,6 +22,9 @@ CREATE TABLE IF NOT EXISTS events (
     event_date TIMESTAMP WITH TIME ZONE,
     event_end_date TIMESTAMP WITH TIME ZONE,
     is_active BOOLEAN DEFAULT true,
+    
+    -- Event Scope Configuration
+    event_type TEXT DEFAULT 'other', -- 'hackathon', 'mcq', 'other'
     
     -- Registration Control
     registration_open BOOLEAN DEFAULT true,
@@ -33,13 +36,33 @@ CREATE TABLE IF NOT EXISTS events (
     is_paid BOOLEAN DEFAULT FALSE,
     registration_fee NUMERIC DEFAULT 0,
 
+    -- Hackathon Scope: Specific Timings & URLs
+    problem_selection_start TIMESTAMP WITH TIME ZONE,
+    problem_selection_end TIMESTAMP WITH TIME ZONE,
+    ppt_template_url TEXT,         -- URL to the admin-uploaded template
+    ppt_release_time TIMESTAMP WITH TIME ZONE,
+    submission_start TIMESTAMP WITH TIME ZONE,
+    submission_end TIMESTAMP WITH TIME ZONE,
+    submission_form_fields JSONB DEFAULT '[]'::jsonb, -- Separate from registration form
+
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL
 );
 
--- B. Participants Table
--- Tracks user registrations + Payment Status
+-- B. Problem Statements Table (New for Hackathon Scope)
+-- Stores the challenges/problems participants can select
+CREATE TABLE IF NOT EXISTS problem_statements (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    event_id UUID REFERENCES events(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    description TEXT,
+    max_selections INTEGER DEFAULT 1, -- Maximum number of teams/participants that can select this
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- C. Participants Table
+-- Tracks user registrations, Payment Status, and Hackathon progress
 CREATE TABLE IF NOT EXISTS participants (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     event_id UUID REFERENCES events(id) ON DELETE CASCADE,
@@ -47,6 +70,11 @@ CREATE TABLE IF NOT EXISTS participants (
     responses JSONB NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending', -- 'pending', 'approved', 'rejected'
     
+    -- Hackathon Scope: Progress Tracking
+    selected_problem_id UUID REFERENCES problem_statements(id),
+    submission_data JSONB,         -- Stores the answers to the final submission form
+    submitted_at TIMESTAMP WITH TIME ZONE,
+
     -- Payment Transaction Details
     payment_id TEXT,               -- Razorpay Payment ID
     order_id TEXT,                 -- Razorpay Order ID
@@ -61,7 +89,7 @@ CREATE TABLE IF NOT EXISTS participants (
     CONSTRAINT participant_status_check CHECK (status IN ('pending', 'approved', 'rejected'))
 );
 
--- C. Contact Submissions Table
+-- D. Contact Submissions Table
 CREATE TABLE IF NOT EXISTS contact_submissions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name TEXT NOT NULL,
@@ -70,7 +98,7 @@ CREATE TABLE IF NOT EXISTS contact_submissions (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- D. Admin Users Table (UPDATED FOR DIRECT PAYMENTS)
+-- E. Admin Users Table
 -- Stores Admin roles, Club details, and Club's OWN Razorpay Keys
 CREATE TABLE IF NOT EXISTS admin_users (
     user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -81,7 +109,6 @@ CREATE TABLE IF NOT EXISTS admin_users (
     club_logo_url TEXT,
     
     -- Razorpay API Keys (The Club's Own Keys)
-    -- This allows payments to go directly to the club, not the platform.
     razorpay_key_id TEXT, 
     razorpay_key_secret TEXT,
 
@@ -90,7 +117,7 @@ CREATE TABLE IF NOT EXISTS admin_users (
     CONSTRAINT admin_role_check CHECK (role IN ('admin', 'super_admin'))
 );
 
--- E. Profiles Table (General Users)
+-- F. Profiles Table (General Users)
 CREATE TABLE IF NOT EXISTS profiles (
     id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     name TEXT,
@@ -117,12 +144,55 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- Function: Check and Select Problem (Concurrency Safe)
+-- Ensures limits are enforced even if multiple users click at the exact same moment
+CREATE OR REPLACE FUNCTION check_and_select_problem(p_user_id UUID, p_event_id UUID, p_problem_id UUID)
+RETURNS BOOLEAN AS $$
+DECLARE
+    current_count INTEGER;
+    max_limit INTEGER;
+    existing_selection UUID;
+BEGIN
+    -- 1. Check if user already selected a problem for this event
+    SELECT selected_problem_id INTO existing_selection
+    FROM participants
+    WHERE user_id = p_user_id AND event_id = p_event_id;
+
+    IF existing_selection IS NOT NULL THEN
+        RAISE EXCEPTION 'You have already selected a problem statement.';
+    END IF;
+
+    -- 2. Check current count for the requested problem
+    SELECT count(*) INTO current_count
+    FROM participants
+    WHERE selected_problem_id = p_problem_id;
+
+    -- 3. Get the limit
+    SELECT max_selections INTO max_limit
+    FROM problem_statements
+    WHERE id = p_problem_id;
+
+    -- 4. Validate
+    IF current_count >= max_limit THEN
+        RETURN FALSE; -- Limit reached
+    END IF;
+
+    -- 5. Update the participant record
+    UPDATE participants
+    SET selected_problem_id = p_problem_id
+    WHERE user_id = p_user_id AND event_id = p_event_id;
+
+    RETURN TRUE;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 -- ====================================================================
 -- 4. ROW LEVEL SECURITY (RLS) POLICIES
 -- ====================================================================
 
 -- Enable RLS on all tables
 ALTER TABLE events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE problem_statements ENABLE ROW LEVEL SECURITY;
 ALTER TABLE participants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE contact_submissions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE admin_users ENABLE ROW LEVEL SECURITY;
@@ -133,14 +203,19 @@ DROP POLICY IF EXISTS "Events are viewable by everyone" ON events;
 DROP POLICY IF EXISTS "Admins can create events" ON events;
 DROP POLICY IF EXISTS "Event owners or super admins can update events" ON events;
 DROP POLICY IF EXISTS "Event owners or super admins can delete events" ON events;
+
+DROP POLICY IF EXISTS "Public read problem statements" ON problem_statements;
+DROP POLICY IF EXISTS "Admins manage problem statements" ON problem_statements;
+
 DROP POLICY IF EXISTS "Participants can be created by authenticated users" ON participants;
 DROP POLICY IF EXISTS "Admins can view participants for events they own" ON participants;
 DROP POLICY IF EXISTS "Users can view their own participant records" ON participants;
 DROP POLICY IF EXISTS "Admins can update participants for events they own" ON participants;
+
 DROP POLICY IF EXISTS "Contact submissions can be created by anyone" ON contact_submissions;
 DROP POLICY IF EXISTS "Contact submissions are viewable by admins" ON contact_submissions;
 DROP POLICY IF EXISTS "Authenticated users can read their own admin status" ON admin_users;
-DROP POLICY IF EXISTS "Super admins can manage admin users" ON admin_users; 
+DROP POLICY IF EXISTS "Admins can update their own profile" ON admin_users; 
 DROP POLICY IF EXISTS "Users can view their own profile" ON profiles;
 DROP POLICY IF EXISTS "Users can create and update their own profile" ON profiles;
 
@@ -161,7 +236,16 @@ CREATE POLICY "Event owners or super admins can delete events"
     ON events FOR DELETE
     USING (public.get_admin_role() = 'super_admin' OR created_by = auth.uid());
 
--- B. Participants Policies
+-- B. Problem Statements Policies
+CREATE POLICY "Public read problem statements" 
+    ON problem_statements FOR SELECT 
+    USING (true);
+
+CREATE POLICY "Admins manage problem statements" 
+    ON problem_statements FOR ALL 
+    USING (public.get_admin_role() IS NOT NULL);
+
+-- C. Participants Policies
 CREATE POLICY "Participants can be created by authenticated users"
     ON participants FOR INSERT
     WITH CHECK (auth.uid() IS NOT NULL);
@@ -190,7 +274,7 @@ CREATE POLICY "Admins can update participants for events they own"
         ))
     );
 
--- C. Contact Submissions Policies
+-- D. Contact Submissions Policies
 CREATE POLICY "Contact submissions can be created by anyone"
     ON contact_submissions FOR INSERT
     WITH CHECK (true);
@@ -199,19 +283,17 @@ CREATE POLICY "Contact submissions are viewable by admins"
     ON contact_submissions FOR SELECT
     USING (public.get_admin_role() IS NOT NULL);
 
--- D. Admin Users Policies
--- Users can see their own admin profile (needed to check if they are an admin)
+-- E. Admin Users Policies
 CREATE POLICY "Authenticated users can read their own admin status"
     ON admin_users FOR SELECT
     USING (auth.uid() = user_id);
 
--- Admins can update their own profile (Club details, API Keys), Super Admins manage all
 CREATE POLICY "Admins can update their own profile"
     ON admin_users FOR UPDATE
     USING (public.get_admin_role() = 'super_admin' OR auth.uid() = user_id)
     WITH CHECK (public.get_admin_role() = 'super_admin' OR auth.uid() = user_id);
 
--- E. Profiles Policies
+-- F. Profiles Policies
 CREATE POLICY "Users can view their own profile"
     ON profiles FOR SELECT
     USING (auth.uid() = id);
@@ -261,3 +343,5 @@ CREATE INDEX IF NOT EXISTS idx_events_created_by ON events(created_by);
 CREATE INDEX IF NOT EXISTS idx_participants_event_id ON participants(event_id);
 CREATE INDEX IF NOT EXISTS idx_participants_user_id ON participants(user_id);
 CREATE INDEX IF NOT EXISTS idx_participants_status ON participants(status);
+-- New index for hackathon scope performance
+CREATE INDEX IF NOT EXISTS idx_problem_statements_event_id ON problem_statements(event_id);

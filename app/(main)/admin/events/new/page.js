@@ -1,186 +1,20 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import ProtectedRoute from '@/components/ProtectedRoute'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
+import EventForm from '@/components/EventForm' // Use the shared component
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
-import { Switch } from '@/components/ui/switch'
-import { Upload, Link as LinkIcon, ArrowLeft, Loader2, IndianRupee } from 'lucide-react'
-import { useDropzone } from 'react-dropzone'
+import { ArrowLeft } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
-import { useAuth } from '@/context/AuthContext' 
-
-// Helper to convert datetime-local string (from input) to ISO format (UTC)
-const toISOString = (dateTimeLocalString) => {
-    if (!dateTimeLocalString) return null;
-    return new Date(dateTimeLocalString).toISOString();
-}
-
-// Helper to get current datetime-local string
-const getCurrentDateTimeLocal = () => {
-  try {
-    const date = new Date();
-    const localDate = new Date(date.getTime() - (date.getTimezoneOffset() * 60000));
-    return localDate.toISOString().slice(0, 16);
-  } catch {
-    return '';
-  }
-}
-
-const storageKey = 'newEventFormData';
-const bannerUrlStorageKey = 'newEventBannerUrl';
 
 function NewEventContent() {
   const router = useRouter()
-  
-  const [formData, setFormData] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const savedData = window.sessionStorage.getItem(storageKey);
-      if (savedData) {
-        return JSON.parse(savedData);
-      }
-    }
-    // Return default state if nothing is saved
-    return {
-      title: '',
-      description: '',
-      event_date: '',
-      event_end_date: '',
-      is_active: false,
-      registration_open: true,
-      registration_start: getCurrentDateTimeLocal(),
-      registration_end: '',
-      banner_url: '',
-      is_paid: false,
-      registration_fee: 0,
-    };
-  });
-  
-  const [bannerMode, setBannerMode] = useState('url')
-  
-  const [bannerUrl, setBannerUrl] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return window.sessionStorage.getItem(bannerUrlStorageKey) || '';
-    }
-    return '';
-  });
-
-  const [bannerFile, setBannerFile] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  
-  // --- START OF NEW PREVIEW CODE (1 of 3) ---
-  const [previewUrl, setPreviewUrl] = useState('');
-  // --- END OF NEW PREVIEW CODE (1 of 3) ---
 
-  const { loading: authLoading } = useAuth()
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      window.sessionStorage.setItem(storageKey, JSON.stringify(formData));
-      window.sessionStorage.setItem(bannerUrlStorageKey, bannerUrl);
-    }
-  }, [formData, bannerUrl]);
-
-  // --- START OF NEW PREVIEW CODE (2 of 3) ---
-  // Effect to update preview URL
-  useEffect(() => {
-    let objectUrl = null; // To keep track of the object URL for cleanup
-
-    if (bannerMode === 'url') {
-      setPreviewUrl(bannerUrl);
-    } else if (bannerMode === 'upload' && bannerFile) {
-      // Create a local URL for the selected file
-      objectUrl = URL.createObjectURL(bannerFile);
-      setPreviewUrl(objectUrl);
-    } else {
-      setPreviewUrl(''); // Clear preview if no file or URL
-    }
-
-    // Cleanup function to revoke the object URL
-    return () => {
-      if (objectUrl) {
-        URL.revokeObjectURL(objectUrl);
-      }
-    };
-  }, [bannerUrl, bannerFile, bannerMode]); // Re-run when these change
-  // --- END OF NEW PREVIEW CODE (2 of 3) ---
-
-  const onDrop = useCallback((acceptedFiles) => {
-    if (acceptedFiles.length > 0) {
-      setBannerFile(acceptedFiles[0])
-    }
-  }, [])
-
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
-    accept: { 'image/*': [] },
-    maxFiles: 1,
-  })
-
-  const uploadBanner = async () => {
-    if (!bannerFile) return null
-
-    const fileExt = bannerFile.name.split('.').pop()
-    const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`
-    const filePath = `${fileName}`
-
-    const { data, error } = await supabase.storage
-      .from('event-banners')
-      .upload(filePath, bannerFile)
-
-    if (error) {
-      console.error('Upload error:', error)
-      throw error
-    }
-
-    const { data: { publicUrl } } = supabase.storage
-      .from('event-banners')
-      .getPublicUrl(filePath)
-
-    return publicUrl
-  }
-
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-
-    // --- Validation ---
-    if (formData.event_end_date && formData.event_date && new Date(formData.event_end_date) < new Date(formData.event_date)) {
-        alert('Event end date cannot be before the event start date.');
-        return;
-    }
-    if (formData.registration_end && formData.registration_start && new Date(formData.registration_end) < new Date(formData.registration_start)) {
-        alert('Registration end date cannot be before the registration start date.');
-        return;
-    }
-    // --- END OF VALIDATION ---
-
+  const handleSubmit = async (formData) => {
     setIsSubmitting(true)
-
     try {
-      let finalBannerUrl = ''
-
-      if (bannerMode === 'upload' && bannerFile) {
-        finalBannerUrl = await uploadBanner()
-      } else if (bannerMode === 'url') {
-        finalBannerUrl = bannerUrl
-      }
-
-      const eventData = {
-        ...formData,
-        banner_url: finalBannerUrl,
-        event_date: toISOString(formData.event_date),
-        event_end_date: toISOString(formData.event_end_date),
-        registration_start: toISOString(formData.registration_start),
-        registration_end: toISOString(formData.registration_end),
-        registration_fee: formData.is_paid ? parseFloat(formData.registration_fee) : 0,
-        form_fields: [], // Initialize with empty form
-      }
-      
       const { data: { session } } = await supabase.auth.getSession();
       
       const response = await fetch(`/api/events`, {
@@ -189,22 +23,15 @@ function NewEventContent() {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${session.access_token}`
         },
-        body: JSON.stringify(eventData),
+        body: JSON.stringify(formData),
       })
 
       const data = await response.json()
       if (data.success) {
-        alert('Event created successfully! (Saved as draft)')
-        
-        if (typeof window !== 'undefined') {
-          window.sessionStorage.removeItem(storageKey);
-          window.sessionStorage.removeItem(bannerUrlStorageKey);
-        }
-
-        router.push('/admin/events')
+        // Redirect to the Dashboard so they can add problems immediately
+        router.push(`/admin/events/${data.event.id}`) 
       } else {
         alert(`Failed to create event: ${data.error}`) 
-        console.error('API Error:', data.error);
       }
     } catch (error) {
       console.error('Error creating event:', error)
@@ -214,258 +41,18 @@ function NewEventContent() {
     }
   }
 
-  if (authLoading) {
-    return (
-      <div className="text-center py-12">
-        <Loader2 className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-brand-red" />
-      </div>
-    )
-  }
-
   return (
     <div className="container mx-auto px-4 py-12 max-w-3xl">
-      <Button
-        variant="ghost"
-        onClick={() => router.push('/admin/events')}
-        className="mb-4"
-      >
+      <Button variant="ghost" onClick={() => router.push('/admin/events')} className="mb-4">
         <ArrowLeft size={20} className="mr-2" />
         Back to Events
       </Button>
       
-      <h1 className="text-4xl font-bold mb-8">Create New Event</h1>
-
-      <form onSubmit={handleSubmit}>
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle>Event Details</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="title">Event Title *</Label>
-              <Input
-                id="title"
-                value={formData.title}
-                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                required
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="description">Description</Label>
-              <Textarea
-                id="description"
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                rows={6}
-              />
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="event_date">Event Start Date & Time</Label>
-                <Input
-                  id="event_date"
-                  type="datetime-local"
-                  value={formData.event_date}
-                  onChange={(e) => setFormData({ ...formData, event_date: e.target.value })}
-                  className="custom-date-icon"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="event_end_date">Event End Date & Time</Label>
-                <Input
-                  id="event_end_date"
-                  type="datetime-local"
-                  value={formData.event_end_date}
-                  onChange={(e) => setFormData({ ...formData, event_end_date: e.target.value })}
-                  className="custom-date-icon"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="registration_start">Registration Start Date & Time</Label>
-                <Input
-                  id="registration_start"
-                  type="datetime-local"
-                  value={formData.registration_start}
-                  onChange={(e) => setFormData({ ...formData, registration_start: e.target.value })}
-                  className="custom-date-icon"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="registration_end">Registration End Date & Time</Label>
-                <Input
-                  id="registration_end"
-                  type="datetime-local"
-                  value={formData.registration_end}
-                  onChange={(e) => setFormData({ ...formData, registration_end: e.target.value })}
-                  className="custom-date-icon"
-                />
-              </div>
-            </div>
-            
-            {/* Payment Section */}
-            <div className="p-4 border rounded-lg bg-gray-50/10 space-y-4">
-                <div className="flex items-center space-x-2">
-                  <Switch
-                    id="is_paid"
-                    checked={formData.is_paid}
-                    onCheckedChange={(checked) => setFormData({ ...formData, is_paid: checked })}
-                  />
-                  <Label htmlFor="is_paid" className="font-semibold text-brand-red">Is this a Paid Event?</Label>
-                </div>
-
-                {formData.is_paid && (
-                  <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
-                    <Label htmlFor="registration_fee">Registration Fee (INR)</Label>
-                    <div className="relative">
-                      <IndianRupee className="absolute left-3 top-2.5 h-4 w-4 text-gray-500" />
-                      <Input
-                        id="registration_fee"
-                        type="number"
-                        min="0"
-                        className="pl-9"
-                        value={formData.registration_fee}
-                        onChange={(e) => setFormData({ ...formData, registration_fee: e.target.value })}
-                        required={formData.is_paid}
-                      />
-                    </div>
-                  </div>
-                )}
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="is_active"
-                checked={formData.is_active}
-                onCheckedChange={(checked) =>
-                  setFormData({ ...formData, is_active: checked })
-                }
-              />
-              <Label htmlFor="is_active" className="font-normal">
-                Event is Active (Publicly Visible)
-              </Label>
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="registration_open"
-                checked={formData.registration_open}
-                onCheckedChange={(checked) =>
-                  setFormData({ ...formData, registration_open: checked })
-                }
-              />
-              <Label htmlFor="registration_open" className="font-normal">
-                Registration is Open
-              </Label>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle>Event Banner</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex space-x-4 mb-4">
-              <Button
-                type="button"
-                variant={bannerMode === 'url' ? 'default' : 'outline'}
-                onClick={() => setBannerMode('url')}
-                className={bannerMode === 'url' ? 'bg-brand-gradient text-white hover:opacity-90' : ''}
-              >
-                <LinkIcon size={16} className="mr-2" />
-                Use URL
-              </Button>
-              <Button
-                type="button"
-                variant={bannerMode === 'upload' ? 'default' : 'outline'}
-                onClick={() => setBannerMode('upload')}
-                className={bannerMode === 'upload' ? 'bg-brand-gradient text-white hover:opacity-90' : ''}
-              >
-                <Upload size={16} className="mr-2" />
-                Upload New
-              </Button>
-            </div>
-
-            {bannerMode === 'url' ? (
-              <div className="space-y-2">
-                <Label htmlFor="banner_url">Banner URL</Label>
-                <Input
-                  id="banner_url"
-                  value={bannerUrl}
-                  onChange={(e) => setBannerUrl(e.target.value)}
-                  placeholder="https://example.com/banner.jpg"
-                />
-              </div>
-            ) : (
-              <div
-                {...getRootProps()}
-                className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer ${
-                  isDragActive ? 'border-brand-red bg-red-900/10' : 'border-gray-600'
-                }`}
-              >
-                <input {...getInputProps()} />
-                <Upload size={48} className="mx-auto mb-4 text-gray-400" />
-                {bannerFile ? (
-                  <p className="text-sm">Selected: <strong>{bannerFile.name}</strong></p>
-                ) : (
-                  <p className="text-sm text-gray-400">
-                    {isDragActive ? 'Drop here' : 'Drag & drop or click to select new image'}
-                  </p>
-                )}
-              </div>
-            )}
-
-            {/* --- START OF NEW PREVIEW CODE (3 of 3) --- */}
-            {previewUrl && (
-              <div className="mt-4">
-                <Label>Banner Preview</Label>
-                <div className="mt-2 aspect-video w-full overflow-hidden rounded-lg border bg-gray-900">
-                  <img
-                    src={previewUrl}
-                    alt="Event Banner Preview"
-                    className="h-full w-full object-contain"
-                  />
-                </div>
-              </div>
-            )}
-            {/* --- END OF NEW PREVIEW CODE (3 of 3) --- */}
-
-          </CardContent>
-        </Card>
-
-        <div className="flex justify-end space-x-4">
-          <Button type="button" variant="outline" onClick={() => router.back()}>
-            Cancel
-          </Button>
-          <Button
-            type="submit"
-            className="bg-brand-gradient text-white font-semibold hover:opacity-90 transition-opacity"
-            disabled={isSubmitting}
-          >
-            {isSubmitting ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Creating...
-              </>
-            ) : (
-              'Create Event'
-            )}
-          </Button>
-        </div>
-      </form>
+      <EventForm onSubmit={handleSubmit} isSubmitting={isSubmitting} />
     </div>
   )
 }
 
 export default function NewEventPage() {
-  return (
-    <ProtectedRoute>
-      <NewEventContent />
-    </ProtectedRoute>
-  )
+  return <ProtectedRoute><NewEventContent /></ProtectedRoute>
 }
