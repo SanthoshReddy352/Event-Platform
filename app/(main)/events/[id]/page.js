@@ -5,17 +5,14 @@ import { useParams, useRouter } from 'next/navigation'
 import DynamicForm from '@/components/DynamicForm'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card' 
 import { Button } from '@/components/ui/button'
-import { Calendar, Clock, ArrowLeft, Loader2, FileClock, XCircle, CheckCircle, IndianRupee } from 'lucide-react'
+import { Calendar, Clock, ArrowLeft, Loader2, FileClock, XCircle, CheckCircle } from 'lucide-react'
 import { parseISO, format } from 'date-fns'; 
 import { formatInTimeZone } from 'date-fns-tz'; 
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client' 
 import { useAuth } from '@/context/AuthContext' 
-import Script from 'next/script' // Required for Razorpay
 
-// --- Helper Components ---
-
-// 1. Helper to format standard event dates
+// Helper function to format date ranges
 const formatEventDate = (start, end, timeZone) => {
   if (!start) return 'Date TBA';
   
@@ -37,77 +34,7 @@ const formatEventDate = (start, end, timeZone) => {
   return `${startDate} ${startTime} - ${endDate} ${endTime} ${tz}`;
 }
 
-// 2. Helper Component for Hackathon Scope Display (NEW)
-const HackathonScopeDisplay = ({ event }) => {
-  if (event.event_type !== 'hackathon') return null;
-
-  const formatDate = (dateString) => {
-    if (!dateString) return 'TBA';
-    // Use the same time zone as the rest of the app
-    return formatInTimeZone(new Date(dateString), 'Asia/Kolkata', 'MMM dd, hh:mm a');
-  };
-
-  return (
-    <Card className="mb-6 border-brand-red/20 bg-brand-red/5">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-lg text-brand-red flex items-center gap-2">
-          <Clock size={18} />
-          Hackathon Schedule & Scope
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-        
-        {/* Problem Selection */}
-        <div className="space-y-1">
-          <p className="font-semibold text-foreground">Problem Selection</p>
-          <div className="grid grid-cols-[60px_1fr] gap-1 text-muted-foreground">
-            <span>Opens:</span>
-            <span className="text-foreground">{formatDate(event.problem_selection_start)}</span>
-            <span>Closes:</span>
-            <span className="text-foreground">{formatDate(event.problem_selection_end)}</span>
-          </div>
-        </div>
-
-        {/* PPT Round */}
-        <div className="space-y-1">
-          <p className="font-semibold text-foreground">PPT Round</p>
-          <div className="grid grid-cols-[70px_1fr] gap-1 text-muted-foreground">
-            <span>Release:</span>
-            <span className="text-foreground">{formatDate(event.ppt_release_time)}</span>
-            {event.ppt_template_url && (
-              <a 
-                href={event.ppt_template_url} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="col-span-2 text-brand-red hover:underline mt-1 block font-medium"
-              >
-                Download PPT Template
-              </a>
-            )}
-          </div>
-        </div>
-
-        {/* Final Submission */}
-        <div className="col-span-1 md:col-span-2 space-y-1 pt-2 border-t border-dashed border-brand-red/20">
-          <p className="font-semibold text-foreground">Final Project Submission</p>
-          <div className="flex flex-wrap gap-x-6 gap-y-1 text-muted-foreground">
-             <div className="flex gap-2">
-               <span>Starts:</span>
-               <span className="text-foreground">{formatDate(event.submission_start)}</span>
-             </div>
-             <div className="flex gap-2">
-               <span>Ends:</span>
-               <span className="text-foreground">{formatDate(event.submission_end)}</span>
-             </div>
-          </div>
-        </div>
-
-      </CardContent>
-    </Card>
-  );
-};
-
-// 3. Helper to determine status
+// Helper function to get event status
 const getEventStatus = (event) => {
   const now = new Date();
   const eventEndDate = event.event_end_date ? parseISO(event.event_end_date) : null;
@@ -155,7 +82,7 @@ function EventDetailContent() {
   const { user, loading: authLoading } = useAuth() 
   const [isRegistered, setIsRegistered] = useState(false) 
   const [registrationStatus, setRegistrationStatus] = useState(null)
-  const [regCheckLoading, setRegCheckLoading] = useState(true) 
+  const [regCheckLoading, setRegCheckLoading] = useState(true)
   const storageKey = `formData-${params.id}`;
   
   const [rejectionHistory, setRejectionHistory] = useState(null);
@@ -174,7 +101,11 @@ function EventDetailContent() {
   };
 
   const fetchEvent = useCallback(async () => {
-    if (!params.id) return;
+    // SECURITY FIX: Do not fetch if ID is undefined or invalid
+    if (!params.id || params.id === 'undefined' || params.id === 'null') {
+        setLoading(false);
+        return;
+    }
     
     setLoading(true); 
     try {
@@ -183,7 +114,7 @@ function EventDetailContent() {
       if (data.success) {
         setEvent(data.event);
       } else {
-        setEvent(null); 
+        setEvent(null);
       }
     } catch (error) {
       console.error('Error fetching event:', error);
@@ -194,12 +125,14 @@ function EventDetailContent() {
   }, [params.id]);
 
   const checkRegistrationStatus = useCallback(async (userId, eventId) => {
-    if (!userId || !eventId) {
+    // SECURITY FIX: Ensure both IDs are valid strings
+    if (!userId || !eventId || eventId === 'undefined') {
       setRegCheckLoading(false);
       return;
     }
     setRegCheckLoading(true);
-    setRejectionHistory(null); 
+    setRejectionHistory(null);
+    
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
@@ -257,97 +190,12 @@ function EventDetailContent() {
     }
   }, [user?.id, event?.id, loading, authLoading, checkRegistrationStatus]); 
 
-  // --- HANDLESUBMIT FOR DYNAMIC KEYS ---
   const handleSubmit = async (submitData) => {
     if (!user) {
         alert('You must be logged in to register.');
         return;
     }
-
-    // 1. Check if Paid Event
-    if (event.is_paid && event.registration_fee > 0) {
-        try {
-            if (!window.Razorpay) {
-                alert("Razorpay SDK failed to load. Please check your internet connection or ad-blocker.");
-                return;
-            }
-
-            const res = await fetch("/api/razorpay/create-order", {
-                method: "POST",
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ amount: event.registration_fee, eventId: event.id }),
-            });
-            
-            const order = await res.json();
-            
-            if (!res.ok) {
-                throw new Error(order.error || `Server Error: ${res.status}`);
-            }
-
-            if (!order.id) {
-                throw new Error("Invalid response received from payment server");
-            }
-
-            const options = {
-                key: order.key_id, 
-                amount: order.amount,
-                currency: order.currency,
-                name: "Event Platform", 
-                description: `Registration for ${event.title}`,
-                order_id: order.id,
-                handler: async function (response) {
-                    try {
-                        const verifyRes = await fetch("/api/razorpay/verify", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({
-                                razorpay_payment_id: response.razorpay_payment_id,
-                                razorpay_order_id: response.razorpay_order_id,
-                                razorpay_signature: response.razorpay_signature,
-                                eventId: event.id,
-                                userId: user.id,
-                                userDetails: { email: user.email }, 
-                                responses: submitData 
-                            }),
-                        });
-
-                        const result = await verifyRes.json();
-                        if (result.success) {
-                            setSubmitted(true);
-                            window.sessionStorage.removeItem(storageKey);
-                            alert("Payment Successful! You are registered.");
-                            checkRegistrationStatus(user.id, event.id);
-                        } else {
-                            alert("Payment verification failed: " + (result.error || "Please contact support"));
-                        }
-                    } catch (err) {
-                        console.error("Verification error", err);
-                        alert("Error during verification: " + err.message);
-                    }
-                },
-                prefill: {
-                    name: user.user_metadata?.full_name || "",
-                    email: user.email,
-                },
-                theme: {
-                    color: "#E11D48", 
-                },
-            };
-
-            const rzp1 = new window.Razorpay(options);
-            rzp1.on('payment.failed', function (response){
-                    alert("Payment Failed: " + response.error.description);
-            });
-            rzp1.open();
-
-        } catch (error) {
-            console.error("Payment initiation error:", error);
-            alert(`Could not start payment: ${error.message}`);
-        }
-        return; 
-    }
     
-    // 2. Standard Free Registration
     try {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) {
@@ -517,7 +365,7 @@ function EventDetailContent() {
       }
       
       if (!isRegistrationAvailable) {
-          if (registrationStatus === 'rejected' && rejectionHistory) {
+          if (registrationStatus === 'rejected') {
              return (
                   <Card className="border-red-500">
                       <CardHeader>
@@ -577,14 +425,14 @@ function EventDetailContent() {
           )
       }
 
-      const rejectedCard = registrationStatus === 'rejected' && rejectionHistory && (
+      const rejectedCard = registrationStatus === 'rejected' && (
          <Card className="border-red-500 mb-6">
             <CardHeader>
                 <CardTitle className="text-red-500">Registration Rejected</CardTitle>
                 <CardDescription>Unfortunately, your last registration was not approved. You may register again below.</CardDescription>
             </CardHeader>
             <CardContent>
-                <p className="text-gray-300 font-medium">Message by the Event Organizer :</p>
+                <p className="text-gray-300 font-medium">Reason:</p>
                 <p className="text-gray-300 whitespace-pre-wrap">
                   {rejectionHistory.rejection_reason || 'No reason provided.'}
                 </p>
@@ -607,8 +455,7 @@ function EventDetailContent() {
                         onSubmit={handleSubmit}
                         eventId={params.id}
                         formData={formData} 
-                        onFormChange={setAndStoreFormData}
-                        submitLabel={event.is_paid && event.registration_fee > 0 ? `Pay ₹${event.registration_fee} & Register` : 'Register Now'}
+                        onFormChange={setAndStoreFormData} 
                     />
                 </CardContent>
             </Card>
@@ -618,8 +465,6 @@ function EventDetailContent() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Script src="https://checkout.razorpay.com/v1/checkout.js" />
-      
       <div className="w-full h-64 bg-brand-gradient relative">
         {event?.banner_url && (
           <img
@@ -661,13 +506,6 @@ function EventDetailContent() {
                             <span>{formattedTime}</span>
                           </div>
                         )}
-                        {/* Show Fee Tag */}
-                        {event.is_paid && (
-                            <div className="flex items-center text-green-400 font-semibold">
-                                <IndianRupee size={16} className="mr-1" />
-                                <span>{event.registration_fee > 0 ? `INR ${event.registration_fee}` : 'Free'}</span>
-                            </div>
-                        )}
                       </div>
                     </div>
                     {statusBadge}
@@ -690,9 +528,6 @@ function EventDetailContent() {
                     </CardContent>
                   </Card>
                 
-                  {/* --- NEW HACKATHON SCOPE DISPLAY --- */}
-                  <HackathonScopeDisplay event={event} />
-
                   <h3 className="font-bold text-xl mb-2">Description</h3>
                   <p className="text-gray-300 whitespace-pre-wrap">
                     {event.description || 'No description available'}
