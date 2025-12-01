@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Calendar, CheckCircle, XCircle, FileClock } from 'lucide-react'
 import { parseISO, format } from 'date-fns'; 
 import { formatInTimeZone } from 'date-fns-tz'; 
+import { Badge } from '@/components/ui/badge'
 
 // Helper function to format date ranges (unchanged)
 const formatEventDate = (start, end, timeZone) => {
@@ -80,15 +81,15 @@ export default function EventCard({ event }) {
   const isEventActive = event.is_active;
   const isCompleted = status.text === 'Completed';
 
-  // --- START OF MODIFICATION: Get club info from event prop ---
   const club = event.club;
-  // --- END OF MODIFICATION ---
+
+  // Format Event Type (e.g., 'hackathon' -> 'Hackathon')
+  const eventType = event.event_type ? event.event_type.replace('_', ' ') : 'Event';
 
   return (
     <Card className="overflow-hidden hover:shadow-lg transition-shadow flex flex-col">
       {/* Event Banner */}
-      {/* --- START OF THEME CHANGE --- */}
-      <div className="w-full h-48 bg-brand-gradient relative"> {/* CHANGED */}
+      <div className="w-full h-48 bg-brand-gradient relative">
         {event.banner_url ? (
           <img
             src={event.banner_url}
@@ -100,8 +101,15 @@ export default function EventCard({ event }) {
             {event.title}
           </div>
         )}
-      {/* --- END OF THEME CHANGE --- */}
         
+        {/* NEW: Event Type Badge (Top Left) */}
+        <div className="absolute top-2 left-2">
+            <Badge className="bg-white/90 text-black hover:bg-white/75 shadow-sm backdrop-blur-sm capitalize">
+              {eventType}
+            </Badge>
+        </div>
+
+        {/* Status Badge (Top Right) */}
         <span 
           className={`absolute top-2 right-2 text-white text-xs px-3 py-1 rounded-full flex items-center gap-1.5 ${status.color}`}
         >
@@ -110,7 +118,7 @@ export default function EventCard({ event }) {
         </span>
       </div>
 
-      {/* Card Header (Unchanged) */}
+      {/* Card Header */}
       <CardHeader className="pb-4">
         <CardTitle className="text-xl">{event.title}</CardTitle>
         <CardDescription className="line-clamp-2 h-10">
@@ -120,43 +128,37 @@ export default function EventCard({ event }) {
 
       {/* Card Content */}
       <CardContent className="pt-0">
-        <div className="space-y-2 text-sm text-gray-400"> {/* CHANGED: text-gray-600 to 400 */}
+        <div className="space-y-2 text-sm text-gray-400">
           <div className="flex items-start space-x-2">
-            {/* --- START OF THEME CHANGE --- */}
-            <Calendar size={16} className="text-brand-red mt-0.5 flex-shrink-0" /> {/* CHANGED */}
-            {/* --- END OF THEME CHANGE --- */}
+            <Calendar size={16} className="text-brand-red mt-0.5 flex-shrink-0" />
             <span>{formattedEventDate}</span>
           </div>
         </div>
       </CardContent>
 
-      {/* --- START OF MODIFICATION: Updated CardFooter --- */}
       <CardFooter className="mt-auto flex flex-col items-start gap-4">
         {/* Club Info */}
         {club && club.club_name && (
-          <div className="flex items-center gap-2 w-full pt-4 border-t border-border"> {/* CHANGED: border-t */}
+          <div className="flex items-center gap-2 w-full pt-4 border-t border-border">
             <img 
               src={club.club_logo_url || 'https://via.placeholder.com/40'} 
               alt={`${club.club_name} logo`}
-              className="w-8 h-8 rounded-full object-contain border border-border" // CHANGED: border
+              className="w-8 h-8 rounded-full object-contain border border-border"
             />
-            <span className="text-sm font-medium text-gray-300">{club.club_name}</span> {/* CHANGED: text-gray-700 to 300 */}
+            <span className="text-sm font-medium text-gray-300">{club.club_name}</span>
           </div>
         )}
 
         {/* View Event Button */}
         <Link href={`/events/${event.id}`} className="w-full">
-          {/* --- START OF THEME CHANGE --- */}
           <Button
-            className="w-full bg-brand-gradient text-white font-semibold hover:opacity-90 transition-opacity" // CHANGED
+            className="w-full bg-brand-gradient text-white font-semibold hover:opacity-90 transition-opacity"
             disabled={!isEventActive} 
           >
-          {/* --- END OF THEME CHANGE --- */}
             {isCompleted ? 'View Details' : (isEventActive ? 'View Event' : 'Inactive')}
           </Button>
         </Link>
       </CardFooter>
-      {/* --- END OF MODIFICATION --- */}
     </Card>
   )
 }

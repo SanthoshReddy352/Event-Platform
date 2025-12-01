@@ -5,13 +5,13 @@ import { useParams, useRouter } from 'next/navigation'
 import DynamicForm from '@/components/DynamicForm'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card' 
 import { Button } from '@/components/ui/button'
-import { Calendar, Clock, ArrowLeft, Loader2, FileClock, XCircle, CheckCircle, IndianRupee } from 'lucide-react'
+import { Calendar, Clock, ArrowLeft, Loader2, FileClock, XCircle, CheckCircle, IndianRupee, Tag } from 'lucide-react'
 import { parseISO, format } from 'date-fns'; 
 import { formatInTimeZone } from 'date-fns-tz'; 
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client' 
 import { useAuth } from '@/context/AuthContext' 
-import Script from 'next/script' // Required for Razorpay
+import Script from 'next/script'
 
 // Helper function to format date ranges
 const formatEventDate = (start, end, timeZone) => {
@@ -198,7 +198,6 @@ function EventDetailContent() {
                 return;
             }
 
-            // A. Create Order
             const res = await fetch("/api/razorpay/create-order", {
                 method: "POST",
                 headers: { 'Content-Type': 'application/json' },
@@ -215,7 +214,6 @@ function EventDetailContent() {
                 throw new Error("Invalid response received from payment server");
             }
 
-            // B. Open Razorpay using the Club's Key ID returned from backend
             const options = {
                 key: order.key_id, 
                 amount: order.amount,
@@ -224,7 +222,6 @@ function EventDetailContent() {
                 description: `Registration for ${event.title}`,
                 order_id: order.id,
                 handler: async function (response) {
-                    // C. Payment Success - Verify & Register
                     try {
                         const verifyRes = await fetch("/api/razorpay/verify", {
                             method: "POST",
@@ -548,7 +545,6 @@ function EventDetailContent() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Import Razorpay SDK Script */}
       <Script src="https://checkout.razorpay.com/v1/checkout.js" />
       
       <div className="w-full h-64 bg-brand-gradient relative">
@@ -581,7 +577,15 @@ function EventDetailContent() {
                   <div className="flex justify-between items-start">
                     <div>
                       <CardTitle className="text-3xl mb-2">{event.title}</CardTitle>
+                      
+                      {/* NEW: Metadata Row with Event Type */}
                       <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-gray-400">
+                        {/* Event Type */}
+                        <div className="flex items-center">
+                          <Tag size={16} className="mr-2 text-brand-red" />
+                          <span className="capitalize">{event.event_type?.replace('_', ' ') || 'Event'}</span>
+                        </div>
+                        
                         <div className="flex items-center">
                           <Calendar size={16} className="mr-2 text-brand-red" />
                           <span>{formattedDate}</span>
@@ -592,7 +596,7 @@ function EventDetailContent() {
                             <span>{formattedTime}</span>
                           </div>
                         )}
-                         {/* Show Fee Tag */}
+                         {/* Fee Tag */}
                          {event.is_paid && (
                             <div className="flex items-center text-green-400 font-semibold">
                                 <IndianRupee size={16} className="mr-1" />
