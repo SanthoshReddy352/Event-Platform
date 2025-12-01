@@ -8,9 +8,9 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { 
   ArrowLeft, Loader2, Clock, Target, FileText, Download,
-  CheckCircle, XCircle, AlertCircle
+  CheckCircle, XCircle, AlertCircle, Lock
 } from 'lucide-react'
-import { format, parseISO } from 'date-fns'
+import { format, isBefore, isAfter, isWithinInterval } from 'date-fns'
 import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/context/AuthContext'
 import { toast } from 'sonner'
@@ -25,14 +25,15 @@ export default function HackathonScopePage() {
   const [scopeStatus, setScopeStatus] = useState(null)
   const [error, setError] = useState(null)
   
-  // Track previous status to detect changes and show notifications
+  // State to force re-render for time checks every minute
+  const [now, setNow] = useState(new Date())
+  
   const prevStatusRef = useRef(null)
 
   const fetchScopeStatus = useCallback(async () => {
     if (!user || !params.id) return
     
     try {
-      // Only show full loading state if we don't have data yet to prevent flashing
       if (!scopeStatus) setLoading(true)
       
       const { data: { session } } = await supabase.auth.getSession()
@@ -41,7 +42,7 @@ export default function HackathonScopePage() {
         throw new Error('Please log in')
       }
 
-      // 1. Fetch event details first (Added timestamp to prevent caching)
+      // 1. Fetch event details
       const eventRes = await fetch(`/api/events/${params.id}?t=${Date.now()}`, {
         cache: 'no-store'
       })
@@ -49,6 +50,25 @@ export default function HackathonScopePage() {
       
       if (!eventData.success) {
         throw new Error('Event not found')
+      }
+
+      // --- Strict Page Access Control ---
+      const currentTime = new Date()
+      const eventStart = new Date(eventData.event.event_date)
+      const eventEnd = new Date(eventData.event.event_end_date)
+
+      // Block access if event hasn't started
+      if (isBefore(currentTime, eventStart)) {
+         setError(`The event has not started yet. Please return at ${format(eventStart, 'PPp')}.`)
+         setLoading(false)
+         return
+      }
+
+      // Block access if event has ended
+      if (isAfter(currentTime, eventEnd)) {
+         setError("The event has concluded. This workspace is no longer accessible.")
+         setLoading(false)
+         return
       }
       
       setEvent(eventData.event)
@@ -59,12 +79,7 @@ export default function HackathonScopePage() {
         return
       }
 
-      // REMOVED: Client-side timing check. 
-      // We now rely on the server (Step 4) to determine if phases are open.
-      // This prevents issues where client clock is slightly behind server clock.
-
-      // 4. Fetch scope status
-      // FIX: Added timestamp query param and cache headers to prevent browser/router caching
+      // 3. Fetch participant specific status
       const scopeRes = await fetch(`/api/events/${params.id}/scope-status?t=${Date.now()}`, {
         headers: { 
           'Authorization': `Bearer ${session.access_token}`,
@@ -86,74 +101,56 @@ export default function HackathonScopePage() {
         return
       }
       
-      // Detect status changes and notify user (non-disruptive)
-      if (prevStatusRef.current && scopeData.phases) {
-        const prev = prevStatusRef.current.phases
-        const curr = scopeData.phases
-        
-        // Notify when problem selection window opens
-        if (!prev.problem_selection && curr.problem_selection) {
-          toast.success('Problem selection window is now open!', {
-            description: 'Click "View & Select Problem" to choose your challenge.',
-            duration: 5000
-          })
-        }
-        
-        // Notify when problem selection window closes
-        if (prev.problem_selection && !curr.problem_selection) {
-          toast.warning('Problem selection window has closed.', {
-            duration: 5000
-          })
-        }
-        
-        // Notify when PPT template becomes available
-        if (!prev.ppt_available && curr.ppt_available) {
-          toast.info('PPT template is now available!', {
-            description: 'Download the official presentation template.',
-            duration: 5000
-          })
-        }
-        
-        // Notify when submission window opens
-        if (!prev.submission_open && curr.submission_open) {
-          toast.success('Submission window is now open!', {
-            description: 'You can now submit your completed project.',
-            duration: 5000
-          })
-        }
-        
-        // Notify when submission window closes
-        if (prev.submission_open && !curr.submission_open) {
-          toast.warning('Submission window has closed.', {
-            duration: 5000
-          })
-        }
-      }
-      
+      // Update local state
       prevStatusRef.current = scopeData
       setScopeStatus(scopeData)
+      setNow(new Date()) // Sync time on fetch
       
     } catch (err) {
       console.error('Error fetching scope status:', err)
-      // Only set error if we don't have partial data to show
       if (!scopeStatus) setError(err.message)
     } finally {
       setLoading(false)
     }
-  // FIX: Depend on user?.id instead of user object to prevent re-fetching on tab focus
-  }, [user?.id, params.id, router]) // Removed scopeStatus from deps to avoid loops
+  }, [user?.id, params.id, router]) 
 
+  // Initial fetch and polling
   useEffect(() => {
     if (!authLoading) {
       fetchScopeStatus()
-
-      // FIX: Added polling interval to auto-update status every 30 seconds
-      // This ensures windows open automatically without manual refresh
+      // Poll every 30 seconds for status updates
       const intervalId = setInterval(fetchScopeStatus, 30000)
-      
       return () => clearInterval(intervalId)
     }
   }, [authLoading, fetchScopeStatus])
+
+  // Update 'now' every second for real-time button states
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000)
+    return () => clearInterval(timer)
+  }, [])
+
+  // --- Helper Functions for Time-Based Access ---
+  const isProblemSelectionActive = () => {
+    if (!event || !event.problem_selection_start || !event.problem_selection_end) return false
+    return isWithinInterval(now, {
+      start: new Date(event.problem_selection_start),
+      end: new Date(event.problem_selection_end)
+    })
+  }
+
+  const isPptActive = () => {
+    if (!event || !event.ppt_release_time) return false
+    return isAfter(now, new Date(event.ppt_release_time))
+  }
+
+  const isSubmissionActive = () => {
+    if (!event || !event.submission_start || !event.submission_end) return false
+    return isWithinInterval(now, {
+      start: new Date(event.submission_start),
+      end: new Date(event.submission_end)
+    })
+  }
 
   if (authLoading || loading) {
     return (
@@ -171,7 +168,10 @@ export default function HackathonScopePage() {
       <div className="container mx-auto px-4 py-12 max-w-2xl">
         <Card className="border-red-500">
           <CardHeader>
-            <CardTitle className="text-red-500">Access Denied</CardTitle>
+            <CardTitle className="text-red-500 flex items-center gap-2">
+                <Lock className="h-5 w-5" />
+                Access Denied
+            </CardTitle>
             <CardDescription>{error}</CardDescription>
           </CardHeader>
           <CardContent>
@@ -187,14 +187,14 @@ export default function HackathonScopePage() {
     )
   }
 
-  // Ensure scopeStatus exists and has required properties
-  if (!event || !scopeStatus) {
-    return null
-  }
+  if (!event || !scopeStatus) return null
 
-  // Safely default to empty objects if properties are missing
-  const phases = scopeStatus.phases || {};
   const participant = scopeStatus.participant || {};
+  
+  // Calculated States
+  const problemSelectionOpen = isProblemSelectionActive();
+  const pptAvailable = isPptActive();
+  const submissionOpen = isSubmissionActive();
 
   return (
     <div className="min-h-screen bg-background">
@@ -214,13 +214,13 @@ export default function HackathonScopePage() {
 
       <div className="container mx-auto px-4 py-8 max-w-5xl space-y-6">
         
-        {/* Status Cards */}
+        {/* Status Cards (Overview) */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Problem Selection */}
-          <Card className={phases.problem_selection ? 'border-green-500' : 'border-gray-500'}>
+          {/* Problem Selection Status */}
+          <Card className={problemSelectionOpen ? 'border-green-500' : 'border-gray-500'}>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <Target size={16} className={phases.problem_selection ? 'text-green-500' : 'text-gray-400'} />
+                <Target size={16} className={problemSelectionOpen ? 'text-green-500' : 'text-gray-400'} />
                 Problem Selection
               </CardTitle>
             </CardHeader>
@@ -230,7 +230,7 @@ export default function HackathonScopePage() {
                   <CheckCircle size={20} />
                   <span className="font-semibold">Selected</span>
                 </div>
-              ) : phases.problem_selection ? (
+              ) : problemSelectionOpen ? (
                 <Badge className="bg-green-500">Open Now</Badge>
               ) : (
                 <Badge variant="outline">Closed</Badge>
@@ -238,16 +238,16 @@ export default function HackathonScopePage() {
             </CardContent>
           </Card>
 
-          {/* PPT Template */}
-          <Card className={phases.ppt_available ? 'border-blue-500' : 'border-gray-500'}>
+          {/* PPT Template Status */}
+          <Card className={pptAvailable ? 'border-blue-500' : 'border-gray-500'}>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <Download size={16} className={phases.ppt_available ? 'text-blue-500' : 'text-gray-400'} />
+                <Download size={16} className={pptAvailable ? 'text-blue-500' : 'text-gray-400'} />
                 PPT Template
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {phases.ppt_available ? (
+              {pptAvailable ? (
                 <Badge className="bg-blue-500">Available</Badge>
               ) : (
                 <Badge variant="outline">Not Released</Badge>
@@ -255,11 +255,11 @@ export default function HackathonScopePage() {
             </CardContent>
           </Card>
 
-          {/* Submission */}
-          <Card className={phases.submission_open ? 'border-orange-500' : 'border-gray-500'}>
+          {/* Submission Status */}
+          <Card className={submissionOpen ? 'border-orange-500' : 'border-gray-500'}>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <FileText size={16} className={phases.submission_open ? 'text-orange-500' : 'text-gray-400'} />
+                <FileText size={16} className={submissionOpen ? 'text-orange-500' : 'text-gray-400'} />
                 Final Submission
               </CardTitle>
             </CardHeader>
@@ -269,7 +269,7 @@ export default function HackathonScopePage() {
                   <CheckCircle size={20} />
                   <span className="font-semibold">Submitted</span>
                 </div>
-              ) : phases.submission_open ? (
+              ) : submissionOpen ? (
                 <Badge className="bg-orange-500">Open Now</Badge>
               ) : (
                 <Badge variant="outline">Not Open</Badge>
@@ -302,7 +302,7 @@ export default function HackathonScopePage() {
             <div className="border-t pt-4 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="font-semibold">PPT Template Release</span>
-                {phases.ppt_available && <CheckCircle className="h-5 w-5 text-green-500" />}
+                {pptAvailable && <CheckCircle className="h-5 w-5 text-green-500" />}
               </div>
               {event.ppt_release_time && (
                 <p className="text-sm text-gray-400">{format(new Date(event.ppt_release_time), 'PPp')}</p>
@@ -323,10 +323,10 @@ export default function HackathonScopePage() {
           </CardContent>
         </Card>
 
-        {/* Action Cards */}
+        {/* Action Cards with Logic for Admin-Set Times */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           
-          {/* Problem Selection Card */}
+          {/* Problem Selection Action */}
           <Card className="hover:border-brand-red/50 transition-colors">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -336,89 +336,72 @@ export default function HackathonScopePage() {
               <CardDescription>
                 {participant.selected_problem_id 
                   ? 'You have selected your problem statement'
-                  : 'Choose your challenge'
+                  : 'Choose your challenge for the hackathon'
                 }
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {participant.selected_problem_id ? (
-                <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-4">
-                  <div className="flex items-center gap-2 text-green-500 mb-2">
-                    <CheckCircle size={20} />
-                    <span className="font-semibold">Problem Selected</span>
-                  </div>
-                  <p className="text-sm text-gray-400">
-                    Your selection is locked and cannot be changed.
-                  </p>
-                </div>
-              ) : phases.problem_selection ? (
-                <>
-                  <p className="text-sm text-gray-400">
-                    Browse available problem statements and make your selection. Once selected, your choice is permanent.
-                  </p>
-                  <Link href={`/events/${params.id}/scope/problems`}>
-                    <Button className="w-full bg-brand-gradient">
-                      View & Select Problem
-                    </Button>
-                  </Link>
-                </>
-              ) : (
-                <div className="bg-gray-500/10 border border-gray-500/20 rounded-lg p-4">
-                  <div className="flex items-center gap-2 text-gray-400 mb-2">
-                    <XCircle size={20} />
-                    <span className="font-semibold">Selection Window Closed</span>
-                  </div>
-                  <p className="text-sm text-gray-400">
-                    The problem selection window is currently closed.
-                  </p>
-                </div>
-              )}
+              <p className="text-sm text-gray-400">
+                Browse available problem statements and make your selection. Once selected, your choice is permanent.
+              </p>
+              
+              <Link href={problemSelectionOpen && !participant.selected_problem_id ? `/events/${params.id}/scope/problems` : '#'}>
+                <Button 
+                    className="w-full bg-brand-gradient"
+                    disabled={!problemSelectionOpen || participant.selected_problem_id}
+                >
+                    {participant.selected_problem_id 
+                        ? "Problem Selected" 
+                        : !problemSelectionOpen 
+                            ? "Selection Window Closed" 
+                            : "View & Select Problem"
+                    }
+                </Button>
+              </Link>
             </CardContent>
           </Card>
 
-          {/* PPT Template Card */}
+          {/* PPT Template Action */}
           <Card className="hover:border-brand-red/50 transition-colors">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Download className="h-5 w-5 text-brand-red" />
                 PPT Template
               </CardTitle>
-              <CardDescription>Presentation template for your project</CardDescription>
+              <CardDescription>Official presentation template</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {phases.ppt_available && scopeStatus.event.ppt_template_url ? (
-                <>
-                  <p className="text-sm text-gray-400">
-                    Download the official presentation template and use it for your project.
-                  </p>
-                  <a href={scopeStatus.event.ppt_template_url} target="_blank" rel="noopener noreferrer" className="block">
-                    <Button className="w-full bg-blue-600 hover:bg-blue-700">
+              <p className="text-sm text-gray-400">
+                 {pptAvailable 
+                    ? "Download the official presentation template and use it for your project."
+                    : "The template will be available for download at the scheduled release time."
+                 }
+              </p>
+
+              {scopeStatus.event.ppt_template_url ? (
+                  <a 
+                    href={pptAvailable ? scopeStatus.event.ppt_template_url : '#'} 
+                    target={pptAvailable ? "_blank" : undefined} 
+                    rel="noopener noreferrer" 
+                    className="block"
+                  >
+                    <Button 
+                        className="w-full bg-blue-600 hover:bg-blue-700"
+                        disabled={!pptAvailable}
+                    >
                       <Download className="h-4 w-4 mr-2" />
-                      Download Template
+                      {pptAvailable ? "Download Template" : "Not Released Yet"}
                     </Button>
                   </a>
-                </>
-              ) : phases.ppt_available && !scopeStatus.event.ppt_template_url ? (
-                <div className="bg-gray-500/10 border border-gray-500/20 rounded-lg p-4">
-                  <p className="text-sm text-gray-400">
-                    No template has been provided by the organizers.
-                  </p>
-                </div>
               ) : (
-                <div className="bg-gray-500/10 border border-gray-500/20 rounded-lg p-4">
-                  <div className="flex items-center gap-2 text-gray-400 mb-2">
-                    <Clock size={20} />
-                    <span className="font-semibold">Not Released Yet</span>
-                  </div>
-                  <p className="text-sm text-gray-400">
-                    The template will be available at the scheduled release time.
-                  </p>
-                </div>
+                  <Button disabled variant="outline" className="w-full">
+                      No Template Uploaded
+                  </Button>
               )}
             </CardContent>
           </Card>
 
-          {/* Submission Card */}
+          {/* Submission Action */}
           <Card className="hover:border-brand-red/50 transition-colors md:col-span-2">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -428,39 +411,27 @@ export default function HackathonScopePage() {
               <CardDescription>Submit your completed project</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {participant.has_submitted ? (
-                <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-4">
-                  <div className="flex items-center gap-2 text-green-500 mb-2">
-                    <CheckCircle size={20} />
-                    <span className="font-semibold">Project Submitted</span>
-                  </div>
-                  <p className="text-sm text-gray-400">
-                    Your project has been successfully submitted. Good luck!
-                  </p>
-                </div>
-              ) : phases.submission_open ? (
-                <>
-                  <p className="text-sm text-gray-400">
-                    The submission window is now open. Fill out the submission form with your project details.
-                  </p>
-                  <Link href={`/events/${params.id}/scope/submit`}>
-                    <Button className="w-full bg-orange-600 hover:bg-orange-700">
-                      <FileText className="h-4 w-4 mr-2" />
-                      Submit Your Project
-                    </Button>
-                  </Link>
-                </>
-              ) : (
-                <div className="bg-gray-500/10 border border-gray-500/20 rounded-lg p-4">
-                  <div className="flex items-center gap-2 text-gray-400 mb-2">
-                    <AlertCircle size={20} />
-                    <span className="font-semibold">Submission Window Not Open</span>
-                  </div>
-                  <p className="text-sm text-gray-400">
-                    The submission window will open at the scheduled time.
-                  </p>
-                </div>
-              )}
+              <p className="text-sm text-gray-400">
+                {participant.has_submitted 
+                    ? "Your project has been successfully submitted."
+                    : "The submission window is now open. Fill out the submission form with your project details."
+                }
+              </p>
+
+              <Link href={submissionOpen && !participant.has_submitted ? `/events/${params.id}/scope/submit` : '#'}>
+                <Button 
+                    className="w-full bg-orange-600 hover:bg-orange-700"
+                    disabled={!submissionOpen || participant.has_submitted}
+                >
+                  <FileText className="h-4 w-4 mr-2" />
+                  {participant.has_submitted 
+                    ? "Project Submitted" 
+                    : !submissionOpen 
+                        ? "Submission Window Closed" 
+                        : "Submit Your Project"
+                  }
+                </Button>
+              </Link>
             </CardContent>
           </Card>
         </div>
