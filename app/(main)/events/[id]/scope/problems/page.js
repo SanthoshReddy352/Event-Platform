@@ -11,7 +11,6 @@ import {
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/context/AuthContext'
-import { toast } from 'sonner'
 import { isWithinInterval } from 'date-fns'
 
 export default function ProblemSelectionPage() {
@@ -22,57 +21,50 @@ export default function ProblemSelectionPage() {
   const [loading, setLoading] = useState(true)
   const [problems, setProblems] = useState([])
   const [event, setEvent] = useState(null)
-  const [scopeStatus, setScopeStatus] = useState(null)
+  const [participant, setParticipant] = useState(null) // Direct participant state
   const [selecting, setSelecting] = useState(false)
   const [error, setError] = useState(null)
   const [selectedProblemDetails, setSelectedProblemDetails] = useState(null)
   
-  const prevStatusRef = useRef(null)
+  // Ref to track if we have loaded initial data
+  const loadedRef = useRef(false)
 
   const fetchData = useCallback(async () => {
     if (!user || !params.id) return
     
     try {
-      if (!scopeStatus) setLoading(true)
+      // Only show full page loader on first load
+      if (!loadedRef.current) setLoading(true)
       
       const { data: { session } } = await supabase.auth.getSession()
-      
-      if (!session) {
-        throw new Error('Please log in')
-      }
+      if (!session) throw new Error('Please log in')
 
-      // 1. Fetch event details
+      // 1. Fetch Event Details (API or DB - API is fine for config)
       const eventRes = await fetch(`/api/events/${params.id}?t=${Date.now()}`, {
         cache: 'no-store'
       })
       const eventData = await eventRes.json()
       
-      if (!eventData.success) {
-        throw new Error('Event not found')
-      }
+      if (!eventData.success) throw new Error('Event not found')
       setEvent(eventData.event)
 
-      // 2. Fetch scope status
-      const scopeRes = await fetch(`/api/events/${params.id}/scope-status?t=${Date.now()}`, {
-        headers: { 
-          'Authorization': `Bearer ${session.access_token}`,
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache'
-        },
-        cache: 'no-store'
-      })
-      
-      const scopeData = await scopeRes.json()
-      
-      if (!scopeData.success) {
-        setError(scopeData.error || 'Access denied')
-        return
-      }
-      
-      prevStatusRef.current = scopeData
-      setScopeStatus(scopeData)
+      // 2. Fetch Current User's Participant Record (Direct DB)
+      const { data: participantData, error: participantError } = await supabase
+        .from('participants')
+        .select('*')
+        .eq('event_id', params.id)
+        .eq('user_id', user.id)
+        .single()
 
-      // 3. Fetch problem statements
+      if (participantError && participantError.code !== 'PGRST116') throw participantError
+      
+      if (!participantData) {
+         setError("You are not registered for this event.")
+         return
+      }
+      setParticipant(participantData)
+
+      // 3. Fetch Problem Statements (Direct DB)
       const { data: problemsData, error: problemsError } = await supabase
         .from('problem_statements')
         .select('*')
@@ -81,20 +73,22 @@ export default function ProblemSelectionPage() {
 
       if (problemsError) throw problemsError
 
-      // 4. Fetch current selection counts
-      const { data: participants } = await supabase
+      // 4. Calculate Selection Counts (Direct DB)
+      // Note: This relies on RLS allowing you to read other participants' selection data.
+      const { data: allParticipants } = await supabase
         .from('participants')
         .select('selected_problem_id')
         .eq('event_id', params.id)
         .not('selected_problem_id', 'is', null)
 
       const selectionCounts = {}
-      if (participants) {
-        participants.forEach(p => {
+      if (allParticipants) {
+        allParticipants.forEach(p => {
           selectionCounts[p.selected_problem_id] = (selectionCounts[p.selected_problem_id] || 0) + 1
         })
       }
 
+      // Merge counts into problem data
       const problemsWithCounts = problemsData.map(p => ({
         ...p,
         current_selections: selectionCounts[p.id] || 0,
@@ -103,33 +97,48 @@ export default function ProblemSelectionPage() {
 
       setProblems(problemsWithCounts)
 
-      if (scopeData.participant?.selected_problem_id) {
-        const selected = problemsWithCounts.find(p => p.id === scopeData.participant.selected_problem_id)
+      // Set selected problem details if applicable
+      if (participantData.selected_problem_id) {
+        const selected = problemsWithCounts.find(p => p.id === participantData.selected_problem_id)
         setSelectedProblemDetails(selected)
       }
 
+      loadedRef.current = true
+
     } catch (err) {
       console.error('Error fetching data:', err)
-      if (!scopeStatus) setError(err.message)
+      setError(err.message)
     } finally {
       setLoading(false)
     }
   }, [user?.id, params.id]) 
 
+  // Initial Fetch
+  useEffect(() => {
+    if (!authLoading) {
+      fetchData()
+    }
+  }, [authLoading, fetchData])
+
+  // --- REALTIME LISTENER ---
+  // Listens for ANY change to participants in this event (e.g., someone selects a problem)
+  // This updates the 'current_selections' count in real-time.
   useEffect(() => {
     if (!params.id) return
 
     const channel = supabase
-      .channel('problem_selection_updates')
+      .channel(`problems_realtime:${params.id}`)
       .on(
         'postgres_changes',
         {
-          event: '*',
+          event: '*', // Listen for INSERT and UPDATE
           schema: 'public',
           table: 'participants',
           filter: `event_id=eq.${params.id}`
         },
         (payload) => {
+          console.log('Realtime change detected:', payload)
+          // Refetch data to update counts and user status
           fetchData()
         }
       )
@@ -140,12 +149,6 @@ export default function ProblemSelectionPage() {
     }
   }, [params.id, fetchData])
 
-  useEffect(() => {
-    if (!authLoading) {
-      fetchData()
-    }
-  }, [authLoading, fetchData])
-
   const handleSelectProblem = async (problemId) => {
     if (!confirm('Are you sure? Once selected, you CANNOT change your problem statement. This decision is permanent.')) {
       return
@@ -155,6 +158,8 @@ export default function ProblemSelectionPage() {
     try {
       const { data: { session } } = await supabase.auth.getSession()
       
+      // We still use the API endpoint for the selection action because it likely 
+      // contains the logic (check_and_select_problem) and validation.
       const response = await fetch(`/api/events/${params.id}/select-problem`, {
         method: 'POST',
         headers: {
@@ -167,6 +172,8 @@ export default function ProblemSelectionPage() {
       const data = await response.json()
 
       if (data.success) {
+        // The Realtime listener will likely pick this up, but we fetch immediately just in case
+        await fetchData()
         alert('Problem statement selected successfully! Your selection is now locked.')
         router.push(`/events/${params.id}/scope`)
       } else {
@@ -213,17 +220,18 @@ export default function ProblemSelectionPage() {
     )
   }
 
-  const alreadySelected = scopeStatus?.participant?.selected_problem_id
+  const alreadySelected = !!participant?.selected_problem_id
   
   const selectionOpen = event?.problem_selection_start && event?.problem_selection_end
   ? isWithinInterval(new Date(), {
       start: new Date(event.problem_selection_start),
       end: new Date(event.problem_selection_end)
     })
-  : scopeStatus?.phases?.problem_selection
+  : false
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Header */}
       <div className="bg-brand-gradient py-12">
         <div className="container mx-auto px-4 max-w-5xl">
           <Link href={`/events/${params.id}/scope`}>
@@ -239,6 +247,7 @@ export default function ProblemSelectionPage() {
 
       <div className="container mx-auto px-4 py-8 max-w-5xl space-y-6">
         
+        {/* Status Banner */}
         {alreadySelected ? (
           <Card className="border-green-500 bg-green-500/5">
             <CardContent className="py-6">
@@ -294,6 +303,7 @@ export default function ProblemSelectionPage() {
           </Card>
         )}
 
+        {/* Instructions */}
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">Instructions</CardTitle>
@@ -306,6 +316,7 @@ export default function ProblemSelectionPage() {
           </CardContent>
         </Card>
 
+        {/* Problem Statements List */}
         {problems.length === 0 ? (
           <Card>
             <CardContent className="py-12 text-center text-gray-400">
@@ -317,7 +328,7 @@ export default function ProblemSelectionPage() {
             <h2 className="text-xl font-semibold">Available Problem Statements ({problems.length})</h2>
             
             {problems.map((problem, index) => {
-              const isSelected = problem.id === scopeStatus?.participant?.selected_problem_id
+              const isSelected = problem.id === participant?.selected_problem_id
               const isFull = problem.is_full && !isSelected
               const canSelect = selectionOpen && !alreadySelected && !isFull
 
@@ -347,6 +358,7 @@ export default function ProblemSelectionPage() {
                         <CardTitle className="text-xl">{problem.title}</CardTitle>
                       </div>
                       
+                      {/* Selection Indicator */}
                       <div className="text-center min-w-[100px]">
                         <div className="flex items-center justify-center gap-2 text-sm mb-1">
                           <Users size={16} className={problem.is_full ? 'text-red-500' : 'text-gray-400'} />

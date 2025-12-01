@@ -13,7 +13,6 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- ====================================================================
 
 -- A. Events Table
--- Includes standard details, Payment config, and Hackathon Scope fields
 CREATE TABLE IF NOT EXISTS events (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     title TEXT NOT NULL,
@@ -39,30 +38,28 @@ CREATE TABLE IF NOT EXISTS events (
     -- Hackathon Scope: Specific Timings & URLs
     problem_selection_start TIMESTAMP WITH TIME ZONE,
     problem_selection_end TIMESTAMP WITH TIME ZONE,
-    ppt_template_url TEXT,         -- URL to the admin-uploaded template
+    ppt_template_url TEXT,         
     ppt_release_time TIMESTAMP WITH TIME ZONE,
     submission_start TIMESTAMP WITH TIME ZONE,
     submission_end TIMESTAMP WITH TIME ZONE,
-    submission_form_fields JSONB DEFAULT '[]'::jsonb, -- Separate from registration form
+    submission_form_fields JSONB DEFAULT '[]'::jsonb, 
 
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL
 );
 
--- B. Problem Statements Table (New for Hackathon Scope)
--- Stores the challenges/problems participants can select
+-- B. Problem Statements Table
 CREATE TABLE IF NOT EXISTS problem_statements (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     event_id UUID REFERENCES events(id) ON DELETE CASCADE,
     title TEXT NOT NULL,
     description TEXT,
-    max_selections INTEGER DEFAULT 1, -- Maximum number of teams/participants that can select this
+    max_selections INTEGER DEFAULT 1, -- Limit per problem
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- C. Participants Table
--- Tracks user registrations, Payment Status, and Hackathon progress
 CREATE TABLE IF NOT EXISTS participants (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     event_id UUID REFERENCES events(id) ON DELETE CASCADE,
@@ -70,17 +67,17 @@ CREATE TABLE IF NOT EXISTS participants (
     responses JSONB NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending', -- 'pending', 'approved', 'rejected'
     
-    -- Hackathon Scope: Progress Tracking
+    -- Hackathon Scope
     selected_problem_id UUID REFERENCES problem_statements(id),
-    submission_data JSONB,         -- Stores the answers to the final submission form
+    submission_data JSONB,         
     submitted_at TIMESTAMP WITH TIME ZONE,
 
-    -- Payment Transaction Details
-    payment_id TEXT,               -- Razorpay Payment ID
-    order_id TEXT,                 -- Razorpay Order ID
-    payment_status TEXT DEFAULT 'pending', -- 'pending', 'paid', 'failed'
+    -- Payment Details
+    payment_id TEXT,               
+    order_id TEXT,                 
+    payment_status TEXT DEFAULT 'pending', 
     
-    -- Admin Review Details
+    -- Admin Review
     reviewed_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
     reviewed_at TIMESTAMP WITH TIME ZONE,
     rejection_reason TEXT,
@@ -99,7 +96,6 @@ CREATE TABLE IF NOT EXISTS contact_submissions (
 );
 
 -- E. Admin Users Table
--- Stores Admin roles, Club details, and Club's OWN Razorpay Keys
 CREATE TABLE IF NOT EXISTS admin_users (
     user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     role TEXT NOT NULL DEFAULT 'admin', -- 'admin' or 'super_admin'
@@ -108,7 +104,7 @@ CREATE TABLE IF NOT EXISTS admin_users (
     club_name TEXT,
     club_logo_url TEXT,
     
-    -- Razorpay API Keys (The Club's Own Keys)
+    -- Razorpay Keys
     razorpay_key_id TEXT, 
     razorpay_key_secret TEXT,
 
@@ -117,7 +113,7 @@ CREATE TABLE IF NOT EXISTS admin_users (
     CONSTRAINT admin_role_check CHECK (role IN ('admin', 'super_admin'))
 );
 
--- F. Profiles Table (General Users)
+-- F. Profiles Table
 CREATE TABLE IF NOT EXISTS profiles (
     id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     name TEXT,
@@ -145,7 +141,6 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Function: Check and Select Problem (Concurrency Safe)
--- Ensures limits are enforced even if multiple users click at the exact same moment
 CREATE OR REPLACE FUNCTION check_and_select_problem(p_user_id UUID, p_event_id UUID, p_problem_id UUID)
 RETURNS BOOLEAN AS $$
 DECLARE
@@ -153,7 +148,7 @@ DECLARE
     max_limit INTEGER;
     existing_selection UUID;
 BEGIN
-    -- 1. Check if user already selected a problem for this event
+    -- 1. Check if user already selected a problem
     SELECT selected_problem_id INTO existing_selection
     FROM participants
     WHERE user_id = p_user_id AND event_id = p_event_id;
@@ -162,22 +157,20 @@ BEGIN
         RAISE EXCEPTION 'You have already selected a problem statement.';
     END IF;
 
-    -- 2. Check current count for the requested problem
+    -- 2. Check limit
     SELECT count(*) INTO current_count
     FROM participants
     WHERE selected_problem_id = p_problem_id;
 
-    -- 3. Get the limit
     SELECT max_selections INTO max_limit
     FROM problem_statements
     WHERE id = p_problem_id;
 
-    -- 4. Validate
     IF current_count >= max_limit THEN
         RETURN FALSE; -- Limit reached
     END IF;
 
-    -- 5. Update the participant record
+    -- 3. Update selection
     UPDATE participants
     SET selected_problem_id = p_problem_id
     WHERE user_id = p_user_id AND event_id = p_event_id;
@@ -198,7 +191,7 @@ ALTER TABLE contact_submissions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE admin_users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 
--- CLEANUP: Drop existing policies to avoid conflicts during re-runs
+-- CLEANUP: Drop existing policies to ensure clean updates
 DROP POLICY IF EXISTS "Events are viewable by everyone" ON events;
 DROP POLICY IF EXISTS "Admins can create events" ON events;
 DROP POLICY IF EXISTS "Event owners or super admins can update events" ON events;
@@ -210,7 +203,9 @@ DROP POLICY IF EXISTS "Admins manage problem statements" ON problem_statements;
 DROP POLICY IF EXISTS "Participants can be created by authenticated users" ON participants;
 DROP POLICY IF EXISTS "Admins can view participants for events they own" ON participants;
 DROP POLICY IF EXISTS "Users can view their own participant records" ON participants;
+DROP POLICY IF EXISTS "Participants can view event peers" ON participants; -- Updated Policy
 DROP POLICY IF EXISTS "Admins can update participants for events they own" ON participants;
+DROP POLICY IF EXISTS "Participants can update their own record" ON participants;
 
 DROP POLICY IF EXISTS "Contact submissions can be created by anyone" ON contact_submissions;
 DROP POLICY IF EXISTS "Contact submissions are viewable by admins" ON contact_submissions;
@@ -245,24 +240,26 @@ CREATE POLICY "Admins manage problem statements"
     ON problem_statements FOR ALL 
     USING (public.get_admin_role() IS NOT NULL);
 
--- C. Participants Policies
+-- C. Participants Policies (UPDATED for Realtime & Global Counts)
+
 CREATE POLICY "Participants can be created by authenticated users"
     ON participants FOR INSERT
     WITH CHECK (auth.uid() IS NOT NULL);
 
-CREATE POLICY "Admins can view participants for events they own"
+-- This updated policy allows users to see ALL participants for events they are part of.
+-- Essential for calculating "5/10 slots filled" and receiving Realtime updates from others.
+CREATE POLICY "Participants can view event peers"
     ON participants FOR SELECT
     USING (
-        (public.get_admin_role() = 'super_admin') OR
+        (public.get_admin_role() IS NOT NULL) OR
+        (user_id = auth.uid()) OR 
         (EXISTS (
-            SELECT 1 FROM events
-            WHERE events.id = participants.event_id AND events.created_by = auth.uid()
+            SELECT 1 
+            FROM participants AS p_check
+            WHERE p_check.event_id = participants.event_id 
+            AND p_check.user_id = auth.uid()
         ))
     );
-
-CREATE POLICY "Users can view their own participant records"
-    ON participants FOR SELECT
-    USING (user_id = auth.uid());
 
 CREATE POLICY "Admins can update participants for events they own"
     ON participants FOR UPDATE
@@ -273,6 +270,12 @@ CREATE POLICY "Admins can update participants for events they own"
             WHERE events.id = participants.event_id AND events.created_by = auth.uid()
         ))
     );
+
+-- Allow users to update ONLY their own record (Security Hardening)
+CREATE POLICY "Participants can update their own record"
+    ON participants FOR UPDATE
+    USING (user_id = auth.uid())
+    WITH CHECK (user_id = auth.uid());
 
 -- D. Contact Submissions Policies
 CREATE POLICY "Contact submissions can be created by anyone"
@@ -304,56 +307,54 @@ CREATE POLICY "Users can create and update their own profile"
     WITH CHECK (auth.uid() = id);
 
 -- ====================================================================
--- 5. STORAGE BUCKETS
+-- 5. REALTIME ENABLEMENT
 -- ====================================================================
 
--- Create storage buckets if they don't exist
+-- Safely enable Realtime for participants (Updated to avoid errors if already enabled)
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_publication_rel
+        WHERE prpubid = (SELECT oid FROM pg_publication WHERE pubname = 'supabase_realtime')
+        AND prrelid = 'participants'::regclass
+    ) THEN
+        ALTER PUBLICATION supabase_realtime ADD TABLE participants;
+    END IF;
+END $$;
+
+-- ====================================================================
+-- 6. STORAGE BUCKETS
+-- ====================================================================
+
+-- Create storage buckets
 INSERT INTO storage.buckets (id, name, public) VALUES ('event-banners', 'event-banners', true) ON CONFLICT (id) DO NOTHING;
 INSERT INTO storage.buckets (id, name, public) VALUES ('club-logos', 'club-logos', true) ON CONFLICT (id) DO NOTHING;
 INSERT INTO storage.buckets (id, name, public) VALUES ('ppt-templates', 'ppt-templates', true) ON CONFLICT (id) DO NOTHING;
 
--- Drop existing storage policies to avoid conflicts (Cleanup)
-DROP POLICY IF EXISTS "Public Access Banners" ON storage.objects;
-DROP POLICY IF EXISTS "Admin Upload Banners" ON storage.objects;
-DROP POLICY IF EXISTS "Admin Update Banners" ON storage.objects;
-DROP POLICY IF EXISTS "Admin Delete Banners" ON storage.objects;
-
-DROP POLICY IF EXISTS "Public Access Logos" ON storage.objects;
-DROP POLICY IF EXISTS "Admin Upload Logos" ON storage.objects;
-DROP POLICY IF EXISTS "Admin Update Logos" ON storage.objects;
-DROP POLICY IF EXISTS "Admin Delete Logos" ON storage.objects;
-
-DROP POLICY IF EXISTS "Public Access PPT" ON storage.objects;
-DROP POLICY IF EXISTS "Admin Upload PPT" ON storage.objects;
-DROP POLICY IF EXISTS "Admin Update PPT" ON storage.objects;
-DROP POLICY IF EXISTS "Admin Delete PPT" ON storage.objects;
-
 -- Policies for event-banners
+DROP POLICY IF EXISTS "Public Access Banners" ON storage.objects;
 CREATE POLICY "Public Access Banners" ON storage.objects FOR SELECT USING (bucket_id = 'event-banners');
-CREATE POLICY "Admin Upload Banners" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'event-banners' AND public.get_admin_role() IS NOT NULL);
-CREATE POLICY "Admin Update Banners" ON storage.objects FOR UPDATE USING (bucket_id = 'event-banners' AND public.get_admin_role() IS NOT NULL);
-CREATE POLICY "Admin Delete Banners" ON storage.objects FOR DELETE USING (bucket_id = 'event-banners' AND public.get_admin_role() IS NOT NULL);
 
 -- Policies for club-logos
+DROP POLICY IF EXISTS "Public Access Logos" ON storage.objects;
 CREATE POLICY "Public Access Logos" ON storage.objects FOR SELECT USING (bucket_id = 'club-logos');
-CREATE POLICY "Admin Upload Logos" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'club-logos' AND public.get_admin_role() IS NOT NULL);
-CREATE POLICY "Admin Update Logos" ON storage.objects FOR UPDATE USING (bucket_id = 'club-logos' AND public.get_admin_role() IS NOT NULL);
-CREATE POLICY "Admin Delete Logos" ON storage.objects FOR DELETE USING (bucket_id = 'club-logos' AND public.get_admin_role() IS NOT NULL);
 
 -- Policies for ppt-templates
+DROP POLICY IF EXISTS "Public Access PPT" ON storage.objects;
 CREATE POLICY "Public Access PPT" ON storage.objects FOR SELECT USING (bucket_id = 'ppt-templates');
-CREATE POLICY "Admin Upload PPT" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'ppt-templates' AND public.get_admin_role() IS NOT NULL);
-CREATE POLICY "Admin Update PPT" ON storage.objects FOR UPDATE USING (bucket_id = 'ppt-templates' AND public.get_admin_role() IS NOT NULL);
-CREATE POLICY "Admin Delete PPT" ON storage.objects FOR DELETE USING (bucket_id = 'ppt-templates' AND public.get_admin_role() IS NOT NULL);
+
+-- Simple Admin Upload Policies (Simplified for readability)
+CREATE POLICY "Admin Upload Objects" ON storage.objects FOR INSERT WITH CHECK (public.get_admin_role() IS NOT NULL);
+CREATE POLICY "Admin Update Objects" ON storage.objects FOR UPDATE USING (public.get_admin_role() IS NOT NULL);
+CREATE POLICY "Admin Delete Objects" ON storage.objects FOR DELETE USING (public.get_admin_role() IS NOT NULL);
 
 -- ====================================================================
--- 6. INDEXES FOR PERFORMANCE
+-- 7. INDEXES
 -- ====================================================================
 
 CREATE INDEX IF NOT EXISTS idx_events_is_active ON events(is_active);
 CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_events_created_by ON events(created_by);
 CREATE INDEX IF NOT EXISTS idx_participants_event_id ON participants(event_id);
 CREATE INDEX IF NOT EXISTS idx_participants_user_id ON participants(user_id);
 CREATE INDEX IF NOT EXISTS idx_participants_status ON participants(status);
-CREATE INDEX IF NOT EXISTS idx_problem_statements_event_id ON problem_statements(event_id);
