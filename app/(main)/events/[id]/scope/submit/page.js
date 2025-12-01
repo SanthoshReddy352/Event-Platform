@@ -87,6 +87,7 @@ export default function ProjectSubmissionPage() {
       prevStatusRef.current = scopeData
       setScopeStatus(scopeData)
 
+      // CHANGED: Explicitly set submitted state from API response
       if (scopeData.participant?.has_submitted) {
         setSubmitted(true)
       }
@@ -107,6 +108,12 @@ export default function ProjectSubmissionPage() {
   }, [authLoading, fetchData])
 
   const handleSubmit = async (submissionData) => {
+    // CHANGED: Double check if already submitted
+    if (submitted || scopeStatus?.participant?.has_submitted) {
+        alert("You have already submitted your project.")
+        return
+    }
+
     if (!confirm('Are you sure you want to submit? You can only submit once.')) {
       return
     }
@@ -132,6 +139,7 @@ export default function ProjectSubmissionPage() {
           window.sessionStorage.removeItem(storageKey)
         }
         alert('Project submitted successfully! Good luck!')
+        router.refresh() // Clear Next.js cache
         router.push(`/events/${params.id}/scope`)
       } else {
         alert(`Submission failed: ${data.error}`)
@@ -188,6 +196,7 @@ export default function ProjectSubmissionPage() {
       })
     : scopeStatus.phases?.submission_open
 
+  // CHANGED: Use a derived constant for clarity, ensuring API response is respected
   const hasSubmitted = submitted || scopeStatus.participant?.has_submitted
   const submissionFormFields = event.submission_form_fields || []
 

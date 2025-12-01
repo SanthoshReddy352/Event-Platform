@@ -33,6 +33,7 @@ export default function ProblemSelectionPage() {
     if (!user || !params.id) return
     
     try {
+      // Don't set loading to true on background refresh to avoid UI flickering
       if (!scopeStatus) setLoading(true)
       
       const { data: { session } } = await supabase.auth.getSession()
@@ -69,7 +70,7 @@ export default function ProblemSelectionPage() {
         return
       }
       
-      // Notify phase changes (optional since polling is removed, but good for initial load check)
+      // Notify phase changes
       if (prevStatusRef.current && scopeData.phases) {
         const prev = prevStatusRef.current.phases
         const curr = scopeData.phases
@@ -126,7 +127,33 @@ export default function ProblemSelectionPage() {
     }
   }, [user?.id, params.id]) 
 
-  // Initial fetch only - NO setInterval
+  // CHANGED: Added Realtime Subscription to update counts
+  useEffect(() => {
+    if (!params.id) return
+
+    const channel = supabase
+      .channel('problem_selection_updates')
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // Listen for any change (INSERT, UPDATE)
+          schema: 'public',
+          table: 'participants',
+          filter: `event_id=eq.${params.id}` // Filter for this event
+        },
+        (payload) => {
+          // When a participant selects a problem, refresh the data to update counts
+          fetchData()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [params.id, fetchData])
+
+  // Initial fetch
   useEffect(() => {
     if (!authLoading) {
       fetchData()
@@ -168,6 +195,7 @@ export default function ProblemSelectionPage() {
     }
   }
 
+  // ... (Rest of the file remains unchanged - render logic)
   if (authLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">

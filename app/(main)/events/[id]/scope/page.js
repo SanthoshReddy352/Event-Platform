@@ -23,6 +23,7 @@ export default function HackathonScopePage() {
   const [loading, setLoading] = useState(true)
   const [event, setEvent] = useState(null)
   const [scopeStatus, setScopeStatus] = useState(null)
+  const [selectedProblem, setSelectedProblem] = useState(null) // Added state for problem details
   const [error, setError] = useState(null)
   
   // State to force re-render for time checks every minute (UI only, no data fetch)
@@ -104,6 +105,20 @@ export default function HackathonScopePage() {
       // Update local state
       prevStatusRef.current = scopeData
       setScopeStatus(scopeData)
+      
+      // 4. Fetch Selected Problem Details (If applicable)
+      if (scopeData.participant?.selected_problem_id) {
+          const { data: problemData } = await supabase
+            .from('problem_statements')
+            .select('title, description')
+            .eq('id', scopeData.participant.selected_problem_id)
+            .single()
+          
+          if (problemData) {
+            setSelectedProblem(problemData)
+          }
+      }
+
       setNow(new Date()) // Sync time on fetch
       
     } catch (err) {
@@ -333,29 +348,42 @@ export default function HackathonScopePage() {
               </CardTitle>
               <CardDescription>
                 {participant.selected_problem_id 
-                  ? 'You have selected your problem statement'
+                  ? 'Your selected challenge'
                   : 'Choose your challenge for the hackathon'
                 }
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <p className="text-sm text-gray-400">
-                Browse available problem statements and make your selection. Once selected, your choice is permanent.
-              </p>
-              
-              <Link href={problemSelectionOpen && !participant.selected_problem_id ? `/events/${params.id}/scope/problems` : '#'}>
-                <Button 
-                    className="w-full bg-brand-gradient"
-                    disabled={!problemSelectionOpen || participant.selected_problem_id}
-                >
-                    {participant.selected_problem_id 
-                        ? "Problem Selected" 
-                        : !problemSelectionOpen 
-                            ? "Selection Window Closed" 
-                            : "View & Select Problem"
-                    }
-                </Button>
-              </Link>
+              {participant.selected_problem_id && selectedProblem ? (
+                // CHANGED: Display Title and Description if selected
+                <div className="bg-muted/50 p-4 rounded-md border border-gray-700">
+                  <h3 className="font-semibold text-lg mb-2 text-white">{selectedProblem.title}</h3>
+                  <p className="text-sm text-gray-400 line-clamp-3 mb-3">{selectedProblem.description}</p>
+                  <div className="flex items-center gap-2 text-green-500 font-medium text-sm">
+                    <CheckCircle className="h-4 w-4" />
+                    Confirmed Selection
+                  </div>
+                </div>
+              ) : (
+                // CHANGED: Standard selection view
+                <>
+                    <p className="text-sm text-gray-400">
+                        Browse available problem statements and make your selection. Once selected, your choice is permanent.
+                    </p>
+                    
+                    <Link href={problemSelectionOpen && !participant.selected_problem_id ? `/events/${params.id}/scope/problems` : '#'}>
+                        <Button 
+                            className="w-full bg-brand-gradient"
+                            disabled={!problemSelectionOpen || participant.selected_problem_id}
+                        >
+                            {!problemSelectionOpen 
+                                    ? "Selection Window Closed" 
+                                    : "View & Select Problem"
+                            }
+                        </Button>
+                    </Link>
+                </>
+              )}
             </CardContent>
           </Card>
 
@@ -416,20 +444,31 @@ export default function HackathonScopePage() {
                 }
               </p>
 
-              <Link href={submissionOpen && !participant.has_submitted ? `/events/${params.id}/scope/submit` : '#'}>
-                <Button 
-                    className="w-full bg-orange-600 hover:bg-orange-700"
-                    disabled={!submissionOpen || participant.has_submitted}
-                >
-                  <FileText className="h-4 w-4 mr-2" />
-                  {participant.has_submitted 
-                    ? "Project Submitted" 
-                    : !submissionOpen 
-                        ? "Submission Window Closed" 
-                        : "Submit Your Project"
-                  }
-                </Button>
-              </Link>
+              {participant.has_submitted ? (
+                  // CHANGED: Show success text instead of disabled button
+                  <div className="bg-green-500/10 border border-green-500/20 p-4 rounded-md flex flex-col items-center justify-center text-center">
+                      <div className="flex items-center gap-2 text-green-500 font-bold mb-1 text-lg">
+                          <CheckCircle className="h-6 w-6" />
+                          Submission Received
+                      </div>
+                      <p className="text-sm text-green-400/80">
+                          We have received your project submission. Good luck!
+                      </p>
+                  </div>
+              ) : (
+                  <Link href={submissionOpen && !participant.has_submitted ? `/events/${params.id}/scope/submit` : '#'}>
+                    <Button 
+                        className="w-full bg-orange-600 hover:bg-orange-700"
+                        disabled={!submissionOpen || participant.has_submitted}
+                    >
+                    <FileText className="h-4 w-4 mr-2" />
+                    { !submissionOpen 
+                            ? "Submission Window Closed" 
+                            : "Submit Your Project"
+                    }
+                    </Button>
+                  </Link>
+              )}
             </CardContent>
           </Card>
         </div>
