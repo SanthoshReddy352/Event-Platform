@@ -123,15 +123,22 @@ export default function ProblemSelectionPage() {
 
     } catch (err) {
       console.error('Error fetching data:', err)
-      setError(err.message)
+      // Only set error on initial load
+      if (!scopeStatus) setError(err.message)
     } finally {
       setLoading(false)
     }
-  }, [user, params.id])
+  }, [user?.id, params.id]) // Use user.id to prevent unnecessary re-fetches
 
   useEffect(() => {
     if (!authLoading) {
       fetchData()
+      
+      // Silent background polling every 30 seconds to auto-update status
+      // This updates React state without page reload - non-disruptive!
+      const intervalId = setInterval(fetchData, 30000)
+      
+      return () => clearInterval(intervalId)
     }
   }, [authLoading, fetchData])
 
