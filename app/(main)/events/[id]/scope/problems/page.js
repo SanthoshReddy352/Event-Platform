@@ -33,7 +33,6 @@ export default function ProblemSelectionPage() {
     if (!user || !params.id) return
     
     try {
-      // Don't set loading to true on background refresh to avoid UI flickering
       if (!scopeStatus) setLoading(true)
       
       const { data: { session } } = await supabase.auth.getSession()
@@ -68,16 +67,6 @@ export default function ProblemSelectionPage() {
       if (!scopeData.success) {
         setError(scopeData.error || 'Access denied')
         return
-      }
-      
-      // Notify phase changes
-      if (prevStatusRef.current && scopeData.phases) {
-        const prev = prevStatusRef.current.phases
-        const curr = scopeData.phases
-        
-        if (!prev.problem_selection && curr.problem_selection) {
-          toast.success('Problem selection window is now open!')
-        }
       }
       
       prevStatusRef.current = scopeData
@@ -127,7 +116,6 @@ export default function ProblemSelectionPage() {
     }
   }, [user?.id, params.id]) 
 
-  // CHANGED: Added Realtime Subscription to update counts
   useEffect(() => {
     if (!params.id) return
 
@@ -136,13 +124,12 @@ export default function ProblemSelectionPage() {
       .on(
         'postgres_changes',
         {
-          event: '*', // Listen for any change (INSERT, UPDATE)
+          event: '*',
           schema: 'public',
           table: 'participants',
-          filter: `event_id=eq.${params.id}` // Filter for this event
+          filter: `event_id=eq.${params.id}`
         },
         (payload) => {
-          // When a participant selects a problem, refresh the data to update counts
           fetchData()
         }
       )
@@ -153,7 +140,6 @@ export default function ProblemSelectionPage() {
     }
   }, [params.id, fetchData])
 
-  // Initial fetch
   useEffect(() => {
     if (!authLoading) {
       fetchData()
@@ -195,7 +181,6 @@ export default function ProblemSelectionPage() {
     }
   }
 
-  // ... (Rest of the file remains unchanged - render logic)
   if (authLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -230,7 +215,6 @@ export default function ProblemSelectionPage() {
 
   const alreadySelected = scopeStatus?.participant?.selected_problem_id
   
-  // Local time check
   const selectionOpen = event?.problem_selection_start && event?.problem_selection_end
   ? isWithinInterval(new Date(), {
       start: new Date(event.problem_selection_start),
@@ -240,7 +224,6 @@ export default function ProblemSelectionPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
       <div className="bg-brand-gradient py-12">
         <div className="container mx-auto px-4 max-w-5xl">
           <Link href={`/events/${params.id}/scope`}>
@@ -256,7 +239,6 @@ export default function ProblemSelectionPage() {
 
       <div className="container mx-auto px-4 py-8 max-w-5xl space-y-6">
         
-        {/* Status Banner */}
         {alreadySelected ? (
           <Card className="border-green-500 bg-green-500/5">
             <CardContent className="py-6">
@@ -312,7 +294,6 @@ export default function ProblemSelectionPage() {
           </Card>
         )}
 
-        {/* Instructions */}
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">Instructions</CardTitle>
@@ -325,7 +306,6 @@ export default function ProblemSelectionPage() {
           </CardContent>
         </Card>
 
-        {/* Problem Statements List */}
         {problems.length === 0 ? (
           <Card>
             <CardContent className="py-12 text-center text-gray-400">
@@ -367,7 +347,6 @@ export default function ProblemSelectionPage() {
                         <CardTitle className="text-xl">{problem.title}</CardTitle>
                       </div>
                       
-                      {/* Selection Indicator */}
                       <div className="text-center min-w-[100px]">
                         <div className="flex items-center justify-center gap-2 text-sm mb-1">
                           <Users size={16} className={problem.is_full ? 'text-red-500' : 'text-gray-400'} />

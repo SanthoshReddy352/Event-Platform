@@ -8,12 +8,11 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { 
   ArrowLeft, Loader2, Clock, Target, FileText, Download,
-  CheckCircle, XCircle, AlertCircle, Lock
+  CheckCircle, Lock
 } from 'lucide-react'
 import { format, isBefore, isAfter, isWithinInterval } from 'date-fns'
 import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/context/AuthContext'
-import { toast } from 'sonner'
 
 export default function HackathonScopePage() {
   const params = useParams()
@@ -22,96 +21,85 @@ export default function HackathonScopePage() {
   
   const [loading, setLoading] = useState(true)
   const [event, setEvent] = useState(null)
-  const [scopeStatus, setScopeStatus] = useState(null)
-  const [selectedProblem, setSelectedProblem] = useState(null) // Added state for problem details
+  const [participant, setParticipant] = useState(null)
+  const [selectedProblem, setSelectedProblem] = useState(null)
   const [error, setError] = useState(null)
   
-  // State to force re-render for time checks every minute (UI only, no data fetch)
   const [now, setNow] = useState(new Date())
-  
-  const prevStatusRef = useRef(null)
 
+  // --- Main Data Fetcher ---
   const fetchScopeStatus = useCallback(async () => {
     if (!user || !params.id) return
     
     try {
-      if (!scopeStatus) setLoading(true)
+      if (!event) setLoading(true)
       
       const { data: { session } } = await supabase.auth.getSession()
-      
-      if (!session) {
-        throw new Error('Please log in')
-      }
+      if (!session) throw new Error('Please log in')
 
-      // 1. Fetch event details
+      // 1. Fetch Event Details (Public Config)
       const eventRes = await fetch(`/api/events/${params.id}?t=${Date.now()}`, {
         cache: 'no-store'
       })
       const eventData = await eventRes.json()
       
-      if (!eventData.success) {
-        throw new Error('Event not found')
-      }
-
-      // --- Strict Page Access Control ---
+      if (!eventData.success) throw new Error('Event not found')
+      
+      // Strict Time Checks
       const currentTime = new Date()
       const eventStart = new Date(eventData.event.event_date)
       const eventEnd = new Date(eventData.event.event_end_date)
 
-      // Block access if event hasn't started
       if (isBefore(currentTime, eventStart)) {
          setError(`The event has not started yet. Please return at ${format(eventStart, 'PPp')}.`)
          setLoading(false)
          return
       }
 
-      // Block access if event has ended
       if (isAfter(currentTime, eventEnd)) {
          setError("The event has concluded. This workspace is no longer accessible.")
          setLoading(false)
          return
       }
-      
+
       setEvent(eventData.event)
 
-      // 2. Check if this is a hackathon
       if (eventData.event.event_type !== 'hackathon') {
         router.push(`/events/${params.id}`)
         return
       }
 
-      // 3. Fetch participant specific status
-      const scopeRes = await fetch(`/api/events/${params.id}/scope-status?t=${Date.now()}`, {
-        headers: { 
-          'Authorization': `Bearer ${session.access_token}`,
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache',
-          'Expires': '0'
-        },
-        cache: 'no-store'
-      })
-      
-      const scopeData = await scopeRes.json()
-      
-      if (!scopeData.success) {
-        if (!scopeData.isApproved) {
-          setError('You must be an approved participant to access the hackathon scope.')
-        } else {
-          setError(scopeData.error)
-        }
-        return
+      // 2. Fetch Participant DIRECTLY from Supabase
+      // We select specific fields including the ones you confirmed exist in DB
+      const { data: participantData, error: participantError } = await supabase
+        .from('participants')
+        .select('id, status, selected_problem_id, submitted_at, submission_data')
+        .eq('event_id', params.id)
+        .eq('user_id', user.id)
+        .single()
+
+      if (participantError && participantError.code !== 'PGRST116') {
+          throw participantError
       }
+
+      if (!participantData) {
+          setError('You are not registered for this event.')
+          return
+      }
+
+      if (participantData.status !== 'approved') {
+          setError('You must be an approved participant to access the hackathon scope.')
+          return
+      }
+
+      setParticipant(participantData)
       
-      // Update local state
-      prevStatusRef.current = scopeData
-      setScopeStatus(scopeData)
-      
-      // 4. Fetch Selected Problem Details (If applicable)
-      if (scopeData.participant?.selected_problem_id) {
+      // 3. Fetch Selected Problem Details (if user has selected one)
+      if (participantData.selected_problem_id) {
           const { data: problemData } = await supabase
             .from('problem_statements')
             .select('title, description')
-            .eq('id', scopeData.participant.selected_problem_id)
+            .eq('id', participantData.selected_problem_id)
             .single()
           
           if (problemData) {
@@ -119,30 +107,65 @@ export default function HackathonScopePage() {
           }
       }
 
-      setNow(new Date()) // Sync time on fetch
+      setNow(new Date()) 
       
     } catch (err) {
       console.error('Error fetching scope status:', err)
-      if (!scopeStatus) setError(err.message)
+      if (!event) setError(err.message)
     } finally {
       setLoading(false)
     }
   }, [user?.id, params.id, router]) 
 
-  // Initial fetch ONLY (No polling)
+  // Initial fetch
   useEffect(() => {
     if (!authLoading) {
       fetchScopeStatus()
     }
   }, [authLoading, fetchScopeStatus])
 
-  // Update 'now' every second for real-time button states
+  // --- Realtime Listener ---
+  useEffect(() => {
+    if (!user || !params.id) return
+
+    const channel = supabase
+      .channel(`scope_dashboard:${params.id}:${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE', 
+          schema: 'public',
+          table: 'participants',
+          filter: `event_id=eq.${params.id}` // RLS ensures this only fires for current user
+        },
+        (payload) => {
+          console.log('Realtime update detected:', payload)
+          
+          // Immediately update local state
+          if (payload.new) {
+             setParticipant(prev => ({ ...prev, ...payload.new }))
+             
+             // If problem ID changed, fetch the new problem details
+             if (payload.new.selected_problem_id !== participant?.selected_problem_id) {
+                 // We need to re-run the full fetch to get the joined problem statement data
+                 fetchScopeStatus() 
+             }
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [user, params.id, fetchScopeStatus, participant])
+
+  // Timer
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000)
     return () => clearInterval(timer)
   }, [])
 
-  // --- Helper Functions for Time-Based Access ---
   const isProblemSelectionActive = () => {
     if (!event || !event.problem_selection_start || !event.problem_selection_end) return false
     return isWithinInterval(now, {
@@ -199,19 +222,21 @@ export default function HackathonScopePage() {
     )
   }
 
-  if (!event || !scopeStatus) return null
+  if (!event || !participant) return null
 
-  // SAFE ACCESS: Use optional chaining or default object
-  const participant = scopeStatus.participant || {};
+  // --- UPDATED LOGIC ---
+  // 1. Check if selected_problem_id is not null
+  const hasSelectedProblem = !!participant.selected_problem_id;
   
-  // Calculated States
+  // 2. Check if submitted_at is not null (The database field you confirmed)
+  const hasSubmitted = !!participant.submitted_at; 
+
   const problemSelectionOpen = isProblemSelectionActive();
   const pptAvailable = isPptActive();
   const submissionOpen = isSubmissionActive();
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
       <div className="bg-brand-gradient py-12">
         <div className="container mx-auto px-4 max-w-5xl">
           <Link href={`/events/${params.id}`}>
@@ -227,18 +252,19 @@ export default function HackathonScopePage() {
 
       <div className="container mx-auto px-4 py-8 max-w-5xl space-y-6">
         
-        {/* Status Cards (Overview) */}
+        {/* Overview Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Problem Selection Status */}
-          <Card className={problemSelectionOpen ? 'border-green-500' : 'border-gray-500'}>
+          
+          {/* 1. Problem Selection Status */}
+          <Card className={hasSelectedProblem ? 'border-green-500' : 'border-gray-500'}>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <Target size={16} className={problemSelectionOpen ? 'text-green-500' : 'text-gray-400'} />
+                <Target size={16} className={hasSelectedProblem ? 'text-green-500' : 'text-gray-400'} />
                 Problem Selection
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {participant.selected_problem_id ? (
+              {hasSelectedProblem ? (
                 <div className="flex items-center gap-2 text-green-500">
                   <CheckCircle size={20} />
                   <span className="font-semibold">Selected</span>
@@ -251,7 +277,7 @@ export default function HackathonScopePage() {
             </CardContent>
           </Card>
 
-          {/* PPT Template Status */}
+          {/* 2. PPT Template Status */}
           <Card className={pptAvailable ? 'border-blue-500' : 'border-gray-500'}>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -268,16 +294,16 @@ export default function HackathonScopePage() {
             </CardContent>
           </Card>
 
-          {/* Submission Status */}
-          <Card className={submissionOpen ? 'border-orange-500' : 'border-gray-500'}>
+          {/* 3. Submission Status */}
+          <Card className={hasSubmitted ? 'border-orange-500' : 'border-gray-500'}>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <FileText size={16} className={submissionOpen ? 'text-orange-500' : 'text-gray-400'} />
+                <FileText size={16} className={hasSubmitted ? 'text-orange-500' : 'text-gray-400'} />
                 Final Submission
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {participant.has_submitted ? (
+              {hasSubmitted ? (
                 <div className="flex items-center gap-2 text-green-500">
                   <CheckCircle size={20} />
                   <span className="font-semibold">Submitted</span>
@@ -303,7 +329,7 @@ export default function HackathonScopePage() {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <span className="font-semibold">Problem Selection</span>
-                {participant.selected_problem_id && <CheckCircle className="h-5 w-5 text-green-500" />}
+                {hasSelectedProblem && <CheckCircle className="h-5 w-5 text-green-500" />}
               </div>
               {event.problem_selection_start && event.problem_selection_end && (
                 <p className="text-sm text-gray-400">
@@ -325,7 +351,7 @@ export default function HackathonScopePage() {
             <div className="border-t pt-4 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="font-semibold">Final Submission</span>
-                {participant.has_submitted && <CheckCircle className="h-5 w-5 text-green-500" />}
+                {hasSubmitted && <CheckCircle className="h-5 w-5 text-green-500" />}
               </div>
               {event.submission_start && event.submission_end && (
                 <p className="text-sm text-gray-400">
@@ -347,42 +373,43 @@ export default function HackathonScopePage() {
                 Problem Statements
               </CardTitle>
               <CardDescription>
-                {participant.selected_problem_id 
+                {hasSelectedProblem 
                   ? 'Your selected challenge'
                   : 'Choose your challenge for the hackathon'
                 }
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {participant.selected_problem_id && selectedProblem ? (
-                // CHANGED: Display Title and Description if selected
-                <div className="bg-muted/50 p-4 rounded-md border border-gray-700">
-                  <h3 className="font-semibold text-lg mb-2 text-white">{selectedProblem.title}</h3>
-                  <p className="text-sm text-gray-400 line-clamp-3 mb-3">{selectedProblem.description}</p>
-                  <div className="flex items-center gap-2 text-green-500 font-medium text-sm">
-                    <CheckCircle className="h-4 w-4" />
-                    Confirmed Selection
+              {hasSelectedProblem ? (
+                selectedProblem ? (
+                  <div className="bg-muted/50 p-4 rounded-md border border-gray-700">
+                    <h3 className="font-semibold text-lg mb-2 text-white">{selectedProblem.title}</h3>
+                    <p className="text-sm text-gray-400 line-clamp-3 mb-3">{selectedProblem.description}</p>
+                    <div className="flex items-center gap-2 text-green-500 font-medium text-sm">
+                      <CheckCircle className="h-4 w-4" />
+                      Confirmed Selection
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="text-sm text-gray-400 animate-pulse">Loading problem details...</div>
+                )
               ) : (
-                // CHANGED: Standard selection view
                 <>
                     <p className="text-sm text-gray-400">
                         Browse available problem statements and make your selection. Once selected, your choice is permanent.
                     </p>
                     
-                    <Link href={problemSelectionOpen && !participant.selected_problem_id ? `/events/${params.id}/scope/problems` : '#'}>
-                        <br></br>
-                        <Button 
-                            className="w-full bg-brand-gradient"
-                            disabled={!problemSelectionOpen || participant.selected_problem_id}
-                        >
-                            {!problemSelectionOpen 
-                                    ? "Selection Window Closed" 
-                                    : "View & Select Problem"
-                            }
+                    {problemSelectionOpen ? (
+                        <Link href={`/events/${params.id}/scope/problems`}>
+                            <Button className="w-full bg-brand-gradient mt-4">
+                                View & Select Problem
+                            </Button>
+                        </Link>
+                    ) : (
+                        <Button className="w-full bg-brand-gradient mt-4" disabled>
+                            Selection Window Closed
                         </Button>
-                    </Link>
+                    )}
                 </>
               )}
             </CardContent>
@@ -405,15 +432,15 @@ export default function HackathonScopePage() {
                  }
               </p>
 
-              {scopeStatus.event?.ppt_template_url ? (
+              {event.ppt_template_url ? (
                   <a 
-                    href={pptAvailable ? scopeStatus.event.ppt_template_url : '#'} 
+                    href={pptAvailable ? event.ppt_template_url : '#'} 
                     target={pptAvailable ? "_blank" : undefined} 
                     rel="noopener noreferrer" 
                     className="block"
                   >
                     <Button 
-                        className="w-full bg-blue-600 hover:bg-blue-700"
+                        className="w-full bg-blue-600 hover:bg-blue-700 mt-2"
                         disabled={!pptAvailable}
                     >
                       <Download className="h-4 w-4 mr-2" />
@@ -421,7 +448,7 @@ export default function HackathonScopePage() {
                     </Button>
                   </a>
               ) : (
-                  <Button disabled variant="outline" className="w-full">
+                  <Button disabled variant="outline" className="w-full mt-2">
                       No Template Uploaded
                   </Button>
               )}
@@ -439,14 +466,13 @@ export default function HackathonScopePage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-sm text-gray-400">
-                {participant.has_submitted 
+                {hasSubmitted 
                     ? "Your project has been successfully submitted."
                     : "The submission window is now open. Fill out the submission form with your project details."
                 }
               </p>
 
-              {participant.has_submitted ? (
-                  // CHANGED: Show success text instead of disabled button
+              {hasSubmitted ? (
                   <div className="bg-green-500/10 border border-green-500/20 p-4 rounded-md flex flex-col items-center justify-center text-center">
                       <div className="flex items-center gap-2 text-green-500 font-bold mb-1 text-lg">
                           <CheckCircle className="h-6 w-6" />
@@ -457,19 +483,19 @@ export default function HackathonScopePage() {
                       </p>
                   </div>
               ) : (
-                  <Link href={submissionOpen && !participant.has_submitted ? `/events/${params.id}/scope/submit` : '#'}>
-                    <br></br>
-                    <Button 
-                        className="w-full bg-orange-600 hover:bg-orange-700"
-                        disabled={!submissionOpen || participant.has_submitted}
-                    >
-                    <FileText className="h-4 w-4 mr-2" />
-                    { !submissionOpen 
-                            ? "Submission Window Closed" 
-                            : "Submit Your Project"
-                    }
+                  submissionOpen ? (
+                    <Link href={`/events/${params.id}/scope/submit`}>
+                        <Button className="w-full bg-orange-600 hover:bg-orange-700 mt-4">
+                            <FileText className="h-4 w-4 mr-2" />
+                            Submit Your Project
+                        </Button>
+                    </Link>
+                  ) : (
+                    <Button className="w-full bg-orange-600 hover:bg-orange-700 mt-4" disabled>
+                        <FileText className="h-4 w-4 mr-2" />
+                        Submission Window Closed
                     </Button>
-                  </Link>
+                  )
               )}
             </CardContent>
           </Card>

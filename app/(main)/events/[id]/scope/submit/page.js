@@ -87,7 +87,6 @@ export default function ProjectSubmissionPage() {
       prevStatusRef.current = scopeData
       setScopeStatus(scopeData)
 
-      // CHANGED: Explicitly set submitted state from API response
       if (scopeData.participant?.has_submitted) {
         setSubmitted(true)
       }
@@ -100,7 +99,6 @@ export default function ProjectSubmissionPage() {
     }
   }, [user?.id, params.id]) 
 
-  // Initial fetch only - NO setInterval
   useEffect(() => {
     if (!authLoading) {
       fetchData()
@@ -108,7 +106,6 @@ export default function ProjectSubmissionPage() {
   }, [authLoading, fetchData])
 
   const handleSubmit = async (submissionData) => {
-    // CHANGED: Double check if already submitted
     if (submitted || scopeStatus?.participant?.has_submitted) {
         alert("You have already submitted your project.")
         return
@@ -138,8 +135,9 @@ export default function ProjectSubmissionPage() {
         if (typeof window !== 'undefined') {
           window.sessionStorage.removeItem(storageKey)
         }
+        
         alert('Project submitted successfully! Good luck!')
-        router.refresh() // Clear Next.js cache
+        router.refresh()
         router.push(`/events/${params.id}/scope`)
       } else {
         alert(`Submission failed: ${data.error}`)
@@ -188,7 +186,6 @@ export default function ProjectSubmissionPage() {
     return null
   }
 
-  // Local time check
   const submissionOpen = event?.submission_start && event?.submission_end
     ? isWithinInterval(new Date(), {
         start: new Date(event.submission_start),
@@ -196,13 +193,11 @@ export default function ProjectSubmissionPage() {
       })
     : scopeStatus.phases?.submission_open
 
-  // CHANGED: Use a derived constant for clarity, ensuring API response is respected
   const hasSubmitted = submitted || scopeStatus.participant?.has_submitted
   const submissionFormFields = event.submission_form_fields || []
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
       <div className="bg-brand-gradient py-12">
         <div className="container mx-auto px-4 max-w-4xl">
           <Link href={`/events/${params.id}/scope`}>
@@ -218,7 +213,6 @@ export default function ProjectSubmissionPage() {
 
       <div className="container mx-auto px-4 py-8 max-w-4xl space-y-6">
         
-        {/* Status Banner */}
         {hasSubmitted ? (
           <Card className="border-green-500 bg-green-500/5">
             <CardContent className="py-6">
@@ -269,7 +263,6 @@ export default function ProjectSubmissionPage() {
           </Card>
         )}
 
-        {/* Instructions */}
         {!hasSubmitted && submissionOpen && (
           <Card>
             <CardHeader>
@@ -285,7 +278,6 @@ export default function ProjectSubmissionPage() {
           </Card>
         )}
 
-        {/* Submission Form or Status */}
         {hasSubmitted ? (
           <Card>
             <CardHeader>
