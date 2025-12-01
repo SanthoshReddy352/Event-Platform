@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import DynamicForm from '@/components/DynamicForm'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card' 
 import { Button } from '@/components/ui/button'
-import { Calendar, Clock, ArrowLeft, Loader2, FileClock, XCircle, CheckCircle, IndianRupee, Tag } from 'lucide-react'
+import { Calendar, Clock, ArrowLeft, Loader2, FileClock, XCircle, CheckCircle, IndianRupee, Tag, Target, ArrowRight } from 'lucide-react'
 import { parseISO, format } from 'date-fns'; 
 import { formatInTimeZone } from 'date-fns-tz'; 
 import Link from 'next/link'
@@ -412,6 +412,18 @@ function EventDetailContent() {
       
       if (isRegistered) {
           if (registrationStatus === 'approved') {
+              // --- START OF FIX: Scope Logic ---
+              const isHackathon = event.event_type === 'hackathon';
+              const now = new Date();
+              // Use problem_selection_start as the start time for the scope
+              // If not set, fallback to event_date
+              const scopeStartTime = event.problem_selection_start 
+                  ? parseISO(event.problem_selection_start) 
+                  : (event.event_date ? parseISO(event.event_date) : null);
+              
+              const isScopeOpen = scopeStartTime && now >= scopeStartTime;
+              // --- END OF FIX ---
+
               return (
                   <Card className="border-green-500">
                       <CardHeader>
@@ -420,6 +432,32 @@ function EventDetailContent() {
                       </CardHeader>
                       <CardContent>
                           <p className="text-gray-300">We look forward to seeing you at the event. You will receive further details via email.</p>
+                          
+                          {/* --- START OF FIX: Enter Workspace Button --- */}
+                          {isHackathon && (
+                            <div className="mt-6 pt-4 border-t border-border">
+                                {isScopeOpen ? (
+                                    <Link href={`/events/${params.id}/scope`}>
+                                        <Button className="w-full bg-brand-gradient text-white font-semibold hover:opacity-90 shadow-md">
+                                            <Target className="mr-2 h-4 w-4" />
+                                            Enter Hackathon Workspace
+                                            <ArrowRight className="ml-2 h-4 w-4" />
+                                        </Button>
+                                    </Link>
+                                ) : (
+                                    <div className="text-center">
+                                        <Button disabled className="w-full bg-gray-700 text-gray-400 cursor-not-allowed">
+                                            <Clock className="mr-2 h-4 w-4" />
+                                            Workspace opens {scopeStartTime ? formatInTimeZone(scopeStartTime, TIME_ZONE, 'MMM dd, hh:mm a') : 'soon'}
+                                        </Button>
+                                        <p className="text-xs text-gray-500 mt-2">
+                                            The hackathon workspace will become available at the scheduled start time.
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+                          )}
+                          {/* --- END OF FIX --- */}
                       </CardContent>
                   </Card>
               )

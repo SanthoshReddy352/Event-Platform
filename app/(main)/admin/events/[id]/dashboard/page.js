@@ -39,6 +39,7 @@ export default function AdminEventDashboard() {
       setEvent(eventData)
 
       // Check permissions
+      // --- FIX: Access properties safely ---
       const canManage = isSuperAdmin || eventData.created_by === user?.id
       if (!canManage) {
         router.push('/admin/events')
@@ -64,11 +65,11 @@ export default function AdminEventDashboard() {
     } finally {
       setLoading(false)
     }
-  }, [params.id, user?.id, isSuperAdmin, router])
+  }, [params.id, user?.id, isSuperAdmin, router]) // --- FIX: Changed dependency to user?.id ---
 
   useEffect(() => {
-    if (user) fetchData()
-  }, [user, fetchData])
+    if (user?.id) fetchData()
+  }, [user?.id, fetchData]) // --- FIX: Changed dependency to user?.id ---
 
   if (loading) {
     return (

@@ -4,23 +4,22 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import { Menu, X, LogIn, LogOut, User, Building } from 'lucide-react'
+import { Menu, X, LogIn, LogOut, User, Building, Ticket } from 'lucide-react' // Added Ticket icon
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/context/AuthContext' 
 
 export default function Navbar() {
   const pathname = usePathname()
-  const router = useRouter() // Keep router for other navigation
+  const router = useRouter() 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   
   const { user, isAdmin, isSuperAdmin } = useAuth() 
 
   const isActive = (path) => pathname === path
 
-  // --- START OF FIX: Aggressive Logout ---
   const handleLogout = async () => {
-    setMobileMenuOpen(false); // Close menu immediately
+    setMobileMenuOpen(false); 
     try {
       const { error } = await supabase.auth.signOut();
       if (error && error.message !== "Session from session_id claim in JWT does not exist") {
@@ -29,26 +28,20 @@ export default function Navbar() {
     } catch (error) {
       console.error('Error in signOut process:', error);
     } finally {
-      // This is the aggressive part. Supabase stores its data in
-      // localStorage. We will manually clear all keys related to Supabase
-      // to ensure no stale session data remains.
       if (typeof window !== 'undefined' && window.localStorage) {
         const keysToRemove = [];
         for (let i = 0; i < window.localStorage.length; i++) {
           const key = window.localStorage.key(i);
-          if (key && key.startsWith('sb-')) { // Supabase keys start with 'sb-'
+          if (key && key.startsWith('sb-')) { 
             keysToRemove.push(key);
           }
         }
         keysToRemove.forEach(key => window.localStorage.removeItem(key));
       }
       
-      // Force a full page reload by navigating to the root.
-      // This will clear all React state and force a re-initialization.
       window.location.href = '/'; 
     }
   }
-  // --- END OF FIX ---
   
   return (
     <nav className="bg-background border-b border-border shadow-sm sticky top-0 z-50"> 
@@ -92,6 +85,16 @@ export default function Navbar() {
             {user ? (
               <>
                 {/* User is logged in */}
+                <Link href="/registered-events">
+                  <Button 
+                    variant="ghost" 
+                    className={`text-gray-300 hover:text-brand-orange ${isActive('/registered-events') ? 'font-semibold' : ''}`}
+                  >
+                    <Ticket size={16} className="mr-2" />
+                    My Events
+                  </Button>
+                </Link>
+
                 <Link href="/profile">
                   <Button 
                     variant="ghost" 
@@ -184,6 +187,14 @@ export default function Navbar() {
 
             {user ? (
               <>
+                <Link
+                  href="/registered-events"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="block py-2 text-gray-300 hover:text-brand-orange"
+                >
+                  My Events
+                </Link>
+
                 <Link
                   href="/profile"
                   onClick={() => setMobileMenuOpen(false)}

@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react' // Added useCallback
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import ProtectedRoute from '@/components/ProtectedRoute'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card' 
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card' 
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { ArrowLeft, Download, ShieldAlert, Loader2 } from 'lucide-react' 
@@ -20,22 +20,19 @@ function ParticipantsContent() {
   const [dynamicFields, setDynamicFields] = useState([]) 
   const { user, isSuperAdmin, loading: authLoading } = useAuth() 
 
-  // --- START OF FIX: Define headers *before* they are used ---
   const fixedHeaders = [
     { label: 'S.No', key: 'index', className: 'w-12' }, 
     { label: 'Registration Date', key: 'created_at', className: 'w-40' }
   ];
   
-  // This will be populated by fetchData
   const allHeaders = [
     ...fixedHeaders,
     ...dynamicFields 
   ];
-  // --- END OF FIX ---
 
-  // --- START OF FIX: Implemented fetchData ---
   const fetchData = useCallback(async () => {
-    if (!params.eventId || !user) return; // Wait for user and eventId
+    // --- FIX: Use user.id for stability ---
+    if (!params.eventId || !user) return; 
     
     setLoading(true);
     try {
@@ -44,7 +41,7 @@ function ParticipantsContent() {
         throw new Error("User not authenticated");
       }
       
-      // 1. Fetch Event (to get title, form_fields, and permissions)
+      // 1. Fetch Event
       const eventResponse = await fetch(`/api/events/${params.eventId}`, {
         headers: { 'Authorization': `Bearer ${session.access_token}` }
       });
@@ -61,7 +58,7 @@ function ParticipantsContent() {
       const canManage = fetchedEvent && user && (isSuperAdmin || fetchedEvent.created_by === user.id);
       if (!canManage) {
         setLoading(false);
-        return; // The component will render the "Access Denied" message
+        return; 
       }
 
       // 3. Fetch Participants
@@ -78,11 +75,11 @@ function ParticipantsContent() {
       const approvedParticipants = participantsData.participants.filter(p => p.status === 'approved');
       setParticipants(approvedParticipants);
 
-      // 5. Extract Dynamic Fields from the event's form
+      // 5. Extract Dynamic Fields
       const fields = fetchedEvent.form_fields || [];
       const extractedFields = fields.map(f => ({
-        label: f.label, // The human-readable name
-        key: f.id      // The ID used as a key in the 'responses' JSON
+        label: f.label,
+        key: f.id     
       }));
       setDynamicFields(extractedFields);
 
@@ -91,14 +88,14 @@ function ParticipantsContent() {
     } finally {
       setLoading(false);
     }
-  }, [params.eventId, user, isSuperAdmin]); // Dependencies
-  // --- END OF FIX ---
+  }, [params.eventId, user?.id, isSuperAdmin]); // --- FIX: Changed dependency to user?.id ---
 
   useEffect(() => {
-    fetchData()
-  }, [fetchData]) // useEffect now depends on the stable useCallback
+    if (user?.id) {
+        fetchData()
+    }
+  }, [fetchData, user?.id]) // --- FIX: Changed dependency to user?.id ---
 
-  // --- START OF FIX: Implemented getParticipantResponseValue ---
   const getParticipantResponseValue = (participant, field) => {
     if (!participant.responses || field.key === 'index' || field.key === 'created_at') {
       return 'N/A';
@@ -109,26 +106,20 @@ function ParticipantsContent() {
     if (typeof value === 'boolean') return value ? 'Yes' : 'No';
     return String(value);
   };
-  // --- END OF FIX ---
 
-  // --- START OF FIX: Implemented exportToCSV ---
   const exportToCSV = () => {
     if (participants.length === 0) return;
 
-    // Use the labels from allHeaders for the CSV header row
     const headers = allHeaders.map(h => `"${h.label}"`).join(',');
     
     const rows = participants.map((participant, index) => {
-      // Manually create fixed column values
       const fixedValues = [
         index + 1,
         `"${format(new Date(participant.created_at), 'MMM dd, yyyy')}"`
       ];
       
-      // Get dynamic column values by iterating over dynamicFields
       const dynamicValues = dynamicFields.map(field => {
         const value = getParticipantResponseValue(participant, field);
-        // Escape quotes by doubling them
         return `"${String(value).replace(/"/g, '""')}"`;
       });
       
@@ -145,7 +136,6 @@ function ParticipantsContent() {
     link.click();
     document.body.removeChild(link);
   }
-  // --- END OF FIX ---
 
   if ((authLoading || loading) && participants.length === 0) {
     return (
@@ -157,7 +147,6 @@ function ParticipantsContent() {
 
   const canManage = event && user && (isSuperAdmin || event.created_by === user.id);
   if (!loading && !authLoading && event && !canManage) {
-    // (Unchanged)
     return (
         <div className="container mx-auto px-4 py-12 max-w-3xl">
             <Card className="border-red-500">
@@ -224,7 +213,6 @@ function ParticipantsContent() {
           <CardContent className="p-0">
             <div className={`overflow-x-auto ${loading ? 'opacity-50' : ''}`}>
               <Table>
-                {/* --- START OF FIX: Use allHeaders for TableHeader --- */}
                 <TableHeader>
                   <TableRow>
                     {allHeaders.map((header) => (
@@ -249,7 +237,6 @@ function ParticipantsContent() {
                     </TableRow>
                   ))}
                 </TableBody>
-                {/* --- END OF FIX --- */}
               </Table>
             </div>
           </CardContent>

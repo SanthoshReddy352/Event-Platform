@@ -10,7 +10,7 @@ import {
   ArrowLeft, Loader2, Clock, Target, FileText, Download,
   CheckCircle, XCircle, AlertCircle
 } from 'lucide-react'
-import { format } from 'date-fns'
+import { format, parseISO } from 'date-fns'
 import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/context/AuthContext'
 
@@ -35,7 +35,7 @@ export default function HackathonScopePage() {
         throw new Error('Please log in')
       }
 
-      // Fetch event
+      // 1. Fetch event details first
       const eventRes = await fetch(`/api/events/${params.id}`)
       const eventData = await eventRes.json()
       
@@ -45,13 +45,25 @@ export default function HackathonScopePage() {
       
       setEvent(eventData.event)
 
-      // Check if this is a hackathon
+      // 2. Check if this is a hackathon
       if (eventData.event.event_type !== 'hackathon') {
         router.push(`/events/${params.id}`)
         return
       }
 
-      // Fetch scope status
+      // 3. Timing Check: Ensure the workspace is actually open
+      const now = new Date();
+      const scopeStartTime = eventData.event.problem_selection_start 
+          ? parseISO(eventData.event.problem_selection_start) 
+          : (eventData.event.event_date ? parseISO(eventData.event.event_date) : null);
+      
+      if (scopeStartTime && now < scopeStartTime) {
+          setError(`The hackathon workspace will open on ${format(scopeStartTime, 'PPp')}.`);
+          setLoading(false);
+          return;
+      }
+
+      // 4. Fetch scope status
       const scopeRes = await fetch(`/api/events/${params.id}/scope-status`, {
         headers: { 'Authorization': `Bearer ${session.access_token}` }
       })
@@ -115,11 +127,14 @@ export default function HackathonScopePage() {
     )
   }
 
+  // --- FIX: Ensure scopeStatus exists and has required properties ---
   if (!event || !scopeStatus) {
     return null
   }
 
-  const { phases, participant } = scopeStatus
+  // Safely default to empty objects if properties are missing
+  const phases = scopeStatus.phases || {};
+  const participant = scopeStatus.participant || {};
 
   return (
     <div className="min-h-screen bg-background">
