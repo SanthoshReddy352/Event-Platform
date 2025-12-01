@@ -402,6 +402,14 @@ export async function GET(request) {
 
         phases.submission_open = now >= start && (!end || now <= end);
       }
+      // Add no-cache headers to prevent caching of time-sensitive data
+      const noCacheHeaders = {
+        ...corsHeaders,
+        "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
+        "Pragma": "no-cache",
+        "Expires": "0",
+      };
+      
       return NextResponse.json(
         {
           success: true,
@@ -415,7 +423,7 @@ export async function GET(request) {
             ppt_template_url: event.ppt_template_url,
           },
         },
-        { headers: corsHeaders },
+        { headers: noCacheHeaders },
       );
     }
 
