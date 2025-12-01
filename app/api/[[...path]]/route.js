@@ -652,9 +652,19 @@ export async function PUT(request) {
       if (body.registration_end !== undefined) updateData.registration_end = body.registration_end
       if (body.form_fields !== undefined) updateData.form_fields = body.form_fields
       
-      // NEW: Payment Fields
+      // Payment Fields
       if (body.is_paid !== undefined) updateData.is_paid = body.is_paid
       if (body.registration_fee !== undefined) updateData.registration_fee = body.registration_fee
+
+      // Hackathon Scope Fields
+      if (body.event_type !== undefined) updateData.event_type = body.event_type
+      if (body.problem_selection_start !== undefined) updateData.problem_selection_start = body.problem_selection_start
+      if (body.problem_selection_end !== undefined) updateData.problem_selection_end = body.problem_selection_end
+      if (body.ppt_template_url !== undefined) updateData.ppt_template_url = body.ppt_template_url
+      if (body.ppt_release_time !== undefined) updateData.ppt_release_time = body.ppt_release_time
+      if (body.submission_start !== undefined) updateData.submission_start = body.submission_start
+      if (body.submission_end !== undefined) updateData.submission_end = body.submission_end
+      if (body.submission_form_fields !== undefined) updateData.submission_form_fields = body.submission_form_fields
 
       updateData.updated_at = new Date().toISOString()
 
