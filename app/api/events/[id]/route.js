@@ -29,7 +29,6 @@ export async function GET(request, { params }) {
       .single();
 
     if (error) {
-      // If code is strictly related to "not found"
       if (error.code === 'PGRST116') {
         return NextResponse.json({ success: false, error: 'Event not found' }, { status: 404 });
       }
@@ -47,7 +46,6 @@ export async function GET(request, { params }) {
 export async function PUT(request, { params }) {
   const { id } = params;
 
-  // 1. Validate ID Format
   if (!id || id === 'undefined' || !isValidUUID(id)) {
     return NextResponse.json(
       { success: false, error: 'Invalid Event ID format' },
@@ -57,7 +55,7 @@ export async function PUT(request, { params }) {
 
   const supabase = createClient();
 
-  // 2. Auth Check (Admins only)
+  // Auth Check
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) {
     return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
@@ -95,7 +93,6 @@ export async function DELETE(request, { params }) {
   
     const supabase = createClient();
   
-    // Auth Check
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
@@ -114,4 +111,4 @@ export async function DELETE(request, { params }) {
       console.error('Error deleting event:', error);
       return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
-  }
+}

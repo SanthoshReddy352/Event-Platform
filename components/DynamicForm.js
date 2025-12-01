@@ -9,23 +9,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox'
 import { Card, CardContent } from '@/components/ui/card'
 
-// --- START OF FIX: Accept formData and onFormChange as props ---
-export default function DynamicForm({ fields = [], onSubmit, eventId, formData, onFormChange }) {
-  // --- END OF FIX ---
+// Added `submitLabel` to props
+export default function DynamicForm({ fields = [], onSubmit, eventId, formData, onFormChange, submitLabel }) {
   
-  // This local state is only for validation errors
   const [errors, setErrors] = useState({})
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const handleInputChange = (fieldId, value) => {
-    // --- START OF FIX: Call parent's state updater ---
-    // This updates the state in `page.js` which is synced to sessionStorage
     if (onFormChange) {
       onFormChange({ ...formData, [fieldId]: value });
     }
-    // --- END OF FIX ---
     
-    // Clear error when user starts typing
     if (errors[fieldId]) {
       setErrors({ ...errors, [fieldId]: null })
     }
@@ -35,9 +29,7 @@ export default function DynamicForm({ fields = [], onSubmit, eventId, formData, 
     const newErrors = {}
     fields.forEach((field) => {
       const fieldKey = field.id; 
-      // --- START OF FIX: Use formData from props for validation ---
       if (field.required && !formData[fieldKey]) {
-      // --- END OF FIX ---
         newErrors[fieldKey] = `${field.label} is required`
       }
     })
@@ -54,9 +46,7 @@ export default function DynamicForm({ fields = [], onSubmit, eventId, formData, 
 
     setIsSubmitting(true)
     try {
-      // --- START OF FIX: Pass formData from props to parent onSubmit ---
       await onSubmit(formData)
-      // --- END OF FIX ---
     } catch (error) {
       console.error('Form submission error:', error)
     } finally {
@@ -66,9 +56,7 @@ export default function DynamicForm({ fields = [], onSubmit, eventId, formData, 
 
   const renderField = (field) => {
     const fieldId = field.id 
-    // --- START OF FIX: Use formData from props to get value ---
     const value = formData[fieldId] || ''
-    // --- END OF FIX ---
 
     switch (field.type) {
       case 'text':
@@ -84,7 +72,7 @@ export default function DynamicForm({ fields = [], onSubmit, eventId, formData, 
             <Input
               id={fieldId}
               type={field.type}
-              value={value} // Value comes from parent state
+              value={value}
               onChange={(e) => handleInputChange(field.id, e.target.value)}
               placeholder={field.placeholder || `Enter ${field.label.toLowerCase()}`}
               required={field.required}
@@ -104,7 +92,7 @@ export default function DynamicForm({ fields = [], onSubmit, eventId, formData, 
             </Label>
             <Textarea
               id={fieldId}
-              value={value} // Value comes from parent state
+              value={value}
               onChange={(e) => handleInputChange(field.id, e.target.value)}
               placeholder={field.placeholder || `Enter ${field.label.toLowerCase()}`}
               required={field.required}
@@ -124,7 +112,7 @@ export default function DynamicForm({ fields = [], onSubmit, eventId, formData, 
               {field.required && <span className="text-red-500 ml-1">*</span>}
             </Label>
             <Select
-              value={value} // Value comes from parent state
+              value={value} 
               onValueChange={(val) => handleInputChange(field.id, val)}
             >
               <SelectTrigger>
@@ -149,7 +137,7 @@ export default function DynamicForm({ fields = [], onSubmit, eventId, formData, 
           <div key={fieldId} className="flex items-center space-x-2">
             <Checkbox
               id={fieldId}
-              checked={value === true} // Value comes from parent state
+              checked={value === true}
               onCheckedChange={(checked) => handleInputChange(field.id, checked)}
             />
             <Label htmlFor={fieldId} className="font-normal">
@@ -169,7 +157,7 @@ export default function DynamicForm({ fields = [], onSubmit, eventId, formData, 
             <Input
               id={fieldId}
               type="date"
-              value={value} // Value comes from parent state
+              value={value}
               onChange={(e) => handleInputChange(field.id, e.target.value)}
               required={field.required}
             />
@@ -204,7 +192,7 @@ export default function DynamicForm({ fields = [], onSubmit, eventId, formData, 
         className="w-full bg-brand-gradient text-white font-semibold hover:opacity-90 transition-opacity"
         disabled={isSubmitting}
       >
-        {isSubmitting ? 'Submitting...' : 'Submit Registration'}
+        {isSubmitting ? 'Submitting...' : (submitLabel || 'Submit Registration')}
       </Button>
     </form>
   )
