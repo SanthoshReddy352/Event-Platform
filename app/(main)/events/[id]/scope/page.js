@@ -24,6 +24,9 @@ export default function HackathonScopePage() {
   const [event, setEvent] = useState(null)
   const [scopeStatus, setScopeStatus] = useState(null)
   const [error, setError] = useState(null)
+  
+  // Track previous status to detect changes and show notifications
+  const prevStatusRef = useRef(null)
 
   const fetchScopeStatus = useCallback(async () => {
     if (!user || !params.id) return
