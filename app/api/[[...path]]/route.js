@@ -627,6 +627,85 @@ export async function POST(request) {
       return NextResponse.json({ success: true, participant: data }, { headers: corsHeaders })
     }
 
+    // POST /api/events/:eventId/select-problem - Select a problem statement
+    if (segments[0] === 'events' && segments[1] && segments[2] === 'select-problem') {
+      const eventId = segments[1]
+      
+      if (!token) {
+        return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401, headers: corsHeaders })
+      }
+      
+      const userSupabase = createClient(supabaseUrl, supabaseAnonKey, {
+        global: { headers: { 'Authorization': `Bearer ${token}` } },
+      })
+      const { data: { user } } = await userSupabase.auth.getUser()
+      
+      if (!user) {
+        return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401, headers: corsHeaders })
+      }
+      
+      const { problem_id } = body
+      
+      // Use the stored procedure for concurrency-safe selection
+      const { data, error } = await supabaseAdmin.rpc('check_and_select_problem', {
+        p_user_id: user.id,
+        p_event_id: eventId,
+        p_problem_id: problem_id
+      })
+      
+      if (error) {
+        return NextResponse.json({ success: false, error: error.message }, { status: 400, headers: corsHeaders })
+      }
+      
+      if (!data) {
+        return NextResponse.json({ 
+          success: false, 
+          error: 'Problem statement is full or already selected' 
+        }, { status: 409, headers: corsHeaders })
+      }
+      
+      return NextResponse.json({ success: true, message: 'Problem selected successfully' }, { headers: corsHeaders })
+    }
+
+    // POST /api/events/:eventId/submit-project - Submit final project
+    if (segments[0] === 'events' && segments[1] && segments[2] === 'submit-project') {
+      const eventId = segments[1]
+      
+      if (!token) {
+        return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401, headers: corsHeaders })
+      }
+      
+      const userSupabase = createClient(supabaseUrl, supabaseAnonKey, {
+        global: { headers: { 'Authorization': `Bearer ${token}` } },
+      })
+      const { data: { user } } = await userSupabase.auth.getUser()
+      
+      if (!user) {
+        return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401, headers: corsHeaders })
+      }
+      
+      const { submission_data } = body
+      
+      // Update participant with submission
+      const { data, error } = await supabaseAdmin
+        .from('participants')
+        .update({
+          submission_data: submission_data,
+          submitted_at: new Date().toISOString()
+        })
+        .eq('event_id', eventId)
+        .eq('user_id', user.id)
+        .eq('status', 'approved')
+        .select()
+        .single()
+      
+      if (error) {
+        return NextResponse.json({ success: false, error: error.message }, { status: 500, headers: corsHeaders })
+      }
+      
+      return NextResponse.json({ success: true, submission: data }, { headers: corsHeaders })
+    }
+
     // POST /api/contact - Submit contact form
     if (segments[0] === 'contact') {
       const contactData = {
