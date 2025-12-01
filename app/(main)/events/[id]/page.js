@@ -13,6 +13,8 @@ import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/context/AuthContext' 
 import Script from 'next/script'
 
+// ... [Keep your helper functions formatEventDate and getEventStatus here] ...
+
 // Helper function to format date ranges
 const formatEventDate = (start, end, timeZone) => {
   if (!start) return 'Date TBA';
@@ -79,53 +81,69 @@ function EventDetailContent() {
   
   const { user, loading: authLoading } = useAuth() 
   
-  // --- 1. SETUP PERSISTENCE KEYS ---
   const EVENT_STORAGE_KEY = `event_page_data_${params.id}`;
-  
-  // --- 2. INITIALIZE STATE FROM STORAGE ---
-  const getCachedData = () => {
-    if (typeof window === 'undefined') return null;
-    const saved = window.sessionStorage.getItem(EVENT_STORAGE_KEY);
-    return saved ? JSON.parse(saved) : null;
-  };
-  
-  const cached = getCachedData();
+  const formStorageKey = `formData-${params.id}`;
 
-  const [loading, setLoading] = useState(!cached); // If cached data exists, don't show loading spinner
-  const [event, setEvent] = useState(cached?.event || null);
+  // --- 1. INITIALIZE STATE SAFELY (MATCH SERVER) ---
+  // Default to loading=true and event=null so server and client match initially.
+  const [loading, setLoading] = useState(true); 
+  const [event, setEvent] = useState(null);
   const [submitted, setSubmitted] = useState(false);
   
   // Registration state
-  const [isRegistered, setIsRegistered] = useState(cached?.isRegistered || false);
-  const [registrationStatus, setRegistrationStatus] = useState(cached?.registrationStatus || null);
-  const [rejectionHistory, setRejectionHistory] = useState(cached?.rejectionHistory || null);
+  const [isRegistered, setIsRegistered] = useState(false);
+  const [registrationStatus, setRegistrationStatus] = useState(null);
+  const [rejectionHistory, setRejectionHistory] = useState(null);
 
-  // Form Data Persistence (Already existed, kept as is)
-  const formStorageKey = `formData-${params.id}`;
-  const [formData, setFormData] = useState(() => {
-     if (typeof window !== 'undefined') {
-      const saved = window.sessionStorage.getItem(formStorageKey);
-      return saved ? JSON.parse(saved) : {};
+  // Form Data
+  const [formData, setFormData] = useState({});
+
+  // --- 2. LOAD CACHE ON MOUNT (CLIENT ONLY) ---
+  useEffect(() => {
+    // This runs only on the client, avoiding hydration mismatch
+    try {
+        const savedEvent = window.sessionStorage.getItem(EVENT_STORAGE_KEY);
+        const savedForm = window.sessionStorage.getItem(formStorageKey);
+
+        if (savedEvent) {
+            const cached = JSON.parse(savedEvent);
+            if (cached.event) {
+                setEvent(cached.event);
+                setIsRegistered(cached.isRegistered);
+                setRegistrationStatus(cached.registrationStatus);
+                setRejectionHistory(cached.rejectionHistory);
+                setLoading(false); // Stop loading if we found cache
+            }
+        }
+
+        if (savedForm) {
+            setFormData(JSON.parse(savedForm));
+        }
+    } catch (e) {
+        console.error("Error reading cache:", e);
     }
-    return {};
-  });
+  }, [EVENT_STORAGE_KEY, formStorageKey]);
 
   const setAndStoreFormData = (newData) => {
     setFormData(newData);
     window.sessionStorage.setItem(formStorageKey, JSON.stringify(newData));
   };
 
-  // --- 3. UNIFIED DATA FETCHING (UPDATED) ---
+  // --- 3. DATA FETCHING ---
   useEffect(() => {
     let mounted = true;
 
     async function loadPageData() {
         if (authLoading) return;
 
-        // ONLY show spinner if we don't have event data yet
-        if (!event) {
-            setLoading(true);
-        }
+        // Fetch fresh data even if we have cache, but don't show spinner if we have event
+        // Note: We use the functional update or check a ref if we want to be strictly sure about 'event' state,
+        // but checking the state directly here is usually fine for this pattern.
+        // We only force loading spinner if we strictly have NO event data.
+        
+        // However, since state updates are async, 'event' might technically be null here on first run 
+        // if the cache effect hasn't committed yet. 
+        // To be safe, we usually let the UI handle the "loading" visual based on the state variables.
 
         try {
             const fetchEventPromise = fetch(`/api/events/${params.id}`).then(res => res.json());
@@ -155,6 +173,9 @@ function EventDetailContent() {
                 newEvent = eventData.event;
                 setEvent(newEvent);
             } else {
+                // Only set to null if we don't have a stale event? 
+                // Or if fetch explicitly failed, we should probably show error.
+                // Keeping original logic:
                 setEvent(null);
             }
 
@@ -177,8 +198,7 @@ function EventDetailContent() {
                 setRejectionHistory(null);
             }
 
-            // --- 4. SAVE TO STORAGE ---
-            // Only save if we successfully fetched the event
+            // Save to storage
             if (newEvent) {
                 const cacheData = {
                     event: newEvent,
@@ -192,7 +212,7 @@ function EventDetailContent() {
 
         } catch (error) {
             console.error("Error loading page data:", error);
-            if (mounted && !event) setEvent(null);
+            if (mounted) setEvent(null); // Or handle error state
         } finally {
             if (mounted) setLoading(false);
         }
@@ -201,7 +221,7 @@ function EventDetailContent() {
     loadPageData();
 
     return () => { mounted = false; };
-  }, [params.id, authLoading, user]); // Removed 'event' from deps to avoid loops, though strict mode might trigger twice.
+  }, [params.id, authLoading, user]); // Kept original deps
 
   const checkRegistrationStatus = useCallback(async (userId, eventId) => {
       try {
@@ -233,6 +253,7 @@ function EventDetailContent() {
     }, [EVENT_STORAGE_KEY]);
 
   const handleSubmit = async (submitData) => {
+    // ... [Keep your existing handleSubmit logic exactly as is] ...
     if (!user) {
         alert('You must be logged in to register.');
         return;
@@ -366,6 +387,7 @@ function EventDetailContent() {
      )
   }
 
+  // ... [Keep the rest of your render logic exactly as is] ...
   if (!event) {
     return (
       <div className="container mx-auto px-4 py-12">
