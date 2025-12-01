@@ -58,6 +58,28 @@ export default function ProblemSelectionPage() {
         return
       }
       
+      // Detect status changes and notify user (non-disruptive)
+      if (prevStatusRef.current && scopeData.phases) {
+        const prev = prevStatusRef.current.phases
+        const curr = scopeData.phases
+        
+        // Notify when problem selection window opens
+        if (!prev.problem_selection && curr.problem_selection) {
+          toast.success('Problem selection window is now open!', {
+            description: 'You can now select your problem statement.',
+            duration: 5000
+          })
+        }
+        
+        // Notify when problem selection window closes
+        if (prev.problem_selection && !curr.problem_selection) {
+          toast.warning('Problem selection window has closed.', {
+            duration: 5000
+          })
+        }
+      }
+      
+      prevStatusRef.current = scopeData
       setScopeStatus(scopeData)
 
       // Fetch problem statements
