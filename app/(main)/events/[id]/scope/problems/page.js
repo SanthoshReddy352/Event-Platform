@@ -12,6 +12,7 @@ import {
 import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/context/AuthContext'
 import { toast } from 'sonner'
+import { isWithinInterval } from 'date-fns' // Added import for time checking
 
 export default function ProblemSelectionPage() {
   const params = useParams()
@@ -20,6 +21,7 @@ export default function ProblemSelectionPage() {
   
   const [loading, setLoading] = useState(true)
   const [problems, setProblems] = useState([])
+  const [event, setEvent] = useState(null) // Added event state
   const [scopeStatus, setScopeStatus] = useState(null)
   const [selecting, setSelecting] = useState(false)
   const [error, setError] = useState(null)
@@ -41,7 +43,18 @@ export default function ProblemSelectionPage() {
         throw new Error('Please log in')
       }
 
-      // Fetch scope status with cache-busting
+      // 1. Fetch event details (Added to get start/end times)
+      const eventRes = await fetch(`/api/events/${params.id}?t=${Date.now()}`, {
+        cache: 'no-store'
+      })
+      const eventData = await eventRes.json()
+      
+      if (!eventData.success) {
+        throw new Error('Event not found')
+      }
+      setEvent(eventData.event)
+
+      // 2. Fetch scope status with cache-busting
       const scopeRes = await fetch(`/api/events/${params.id}/scope-status?t=${Date.now()}`, {
         headers: { 
           'Authorization': `Bearer ${session.access_token}`,
@@ -82,7 +95,7 @@ export default function ProblemSelectionPage() {
       prevStatusRef.current = scopeData
       setScopeStatus(scopeData)
 
-      // Fetch problem statements
+      // 3. Fetch problem statements
       const { data: problemsData, error: problemsError } = await supabase
         .from('problem_statements')
         .select('*')
@@ -91,7 +104,7 @@ export default function ProblemSelectionPage() {
 
       if (problemsError) throw problemsError
 
-      // Fetch current selection counts
+      // 4. Fetch current selection counts
       const { data: participants } = await supabase
         .from('participants')
         .select('selected_problem_id')
@@ -116,7 +129,8 @@ export default function ProblemSelectionPage() {
       setProblems(problemsWithCounts)
 
       // If user has already selected, fetch details
-      if (scopeData.participant.selected_problem_id) {
+      // FIXED: Added optional chaining to prevent crash
+      if (scopeData.participant?.selected_problem_id) {
         const selected = problemsWithCounts.find(p => p.id === scopeData.participant.selected_problem_id)
         setSelectedProblemDetails(selected)
       }
@@ -128,14 +142,13 @@ export default function ProblemSelectionPage() {
     } finally {
       setLoading(false)
     }
-  }, [user?.id, params.id]) // Use user.id to prevent unnecessary re-fetches
+  }, [user?.id, params.id]) 
 
   useEffect(() => {
     if (!authLoading) {
       fetchData()
       
-      // Silent background polling every 30 seconds to auto-update status
-      // This updates React state without page reload - non-disruptive!
+      // Silent background polling every 30 seconds
       const intervalId = setInterval(fetchData, 30000)
       
       return () => clearInterval(intervalId)
@@ -209,8 +222,15 @@ export default function ProblemSelectionPage() {
     )
   }
 
+  // FIXED: Optional chaining and local time calculation
   const alreadySelected = scopeStatus?.participant?.selected_problem_id
-  const selectionOpen = scopeStatus?.phases?.problem_selection
+  
+  const selectionOpen = event?.problem_selection_start && event?.problem_selection_end
+  ? isWithinInterval(new Date(), {
+      start: new Date(event.problem_selection_start),
+      end: new Date(event.problem_selection_end)
+    })
+  : scopeStatus?.phases?.problem_selection
 
   return (
     <div className="min-h-screen bg-background">
@@ -311,6 +331,7 @@ export default function ProblemSelectionPage() {
             <h2 className="text-xl font-semibold">Available Problem Statements ({problems.length})</h2>
             
             {problems.map((problem, index) => {
+              // FIXED: Optional chaining here as well
               const isSelected = problem.id === scopeStatus?.participant?.selected_problem_id
               const isFull = problem.is_full && !isSelected
               const canSelect = selectionOpen && !alreadySelected && !isFull

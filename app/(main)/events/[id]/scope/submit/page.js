@@ -12,6 +12,7 @@ import {
 import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/context/AuthContext'
 import { toast } from 'sonner'
+import { isWithinInterval } from 'date-fns' // Added import for time checking
 
 export default function ProjectSubmissionPage() {
   const params = useParams()
@@ -119,7 +120,7 @@ export default function ProjectSubmissionPage() {
       setScopeStatus(scopeData)
 
       // Check if already submitted
-      if (scopeData.participant.has_submitted) {
+      if (scopeData.participant?.has_submitted) {
         setSubmitted(true)
       }
 
@@ -218,8 +219,16 @@ export default function ProjectSubmissionPage() {
     return null
   }
 
-  const submissionOpen = scopeStatus.phases.submission_open
-  const hasSubmitted = submitted || scopeStatus.participant.has_submitted
+  // FIXED: Calculate submissionOpen using local time comparison with event dates
+  // This ensures consistency with the Scope Page and prevents "Closed" errors when it should be open
+  const submissionOpen = event?.submission_start && event?.submission_end
+    ? isWithinInterval(new Date(), {
+        start: new Date(event.submission_start),
+        end: new Date(event.submission_end)
+      })
+    : scopeStatus.phases?.submission_open
+
+  const hasSubmitted = submitted || scopeStatus.participant?.has_submitted
   const submissionFormFields = event.submission_form_fields || []
 
   return (
