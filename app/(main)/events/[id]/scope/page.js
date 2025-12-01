@@ -37,8 +37,10 @@ export default function HackathonScopePage() {
         throw new Error('Please log in')
       }
 
-      // 1. Fetch event details first
-      const eventRes = await fetch(`/api/events/${params.id}`)
+      // 1. Fetch event details first (Added timestamp to prevent caching)
+      const eventRes = await fetch(`/api/events/${params.id}?t=${Date.now()}`, {
+        cache: 'no-store'
+      })
       const eventData = await eventRes.json()
       
       if (!eventData.success) {
@@ -53,21 +55,20 @@ export default function HackathonScopePage() {
         return
       }
 
-      // 3. Timing Check: Ensure the workspace is actually open
-      const now = new Date();
-      const scopeStartTime = eventData.event.problem_selection_start 
-          ? parseISO(eventData.event.problem_selection_start) 
-          : (eventData.event.event_date ? parseISO(eventData.event.event_date) : null);
-      
-      if (scopeStartTime && now < scopeStartTime) {
-          setError(`The hackathon workspace will open on ${format(scopeStartTime, 'PPp')}.`);
-          setLoading(false);
-          return;
-      }
+      // REMOVED: Client-side timing check. 
+      // We now rely on the server (Step 4) to determine if phases are open.
+      // This prevents issues where client clock is slightly behind server clock.
 
       // 4. Fetch scope status
-      const scopeRes = await fetch(`/api/events/${params.id}/scope-status`, {
-        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      // FIX: Added timestamp query param and cache headers to prevent browser/router caching
+      const scopeRes = await fetch(`/api/events/${params.id}/scope-status?t=${Date.now()}`, {
+        headers: { 
+          'Authorization': `Bearer ${session.access_token}`,
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        },
+        cache: 'no-store'
       })
       
       const scopeData = await scopeRes.json()
@@ -85,16 +86,23 @@ export default function HackathonScopePage() {
       
     } catch (err) {
       console.error('Error fetching scope status:', err)
-      setError(err.message)
+      // Only set error if we don't have partial data to show
+      if (!scopeStatus) setError(err.message)
     } finally {
       setLoading(false)
     }
   // FIX: Depend on user?.id instead of user object to prevent re-fetching on tab focus
-  }, [user?.id, params.id, router]) 
+  }, [user?.id, params.id, router]) // Removed scopeStatus from deps to avoid loops
 
   useEffect(() => {
     if (!authLoading) {
       fetchScopeStatus()
+
+      // FIX: Added polling interval to auto-update status every 30 seconds
+      // This ensures windows open automatically without manual refresh
+      const intervalId = setInterval(fetchScopeStatus, 30000)
+      
+      return () => clearInterval(intervalId)
     }
   }, [authLoading, fetchScopeStatus])
 
