@@ -306,8 +306,8 @@ export default function EventForm({ onSubmit, initialData = null, isSubmitting =
 
           {/* 3. HACKATHON SPECIFIC SETTINGS */}
           {formData.event_type === 'hackathon' && (
-             <div className="space-y-4 animate-in fade-in slide-in-from-top-4 bg-slate-50 p-4 rounded-lg border border-brand-red/20">
-                <div className="flex items-center gap-2 border-b border-brand-red/20 pb-2">
+              <div className="space-y-4 animate-in fade-in slide-in-from-top-4 bg-brand-red/5 p-4 rounded-lg border border-brand-red/20">
+                  <div className="flex items-center gap-2 border-b border-brand-red/20 pb-2">
                     <Clock className="text-brand-red h-5 w-5" />
                     <h3 className="text-lg font-semibold text-brand-red">Hackathon Scope Config</h3>
                 </div>

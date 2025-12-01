@@ -13,7 +13,9 @@ import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/context/AuthContext' 
 import Script from 'next/script' // Required for Razorpay
 
-// Helper function to format date ranges
+// --- Helper Components ---
+
+// 1. Helper to format standard event dates
 const formatEventDate = (start, end, timeZone) => {
   if (!start) return 'Date TBA';
   
@@ -35,7 +37,77 @@ const formatEventDate = (start, end, timeZone) => {
   return `${startDate} ${startTime} - ${endDate} ${endTime} ${tz}`;
 }
 
-// Helper function to get event status
+// 2. Helper Component for Hackathon Scope Display (NEW)
+const HackathonScopeDisplay = ({ event }) => {
+  if (event.event_type !== 'hackathon') return null;
+
+  const formatDate = (dateString) => {
+    if (!dateString) return 'TBA';
+    // Use the same time zone as the rest of the app
+    return formatInTimeZone(new Date(dateString), 'Asia/Kolkata', 'MMM dd, hh:mm a');
+  };
+
+  return (
+    <Card className="mb-6 border-brand-red/20 bg-brand-red/5">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-lg text-brand-red flex items-center gap-2">
+          <Clock size={18} />
+          Hackathon Schedule & Scope
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+        
+        {/* Problem Selection */}
+        <div className="space-y-1">
+          <p className="font-semibold text-foreground">Problem Selection</p>
+          <div className="grid grid-cols-[60px_1fr] gap-1 text-muted-foreground">
+            <span>Opens:</span>
+            <span className="text-foreground">{formatDate(event.problem_selection_start)}</span>
+            <span>Closes:</span>
+            <span className="text-foreground">{formatDate(event.problem_selection_end)}</span>
+          </div>
+        </div>
+
+        {/* PPT Round */}
+        <div className="space-y-1">
+          <p className="font-semibold text-foreground">PPT Round</p>
+          <div className="grid grid-cols-[70px_1fr] gap-1 text-muted-foreground">
+            <span>Release:</span>
+            <span className="text-foreground">{formatDate(event.ppt_release_time)}</span>
+            {event.ppt_template_url && (
+              <a 
+                href={event.ppt_template_url} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="col-span-2 text-brand-red hover:underline mt-1 block font-medium"
+              >
+                Download PPT Template
+              </a>
+            )}
+          </div>
+        </div>
+
+        {/* Final Submission */}
+        <div className="col-span-1 md:col-span-2 space-y-1 pt-2 border-t border-dashed border-brand-red/20">
+          <p className="font-semibold text-foreground">Final Project Submission</p>
+          <div className="flex flex-wrap gap-x-6 gap-y-1 text-muted-foreground">
+             <div className="flex gap-2">
+               <span>Starts:</span>
+               <span className="text-foreground">{formatDate(event.submission_start)}</span>
+             </div>
+             <div className="flex gap-2">
+               <span>Ends:</span>
+               <span className="text-foreground">{formatDate(event.submission_end)}</span>
+             </div>
+          </div>
+        </div>
+
+      </CardContent>
+    </Card>
+  );
+};
+
+// 3. Helper to determine status
 const getEventStatus = (event) => {
   const now = new Date();
   const eventEndDate = event.event_end_date ? parseISO(event.event_end_date) : null;
@@ -185,7 +257,7 @@ function EventDetailContent() {
     }
   }, [user?.id, event?.id, loading, authLoading, checkRegistrationStatus]); 
 
-  // --- UPDATED HANDLESUBMIT FOR DYNAMIC KEYS ---
+  // --- HANDLESUBMIT FOR DYNAMIC KEYS ---
   const handleSubmit = async (submitData) => {
     if (!user) {
         alert('You must be logged in to register.');
@@ -195,13 +267,11 @@ function EventDetailContent() {
     // 1. Check if Paid Event
     if (event.is_paid && event.registration_fee > 0) {
         try {
-            // Check if Razorpay SDK is loaded
             if (!window.Razorpay) {
                 alert("Razorpay SDK failed to load. Please check your internet connection or ad-blocker.");
                 return;
             }
 
-            // A. Create Order
             const res = await fetch("/api/razorpay/create-order", {
                 method: "POST",
                 headers: { 'Content-Type': 'application/json' },
@@ -210,7 +280,6 @@ function EventDetailContent() {
             
             const order = await res.json();
             
-            // Explicitly handle server errors
             if (!res.ok) {
                 throw new Error(order.error || `Server Error: ${res.status}`);
             }
@@ -219,16 +288,14 @@ function EventDetailContent() {
                 throw new Error("Invalid response received from payment server");
             }
 
-            // B. Open Razorpay using the Club's Key ID returned from backend
             const options = {
-                key: order.key_id, // <--- DYNAMIC KEY FROM BACKEND
+                key: order.key_id, 
                 amount: order.amount,
                 currency: order.currency,
                 name: "Event Platform", 
                 description: `Registration for ${event.title}`,
                 order_id: order.id,
                 handler: async function (response) {
-                    // C. Payment Success - Verify & Register
                     try {
                         const verifyRes = await fetch("/api/razorpay/verify", {
                             method: "POST",
@@ -249,7 +316,6 @@ function EventDetailContent() {
                             setSubmitted(true);
                             window.sessionStorage.removeItem(storageKey);
                             alert("Payment Successful! You are registered.");
-                            // Refresh status
                             checkRegistrationStatus(user.id, event.id);
                         } else {
                             alert("Payment verification failed: " + (result.error || "Please contact support"));
@@ -264,7 +330,7 @@ function EventDetailContent() {
                     email: user.email,
                 },
                 theme: {
-                    color: "#E11D48", // Brand Red
+                    color: "#E11D48", 
                 },
             };
 
@@ -278,7 +344,7 @@ function EventDetailContent() {
             console.error("Payment initiation error:", error);
             alert(`Could not start payment: ${error.message}`);
         }
-        return; // Stop here, wait for Razorpay callback
+        return; 
     }
     
     // 2. Standard Free Registration
@@ -542,7 +608,6 @@ function EventDetailContent() {
                         eventId={params.id}
                         formData={formData} 
                         onFormChange={setAndStoreFormData}
-                        // Pass fee info to DynamicForm button (optional, handled in page but you can visualize it there)
                         submitLabel={event.is_paid && event.registration_fee > 0 ? `Pay ₹${event.registration_fee} & Register` : 'Register Now'}
                     />
                 </CardContent>
@@ -553,7 +618,6 @@ function EventDetailContent() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Import Razorpay SDK Script */}
       <Script src="https://checkout.razorpay.com/v1/checkout.js" />
       
       <div className="w-full h-64 bg-brand-gradient relative">
@@ -626,6 +690,9 @@ function EventDetailContent() {
                     </CardContent>
                   </Card>
                 
+                  {/* --- NEW HACKATHON SCOPE DISPLAY --- */}
+                  <HackathonScopeDisplay event={event} />
+
                   <h3 className="font-bold text-xl mb-2">Description</h3>
                   <p className="text-gray-300 whitespace-pre-wrap">
                     {event.description || 'No description available'}
@@ -642,7 +709,6 @@ function EventDetailContent() {
   )
 }
 
-// We wrap the default export in Suspense to allow useParams()
 export default function EventDetailPage() {
   return (
     <Suspense fallback={
