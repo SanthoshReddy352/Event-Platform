@@ -372,6 +372,7 @@ export default function HackathonScopePage() {
                     </p>
                     
                     <Link href={problemSelectionOpen && !participant.selected_problem_id ? `/events/${params.id}/scope/problems` : '#'}>
+                        <br></br>
                         <Button 
                             className="w-full bg-brand-gradient"
                             disabled={!problemSelectionOpen || participant.selected_problem_id}
@@ -457,6 +458,7 @@ export default function HackathonScopePage() {
                   </div>
               ) : (
                   <Link href={submissionOpen && !participant.has_submitted ? `/events/${params.id}/scope/submit` : '#'}>
+                    <br></br>
                     <Button 
                         className="w-full bg-orange-600 hover:bg-orange-700"
                         disabled={!submissionOpen || participant.has_submitted}
