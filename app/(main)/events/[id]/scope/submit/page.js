@@ -48,15 +48,19 @@ export default function ProjectSubmissionPage() {
     if (!user || !params.id) return
     
     try {
-      setLoading(true)
+      // Only show loading spinner on initial load
+      if (!scopeStatus) setLoading(true)
+      
       const { data: { session } } = await supabase.auth.getSession()
       
       if (!session) {
         throw new Error('Please log in')
       }
 
-      // Fetch event
-      const eventRes = await fetch(`/api/events/${params.id}`)
+      // Fetch event with cache-busting
+      const eventRes = await fetch(`/api/events/${params.id}?t=${Date.now()}`, {
+        cache: 'no-store'
+      })
       const eventData = await eventRes.json()
       
       if (!eventData.success) {
@@ -65,9 +69,14 @@ export default function ProjectSubmissionPage() {
       
       setEvent(eventData.event)
 
-      // Fetch scope status
-      const scopeRes = await fetch(`/api/events/${params.id}/scope-status`, {
-        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      // Fetch scope status with cache-busting
+      const scopeRes = await fetch(`/api/events/${params.id}/scope-status?t=${Date.now()}`, {
+        headers: { 
+          'Authorization': `Bearer ${session.access_token}`,
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
+        },
+        cache: 'no-store'
       })
       
       const scopeData = await scopeRes.json()
@@ -77,6 +86,36 @@ export default function ProjectSubmissionPage() {
         return
       }
       
+      // Detect status changes and notify user (non-disruptive)
+      if (prevStatusRef.current && scopeData.phases) {
+        const prev = prevStatusRef.current.phases
+        const curr = scopeData.phases
+        
+        // Notify when submission window opens
+        if (!prev.submission_open && curr.submission_open) {
+          toast.success('Submission window is now open!', {
+            description: 'You can now submit your project.',
+            duration: 5000
+          })
+        }
+        
+        // Notify when submission window closes
+        if (prev.submission_open && !curr.submission_open) {
+          toast.warning('Submission window has closed.', {
+            duration: 5000
+          })
+        }
+        
+        // Notify when PPT template becomes available
+        if (!prev.ppt_available && curr.ppt_available) {
+          toast.info('PPT template is now available!', {
+            description: 'Download it from the hackathon scope page.',
+            duration: 5000
+          })
+        }
+      }
+      
+      prevStatusRef.current = scopeData
       setScopeStatus(scopeData)
 
       // Check if already submitted
@@ -86,15 +125,22 @@ export default function ProjectSubmissionPage() {
 
     } catch (err) {
       console.error('Error fetching data:', err)
-      setError(err.message)
+      // Only set error on initial load
+      if (!scopeStatus) setError(err.message)
     } finally {
       setLoading(false)
     }
-  }, [user, params.id])
+  }, [user?.id, params.id]) // Use user.id to prevent unnecessary re-fetches
 
   useEffect(() => {
     if (!authLoading) {
       fetchData()
+      
+      // Silent background polling every 30 seconds to auto-update status
+      // This updates React state without page reload - non-disruptive!
+      const intervalId = setInterval(fetchData, 30000)
+      
+      return () => clearInterval(intervalId)
     }
   }, [authLoading, fetchData])
 
