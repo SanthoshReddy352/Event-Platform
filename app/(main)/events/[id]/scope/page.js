@@ -86,6 +86,51 @@ export default function HackathonScopePage() {
         return
       }
       
+      // Detect status changes and notify user (non-disruptive)
+      if (prevStatusRef.current && scopeData.phases) {
+        const prev = prevStatusRef.current.phases
+        const curr = scopeData.phases
+        
+        // Notify when problem selection window opens
+        if (!prev.problem_selection && curr.problem_selection) {
+          toast.success('Problem selection window is now open!', {
+            description: 'Click "View & Select Problem" to choose your challenge.',
+            duration: 5000
+          })
+        }
+        
+        // Notify when problem selection window closes
+        if (prev.problem_selection && !curr.problem_selection) {
+          toast.warning('Problem selection window has closed.', {
+            duration: 5000
+          })
+        }
+        
+        // Notify when PPT template becomes available
+        if (!prev.ppt_available && curr.ppt_available) {
+          toast.info('PPT template is now available!', {
+            description: 'Download the official presentation template.',
+            duration: 5000
+          })
+        }
+        
+        // Notify when submission window opens
+        if (!prev.submission_open && curr.submission_open) {
+          toast.success('Submission window is now open!', {
+            description: 'You can now submit your completed project.',
+            duration: 5000
+          })
+        }
+        
+        // Notify when submission window closes
+        if (prev.submission_open && !curr.submission_open) {
+          toast.warning('Submission window has closed.', {
+            duration: 5000
+          })
+        }
+      }
+      
+      prevStatusRef.current = scopeData
       setScopeStatus(scopeData)
       
     } catch (err) {
