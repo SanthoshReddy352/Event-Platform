@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -13,6 +13,7 @@ import {
 import { format, parseISO } from 'date-fns'
 import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/context/AuthContext'
+import { toast } from 'sonner'
 
 export default function HackathonScopePage() {
   const params = useParams()
