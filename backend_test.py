@@ -10,7 +10,7 @@ import sys
 from datetime import datetime, timedelta
 
 # Configuration
-BASE_URL = "https://pwd-update-fix.preview.emergentagent.com/api"
+BASE_URL = "https://problemselect.preview.emergentagent.com/api"
 HEADERS = {
     "Content-Type": "application/json",
     "Accept": "application/json"
