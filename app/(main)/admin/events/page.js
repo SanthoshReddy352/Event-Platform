@@ -114,7 +114,7 @@ function AdminEventsContent() {
                 
                 <CardFooter className="mt-auto flex flex-col gap-2">
                   {/* Dashboard Link - Added at top */}
-                  <Link href={`/admin/events/${event.id}`} className="w-full">
+                  <Link href={`/admin/events/${event.id}/dashboard`} className="w-full">
                     <Button className="w-full bg-slate-900 text-white hover:bg-slate-800" disabled={!canManage}>
                         <LayoutDashboard size={16} className="mr-2" />
                         Open Dashboard
