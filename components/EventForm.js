@@ -1,105 +1,139 @@
-'use client'
+"use client";
 
-import { useState, useEffect } from 'react'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
-import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Loader2, IndianRupee, Clock } from 'lucide-react'
+import { useState, useEffect } from "react";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Loader2, IndianRupee, Clock } from "lucide-react";
 
 // Helper to check if a date is valid
 const isValidDate = (d) => d instanceof Date && !isNaN(d);
 
 // Helper to format Date object to "YYYY-MM-DDTHH:mm" for datetime-local input
 const toDateTimeLocal = (date) => {
-  if (!date || !isValidDate(date)) return '';
-  const pad = (num) => num.toString().padStart(2, '0');
+  if (!date || !isValidDate(date)) return "";
+  const pad = (num) => num.toString().padStart(2, "0");
   return (
     date.getFullYear() +
-    '-' +
+    "-" +
     pad(date.getMonth() + 1) +
-    '-' +
+    "-" +
     pad(date.getDate()) +
-    'T' +
+    "T" +
     pad(date.getHours()) +
-    ':' +
+    ":" +
     pad(date.getMinutes())
   );
 };
 
 // Helper to map DB data to Form State
 const mapDataToForm = (data) => ({
-    title: data.title || '',
-    description: data.description || '',
-    banner_url: data.banner_url || '',
-    
-    event_date: data.event_date ? new Date(data.event_date) : null,
-    event_end_date: data.event_end_date ? new Date(data.event_end_date) : null,
-    registration_start: data.registration_start ? new Date(data.registration_start) : null,
-    registration_end: data.registration_end ? new Date(data.registration_end) : null,
-    
-    is_active: data.is_active || false,
-    registration_open: data.registration_open || false,
-    is_paid: data.is_paid || false,
-    registration_fee: data.registration_fee || 0,
-    
-    event_type: data.event_type || 'other',
-    problem_selection_start: data.problem_selection_start ? new Date(data.problem_selection_start) : null,
-    problem_selection_end: data.problem_selection_end ? new Date(data.problem_selection_end) : null,
-    ppt_template_url: data.ppt_template_url || '',
-    ppt_release_time: data.ppt_release_time ? new Date(data.ppt_release_time) : null,
-    submission_start: data.submission_start ? new Date(data.submission_start) : null,
-    submission_end: data.submission_end ? new Date(data.submission_end) : null,
+  title: data.title || "",
+  description: data.description || "",
+  banner_url: data.banner_url || "",
+
+  event_date: data.event_date ? new Date(data.event_date) : null,
+  event_end_date: data.event_end_date ? new Date(data.event_end_date) : null,
+  registration_start: data.registration_start
+    ? new Date(data.registration_start)
+    : null,
+  registration_end: data.registration_end
+    ? new Date(data.registration_end)
+    : null,
+
+  is_active: data.is_active || false,
+  registration_open: data.registration_open || false,
+  is_paid: data.is_paid || false,
+  registration_fee: data.registration_fee || 0,
+
+  event_type: data.event_type || "other",
+  problem_selection_start: data.problem_selection_start
+    ? new Date(data.problem_selection_start)
+    : null,
+  problem_selection_end: data.problem_selection_end
+    ? new Date(data.problem_selection_end)
+    : null,
+  ppt_template_url: data.ppt_template_url || "",
+  ppt_release_time: data.ppt_release_time
+    ? new Date(data.ppt_release_time)
+    : null,
+  submission_start: data.submission_start
+    ? new Date(data.submission_start)
+    : null,
+  submission_end: data.submission_end ? new Date(data.submission_end) : null,
 });
 
 const defaultFormState = {
-    title: '',
-    description: '',
-    banner_url: '',
-    event_date: null,
-    event_end_date: null,
-    registration_start: null,
-    registration_end: null,
-    is_active: false,
-    registration_open: false,
-    is_paid: false,
-    registration_fee: 0,
-    event_type: 'other',
-    problem_selection_start: null,
-    problem_selection_end: null,
-    ppt_template_url: '',
-    ppt_release_time: null,
-    submission_start: null,
-    submission_end: null,
+  title: "",
+  description: "",
+  banner_url: "",
+  event_date: null,
+  event_end_date: null,
+  registration_start: null,
+  registration_end: null,
+  is_active: false,
+  registration_open: false,
+  is_paid: false,
+  registration_fee: 0,
+  event_type: "other",
+  problem_selection_start: null,
+  problem_selection_end: null,
+  ppt_template_url: "",
+  ppt_release_time: null,
+  submission_start: null,
+  submission_end: null,
 };
 
-export default function EventForm({ onSubmit, initialData = null, isSubmitting = false, storageKey }) {
-  
+export default function EventForm({
+  onSubmit,
+  initialData = null,
+  isSubmitting = false,
+  storageKey,
+}) {
   const [formData, setFormData] = useState(() => {
     // 1. Try to load from storage first (Persistence)
-    if (typeof window !== 'undefined' && storageKey) {
-        const saved = window.sessionStorage.getItem(storageKey);
-        if (saved) {
-            const parsed = JSON.parse(saved);
-            // Rehydrate date strings back to Date objects
-            const dateFields = [
-                'event_date', 'event_end_date', 'registration_start', 'registration_end',
-                'problem_selection_start', 'problem_selection_end', 'ppt_release_time',
-                'submission_start', 'submission_end'
-            ];
-            dateFields.forEach(field => {
-                if (parsed[field]) parsed[field] = new Date(parsed[field]);
-            });
-            return { ...defaultFormState, ...parsed };
-        }
+    if (typeof window !== "undefined" && storageKey) {
+      const saved = window.sessionStorage.getItem(storageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // Rehydrate date strings back to Date objects
+        const dateFields = [
+          "event_date",
+          "event_end_date",
+          "registration_start",
+          "registration_end",
+          "problem_selection_start",
+          "problem_selection_end",
+          "ppt_release_time",
+          "submission_start",
+          "submission_end",
+        ];
+        dateFields.forEach((field) => {
+          if (parsed[field]) parsed[field] = new Date(parsed[field]);
+        });
+        return { ...defaultFormState, ...parsed };
+      }
     }
 
     // 2. If no storage, use initialData (Fix for Edit Page)
     if (initialData) {
-        return mapDataToForm(initialData);
+      return mapDataToForm(initialData);
     }
 
     // 3. Fallback to default
@@ -108,15 +142,18 @@ export default function EventForm({ onSubmit, initialData = null, isSubmitting =
 
   // Save to storage on every change
   useEffect(() => {
-    if (typeof window !== 'undefined' && storageKey) {
-        window.sessionStorage.setItem(storageKey, JSON.stringify(formData));
+    if (typeof window !== "undefined" && storageKey) {
+      window.sessionStorage.setItem(storageKey, JSON.stringify(formData));
     }
   }, [formData, storageKey]);
 
   // Handle case where initialData loads *after* mount (unlikely given parent loader, but safe to keep)
   useEffect(() => {
     if (initialData) {
-      const hasSavedData = typeof window !== 'undefined' && storageKey && window.sessionStorage.getItem(storageKey);
+      const hasSavedData =
+        typeof window !== "undefined" &&
+        storageKey &&
+        window.sessionStorage.getItem(storageKey);
       // Only overwrite if we don't have saved work in progress
       if (!hasSavedData) {
         setFormData(mapDataToForm(initialData));
@@ -125,19 +162,19 @@ export default function EventForm({ onSubmit, initialData = null, isSubmitting =
   }, [initialData, storageKey]);
 
   const handleChange = (e) => {
-    const { name, value } = e.target
+    const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
       [name]: value,
-    }))
-  }
+    }));
+  };
 
   const handleSelectChange = (name, value) => {
     setFormData((prev) => ({
       ...prev,
       [name]: value,
-    }))
-  }
+    }));
+  };
 
   const handleDateTimeLocalChange = (e) => {
     const { name, value } = e.target;
@@ -151,8 +188,8 @@ export default function EventForm({ onSubmit, initialData = null, isSubmitting =
     setFormData((prev) => ({
       ...prev,
       [field]: checked,
-    }))
-  }
+    }));
+  };
 
   const validateForm = () => {
     const {
@@ -163,7 +200,7 @@ export default function EventForm({ onSubmit, initialData = null, isSubmitting =
       problem_selection_start,
       problem_selection_end,
       submission_start,
-      submission_end
+      submission_end,
     } = formData;
 
     if (event_date && event_end_date && event_date >= event_end_date) {
@@ -171,262 +208,324 @@ export default function EventForm({ onSubmit, initialData = null, isSubmitting =
       return false;
     }
 
-    if (registration_start && registration_end && registration_start >= registration_end) {
+    if (
+      registration_start &&
+      registration_end &&
+      registration_start >= registration_end
+    ) {
       alert("Registration Start Date must be before Registration End Date.");
       return false;
     }
 
-    if (registration_end && event_end_date && registration_end > event_end_date) {
+    if (
+      registration_end &&
+      event_end_date &&
+      registration_end > event_end_date
+    ) {
       alert("Registration cannot end after the event has ended.");
       return false;
     }
 
-    if (formData.event_type === 'hackathon') {
-       if (problem_selection_start && problem_selection_end && problem_selection_start >= problem_selection_end) {
-          alert("Problem Selection Start must be before Problem Selection End.");
-          return false;
-       }
-       if (submission_start && submission_end && submission_start >= submission_end) {
-          alert("Submission Start must be before Submission End.");
-          return false;
-       }
+    if (formData.event_type === "hackathon") {
+      if (
+        problem_selection_start &&
+        problem_selection_end &&
+        problem_selection_start >= problem_selection_end
+      ) {
+        alert("Problem Selection Start must be before Problem Selection End.");
+        return false;
+      }
+      if (
+        submission_start &&
+        submission_end &&
+        submission_start >= submission_end
+      ) {
+        alert("Submission Start must be before Submission End.");
+        return false;
+      }
     }
 
     return true;
-  }
+  };
 
   const handleSubmit = (e) => {
-    e.preventDefault()
-    
+    e.preventDefault();
+
     if (!validateForm()) return;
 
     const submissionData = {
       ...formData,
-      event_date: isValidDate(formData.event_date) ? formData.event_date.toISOString() : null,
-      event_end_date: isValidDate(formData.event_end_date) ? formData.event_end_date.toISOString() : null,
-      registration_start: isValidDate(formData.registration_start) ? formData.registration_start.toISOString() : null,
-      registration_end: isValidDate(formData.registration_end) ? formData.registration_end.toISOString() : null,
-      
-      problem_selection_start: isValidDate(formData.problem_selection_start) ? formData.problem_selection_start.toISOString() : null,
-      problem_selection_end: isValidDate(formData.problem_selection_end) ? formData.problem_selection_end.toISOString() : null,
-      ppt_release_time: isValidDate(formData.ppt_release_time) ? formData.ppt_release_time.toISOString() : null,
-      submission_start: isValidDate(formData.submission_start) ? formData.submission_start.toISOString() : null,
-      submission_end: isValidDate(formData.submission_end) ? formData.submission_end.toISOString() : null,
+      event_date: isValidDate(formData.event_date)
+        ? formData.event_date.toISOString()
+        : null,
+      event_end_date: isValidDate(formData.event_end_date)
+        ? formData.event_end_date.toISOString()
+        : null,
+      registration_start: isValidDate(formData.registration_start)
+        ? formData.registration_start.toISOString()
+        : null,
+      registration_end: isValidDate(formData.registration_end)
+        ? formData.registration_end.toISOString()
+        : null,
 
-      registration_fee: formData.is_paid ? parseFloat(formData.registration_fee) : 0,
-    }
-    
-    onSubmit(submissionData)
-  }
+      problem_selection_start: isValidDate(formData.problem_selection_start)
+        ? formData.problem_selection_start.toISOString()
+        : null,
+      problem_selection_end: isValidDate(formData.problem_selection_end)
+        ? formData.problem_selection_end.toISOString()
+        : null,
+      ppt_release_time: isValidDate(formData.ppt_release_time)
+        ? formData.ppt_release_time.toISOString()
+        : null,
+      submission_start: isValidDate(formData.submission_start)
+        ? formData.submission_start.toISOString()
+        : null,
+      submission_end: isValidDate(formData.submission_end)
+        ? formData.submission_end.toISOString()
+        : null,
+
+      registration_fee: formData.is_paid
+        ? parseFloat(formData.registration_fee)
+        : 0,
+    };
+
+    onSubmit(submissionData);
+  };
 
   return (
     <form onSubmit={handleSubmit}>
       <Card className="w-full">
         <CardHeader>
-          <CardTitle>{initialData ? 'Edit Event' : 'Create New Event'}</CardTitle>
+          <CardTitle>
+            {initialData ? "Edit Event" : "Create New Event"}
+          </CardTitle>
           <CardDescription>
-            {initialData ? 'Update the details for your event.' : 'Fill in the details for your new event.'}
+            {initialData
+              ? "Update the details for your event."
+              : "Fill in the details for your new event."}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          
           {/* 1. Basic Info */}
           <div className="space-y-4">
-            <h3 className="text-lg font-semibold border-b pb-2">Basic Details</h3>
+            <h3 className="text-lg font-semibold border-b pb-2">
+              Basic Details
+            </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                    <Label htmlFor="title">Event Title</Label>
-                    <Input
-                    id="title"
-                    name="title"
-                    value={formData.title}
-                    onChange={handleChange}
-                    placeholder="My Awesome Hackathon"
-                    required
-                    />
-                </div>
-                <div className="space-y-2">
-                    <Label htmlFor="event_type">Event Type</Label>
-                    <Select 
-                        value={formData.event_type} 
-                        onValueChange={(value) => handleSelectChange('event_type', value)}
-                    >
-                        <SelectTrigger>
-                            <SelectValue placeholder="Select Type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="other">Standard Event (Workshop/Seminar)</SelectItem>
-                            <SelectItem value="hackathon">Hackathon</SelectItem>
-                            <SelectItem value="mcq">MCQ Quiz</SelectItem>
-                        </SelectContent>
-                    </Select>
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="title">Event Title</Label>
+                <Input
+                  id="title"
+                  name="title"
+                  value={formData.title}
+                  onChange={handleChange}
+                  placeholder="My Awesome Hackathon"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="event_type">Event Type</Label>
+                <Select
+                  value={formData.event_type}
+                  onValueChange={(value) =>
+                    handleSelectChange("event_type", value)
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select Type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="other">
+                      Standard Event (Workshop/Seminar)
+                    </SelectItem>
+                    <SelectItem value="hackathon">Hackathon</SelectItem>
+                    <SelectItem value="mcq">MCQ Quiz</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             <div className="space-y-2">
-                <Label htmlFor="description">Description</Label>
-                <Textarea
+              <Label htmlFor="description">Description</Label>
+              <Textarea
                 id="description"
                 name="description"
                 value={formData.description}
                 onChange={handleChange}
                 placeholder="Describe your event..."
                 rows={5}
-                />
+              />
             </div>
 
             <div className="space-y-2">
-                <Label htmlFor="banner_url">Banner Image URL</Label>
-                <Input
+              <Label htmlFor="banner_url">Banner Image URL</Label>
+              <Input
                 id="banner_url"
                 name="banner_url"
                 value={formData.banner_url}
                 onChange={handleChange}
                 placeholder="https://example.com/my-banner.png"
-                />
+              />
             </div>
           </div>
 
           {/* 2. Registration & Schedule (UPDATED WITH TIME) */}
           <div className="space-y-4">
-            <h3 className="text-lg font-semibold border-b pb-2">Schedule & Registration</h3>
+            <h3 className="text-lg font-semibold border-b pb-2">
+              Schedule & Registration
+            </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Event Start Date */}
-                <div className="space-y-2">
-                    <Label>Event Start Date & Time</Label>
-                    <Input 
-                        type="datetime-local"
-                        name="event_date"
-                        value={toDateTimeLocal(formData.event_date)}
-                        onChange={handleDateTimeLocalChange}
-                        required
-                    />
-                </div>
+              {/* Event Start Date */}
+              <div className="space-y-2">
+                <Label>Event Start Date & Time</Label>
+                <Input
+                  type="datetime-local"
+                  name="event_date"
+                  value={toDateTimeLocal(formData.event_date)}
+                  onChange={handleDateTimeLocalChange}
+                  required
+                />
+              </div>
 
-                {/* Event End Date */}
-                <div className="space-y-2">
-                    <Label>Event End Date & Time</Label>
-                    <Input 
-                        type="datetime-local"
-                        name="event_end_date"
-                        value={toDateTimeLocal(formData.event_end_date)}
-                        onChange={handleDateTimeLocalChange}
-                    />
-                </div>
+              {/* Event End Date */}
+              <div className="space-y-2">
+                <Label>Event End Date & Time</Label>
+                <Input
+                  type="datetime-local"
+                  name="event_end_date"
+                  value={toDateTimeLocal(formData.event_end_date)}
+                  onChange={handleDateTimeLocalChange}
+                />
+              </div>
 
-                {/* Registration Start Date */}
-                <div className="space-y-2">
-                    <Label>Registration Start</Label>
-                    <Input 
-                        type="datetime-local"
-                        name="registration_start"
-                        value={toDateTimeLocal(formData.registration_start)}
-                        onChange={handleDateTimeLocalChange}
-                    />
-                </div>
+              {/* Registration Start Date */}
+              <div className="space-y-2">
+                <Label>Registration Start</Label>
+                <Input
+                  type="datetime-local"
+                  name="registration_start"
+                  value={toDateTimeLocal(formData.registration_start)}
+                  onChange={handleDateTimeLocalChange}
+                />
+              </div>
 
-                {/* Registration End Date */}
-                <div className="space-y-2">
-                    <Label>Registration End</Label>
-                    <Input 
-                        type="datetime-local"
-                        name="registration_end"
-                        value={toDateTimeLocal(formData.registration_end)}
-                        onChange={handleDateTimeLocalChange}
-                    />
-                </div>
+              {/* Registration End Date */}
+              <div className="space-y-2">
+                <Label>Registration End</Label>
+                <Input
+                  type="datetime-local"
+                  name="registration_end"
+                  value={toDateTimeLocal(formData.registration_end)}
+                  onChange={handleDateTimeLocalChange}
+                />
+              </div>
             </div>
           </div>
 
           {/* 3. HACKATHON SPECIFIC SETTINGS */}
-          {formData.event_type === 'hackathon' && (
-              <div className="space-y-4 animate-in fade-in slide-in-from-top-4 bg-brand-red/5 p-4 rounded-lg border border-brand-red/20">
-                  <div className="flex items-center gap-2 border-b border-brand-red/20 pb-2">
-                    <Clock className="text-brand-red h-5 w-5" />
-                    <h3 className="text-lg font-semibold text-brand-red">Hackathon Scope Config</h3>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Problem Statement Section */}
-                    <div className="space-y-2">
-                        <Label className="text-xs font-bold uppercase text-gray-500">Problem Statement Selection Window</Label>
-                        <div className="grid grid-cols-2 gap-2">
-                            <div className="space-y-1">
-                                <Label className="text-xs">Opens At</Label>
-                                <Input 
-                                    type="datetime-local" 
-                                    name="problem_selection_start"
-                                    value={toDateTimeLocal(formData.problem_selection_start)}
-                                    onChange={handleDateTimeLocalChange}
-                                />
-                            </div>
-                            <div className="space-y-1">
-                                <Label className="text-xs">Closes At</Label>
-                                <Input 
-                                    type="datetime-local" 
-                                    name="problem_selection_end"
-                                    value={toDateTimeLocal(formData.problem_selection_end)}
-                                    onChange={handleDateTimeLocalChange}
-                                />
-                            </div>
-                        </div>
-                        <p className="text-[10px] text-gray-400">Participants can only choose problems between these times.</p>
-                    </div>
+          {formData.event_type === "hackathon" && (
+            <div className="space-y-4 animate-in fade-in slide-in-from-top-4 bg-brand-red/5 p-4 rounded-lg border border-brand-red/20">
+              <div className="flex items-center gap-2 border-b border-brand-red/20 pb-2">
+                <Clock className="text-brand-red h-5 w-5" />
+                <h3 className="text-lg font-semibold text-brand-red">
+                  Hackathon Scope Config
+                </h3>
+              </div>
 
-                    {/* PPT Section */}
-                    <div className="space-y-2">
-                        <Label className="text-xs font-bold uppercase text-gray-500">PPT Round</Label>
-                        <div className="space-y-2">
-                             <div className="space-y-1">
-                                <Label className="text-xs">Release Template At</Label>
-                                <Input 
-                                    type="datetime-local" 
-                                    name="ppt_release_time"
-                                    value={toDateTimeLocal(formData.ppt_release_time)}
-                                    onChange={handleDateTimeLocalChange}
-                                />
-                             </div>
-                             <div className="space-y-1">
-                                <Label className="text-xs">PPT Template URL (Optional)</Label>
-                                <Input 
-                                    name="ppt_template_url"
-                                    placeholder="https://drive.google.com/..."
-                                    value={formData.ppt_template_url}
-                                    onChange={handleChange}
-                                />
-                             </div>
-                        </div>
+              <div className="grid grid-cols-1 md:grid-cols-1 gap-6">
+                {/* Problem Statement Section */}
+                <div className="space-y-2 md:col-span-1">
+                  <Label className="text-xs font-bold uppercase text-gray-500">
+                    Problem Statement Selection Window
+                  </Label>
+                  <div className="grid grid-cols-2 md:grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Opens At</Label>
+                      <Input
+                        type="datetime-local"
+                        width="full"
+                        className="custom-date-icon"
+                        name="problem_selection_start"
+                        value={toDateTimeLocal(
+                          formData.problem_selection_start,
+                        )}
+                        onChange={handleDateTimeLocalChange}
+                      />
                     </div>
-
-                    {/* Final Submission Section */}
-                    <div className="space-y-2 md:col-span-2">
-                        <Label className="text-xs font-bold uppercase text-gray-500">Final Project Submission Window</Label>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                            <div className="space-y-1">
-                                <Label className="text-xs">Opens At</Label>
-                                <Input 
-                                    type="datetime-local" 
-                                    name="submission_start"
-                                    value={toDateTimeLocal(formData.submission_start)}
-                                    onChange={handleDateTimeLocalChange}
-                                />
-                            </div>
-                            <div className="space-y-1">
-                                <Label className="text-xs">Closes At</Label>
-                                <Input 
-                                    type="datetime-local" 
-                                    name="submission_end"
-                                    value={toDateTimeLocal(formData.submission_end)}
-                                    onChange={handleDateTimeLocalChange}
-                                />
-                            </div>
-                        </div>
-                        <p className="text-[10px] text-gray-400">The submission form will only be visible during this window.</p>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Closes At</Label>
+                      <Input
+                        type="datetime-local"
+                        name="problem_selection_end"
+                        value={toDateTimeLocal(formData.problem_selection_end)}
+                        onChange={handleDateTimeLocalChange}
+                      />
                     </div>
+                  </div>
+                  <p className="text-[10px] text-gray-400">
+                    Participants can only choose problems between these times.
+                  </p>
                 </div>
-             </div>
+                <br></br>
+                {/* PPT Section */}
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold uppercase text-gray-500">
+                    PPT Round
+                  </Label>
+                  <div className="grid grid-cols-2 md:grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Release Template At</Label>
+                      <Input
+                        type="datetime-local"
+                        name="ppt_release_time"
+                        value={toDateTimeLocal(formData.ppt_release_time)}
+                        onChange={handleDateTimeLocalChange}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">PPT Template URL</Label>
+                      <Input
+                        name="ppt_template_url"
+                        placeholder="https://drive.google.com/..."
+                        value={formData.ppt_template_url}
+                        onChange={handleChange}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Final Submission Section */}
+                <div className="space-y-2 md:col-span-2">
+                  <Label className="text-xs font-bold uppercase text-gray-500">
+                    Final Project Submission Window
+                  </Label>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Opens At</Label>
+                      <Input
+                        type="datetime-local"
+                        name="submission_start"
+                        value={toDateTimeLocal(formData.submission_start)}
+                        onChange={handleDateTimeLocalChange}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Closes At</Label>
+                      <Input
+                        type="datetime-local"
+                        name="submission_end"
+                        value={toDateTimeLocal(formData.submission_end)}
+                        onChange={handleDateTimeLocalChange}
+                      />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-gray-400">
+                    The submission form will only be visible during this window.
+                  </p>
+                </div>
+              </div>
+            </div>
           )}
-
 
           {/* 4. Settings */}
           <div className="p-4 border rounded-lg bg-gray-50/10 space-y-4">
@@ -435,9 +534,13 @@ export default function EventForm({ onSubmit, initialData = null, isSubmitting =
               <Switch
                 id="is_paid"
                 checked={formData.is_paid}
-                onCheckedChange={(checked) => handleSwitchChange('is_paid', checked)}
+                onCheckedChange={(checked) =>
+                  handleSwitchChange("is_paid", checked)
+                }
               />
-              <Label htmlFor="is_paid" className="font-semibold text-brand-red">Is this a Paid Event?</Label>
+              <Label htmlFor="is_paid" className="font-semibold text-brand-red">
+                Is this a Paid Event?
+              </Label>
             </div>
 
             {formData.is_paid && (
@@ -458,24 +561,28 @@ export default function EventForm({ onSubmit, initialData = null, isSubmitting =
                 </div>
               </div>
             )}
-            
+
             <div className="flex items-center space-x-4 pt-4">
-                <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-2">
                 <Switch
-                    id="is_active"
-                    checked={formData.is_active}
-                    onCheckedChange={(checked) => handleSwitchChange('is_active', checked)}
+                  id="is_active"
+                  checked={formData.is_active}
+                  onCheckedChange={(checked) =>
+                    handleSwitchChange("is_active", checked)
+                  }
                 />
                 <Label htmlFor="is_active">Event Active (Public)</Label>
-                </div>
-                <div className="flex items-center space-x-2">
+              </div>
+              <div className="flex items-center space-x-2">
                 <Switch
-                    id="registration_open"
-                    checked={formData.registration_open}
-                    onCheckedChange={(checked) => handleSwitchChange('registration_open', checked)}
+                  id="registration_open"
+                  checked={formData.registration_open}
+                  onCheckedChange={(checked) =>
+                    handleSwitchChange("registration_open", checked)
+                  }
                 />
                 <Label htmlFor="registration_open">Registration Open</Label>
-                </div>
+              </div>
             </div>
           </div>
 
@@ -488,11 +595,11 @@ export default function EventForm({ onSubmit, initialData = null, isSubmitting =
               {isSubmitting ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : null}
-              {initialData ? 'Update Event' : 'Create Event'}
+              {initialData ? "Update Event" : "Create Event"}
             </Button>
           </div>
         </CardContent>
       </Card>
     </form>
-  )
+  );
 }
