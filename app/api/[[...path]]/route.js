@@ -430,9 +430,19 @@ export async function POST(request) {
         registration_start: body.registration_start || null,
         registration_end: body.registration_end || null,
         
-        // NEW: Payment Fields
+        // Payment Fields
         is_paid: body.is_paid !== undefined ? body.is_paid : false,
         registration_fee: body.registration_fee !== undefined ? body.registration_fee : 0,
+
+        // Hackathon Scope Fields
+        event_type: body.event_type || 'other',
+        problem_selection_start: body.problem_selection_start || null,
+        problem_selection_end: body.problem_selection_end || null,
+        ppt_template_url: body.ppt_template_url || null,
+        ppt_release_time: body.ppt_release_time || null,
+        submission_start: body.submission_start || null,
+        submission_end: body.submission_end || null,
+        submission_form_fields: body.submission_form_fields || [],
 
         form_fields: body.form_fields || [],
         created_by: user.id, 
