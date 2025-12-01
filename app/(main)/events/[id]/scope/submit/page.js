@@ -24,6 +24,9 @@ export default function ProjectSubmissionPage() {
   const [scopeStatus, setScopeStatus] = useState(null)
   const [error, setError] = useState(null)
   const [submitted, setSubmitted] = useState(false)
+  
+  // Track previous status to detect changes and show notifications
+  const prevStatusRef = useRef(null)
 
   const storageKey = `hackathonSubmission-${params.id}`
   const [formData, setFormData] = useState(() => {
