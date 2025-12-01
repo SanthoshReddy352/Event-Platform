@@ -250,6 +250,91 @@ export async function GET(request) {
       return NextResponse.json({ success: true, count }, { headers: corsHeaders })
     }
 
+    // GET /api/events/:eventId/scope-status - Get hackathon scope status for a user
+    if (segments[0] === 'events' && segments[1] && segments[2] === 'scope-status') {
+      const eventId = segments[1]
+      const authHeader = request.headers.get('Authorization')
+      
+      if (!authHeader) {
+        return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401, headers: corsHeaders })
+      }
+      
+      const token = authHeader.split(' ')[1]
+      const userSupabase = createClient(supabaseUrl, supabaseAnonKey, {
+        global: { headers: { 'Authorization': `Bearer ${token}` } },
+      })
+      const { data: { user }, error: authError } = await userSupabase.auth.getUser()
+      
+      if (authError || !user) {
+        return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401, headers: corsHeaders })
+      }
+      
+      // Get event details
+      const { data: event } = await supabaseAdmin
+        .from('events')
+        .select('*')
+        .eq('id', eventId)
+        .single()
+      
+      if (!event) {
+        return NextResponse.json({ success: false, error: 'Event not found' }, { status: 404, headers: corsHeaders })
+      }
+      
+      // Get participant record
+      const { data: participant } = await supabaseAdmin
+        .from('participants')
+        .select('*, selected_problem_id, submission_data, submitted_at')
+        .eq('event_id', eventId)
+        .eq('user_id', user.id)
+        .eq('status', 'approved')
+        .maybeSingle()
+      
+      if (!participant) {
+        return NextResponse.json({ 
+          success: false, 
+          error: 'Not registered or not approved',
+          isApproved: false 
+        }, { status: 403, headers: corsHeaders })
+      }
+      
+      // Calculate current phase based on time
+      const now = new Date()
+      const phases = {
+        problem_selection: false,
+        ppt_available: false,
+        submission_open: false
+      }
+      
+      if (event.problem_selection_start && event.problem_selection_end) {
+        const start = new Date(event.problem_selection_start)
+        const end = new Date(event.problem_selection_end)
+        phases.problem_selection = now >= start && now <= end
+      }
+      
+      if (event.ppt_release_time) {
+        phases.ppt_available = now >= new Date(event.ppt_release_time)
+      }
+      
+      if (event.submission_start && event.submission_end) {
+        const start = new Date(event.submission_start)
+        const end = new Date(event.submission_end)
+        phases.submission_open = now >= start && now <= end
+      }
+      
+      return NextResponse.json({ 
+        success: true, 
+        isApproved: true,
+        phases,
+        participant: {
+          selected_problem_id: participant.selected_problem_id,
+          has_submitted: !!participant.submitted_at
+        },
+        event: {
+          ppt_template_url: event.ppt_template_url
+        }
+      }, { headers: corsHeaders })
+    }
+
     // GET /api/participants/:eventId - Get participants for an event
     if (segments[0] === 'participants' && segments[1]) {
       const eventId = segments[1];
