@@ -96,6 +96,7 @@ function EventDetailContent() {
   const [loading, setLoading] = useState(true); 
   const [event, setEvent] = useState(null);
   const [submitted, setSubmitted] = useState(false);
+  const [quizStatus, setQuizStatus] = useState(null); // 'in_progress', 'completed', or null
   
   // Registration state
   const [isRegistered, setIsRegistered] = useState(false);
@@ -179,6 +180,7 @@ function EventDetailContent() {
             );
             
             let fetchParticipantPromise = Promise.resolve(null);
+            let fetchQuizAttemptPromise = Promise.resolve(null);
             
             if (user?.id) {
                 const { data: { session } } = await supabase.auth.getSession();
@@ -196,10 +198,18 @@ function EventDetailContent() {
                             return res.json();
                         })
                     );
+
+                    // Fetch Quiz Attempt directly from Supabase for reliability
+                    fetchQuizAttemptPromise = supabase
+                        .from('quiz_attempts')
+                        .select('status')
+                        .eq('event_id', params.id)
+                        .eq('user_id', user.id)
+                        .maybeSingle();
                 }
             }
 
-            const [eventResult, participantResult] = await Promise.all([fetchEventPromise, fetchParticipantPromise]);
+            const [eventResult, participantResult, quizAttemptResult] = await Promise.all([fetchEventPromise, fetchParticipantPromise, fetchQuizAttemptPromise]);
 
             if (!mounted) return;
             if (eventResult?.aborted || participantResult?.aborted) return;
@@ -235,6 +245,12 @@ function EventDetailContent() {
                 setIsRegistered(false);
                 setRegistrationStatus(null);
                 setRejectionHistory(null);
+            }
+
+            if (quizAttemptResult && quizAttemptResult.data) {
+                setQuizStatus(quizAttemptResult.data.status);
+            } else {
+                setQuizStatus(null);
             }
 
             // Save to storage and memory cache
@@ -561,6 +577,55 @@ function EventDetailContent() {
                                 )}
                             </div>
                           )}
+
+                          {event.event_type === 'mcq' && (
+                            <div className="mt-6 pt-4 border-t border-border">
+                                {(() => {
+                                    const quizStartTime = event.submission_start ? parseISO(event.submission_start) : null;
+                                    const quizEndTime = event.submission_end ? parseISO(event.submission_end) : null;
+                                    const now = new Date();
+                                    const isQuizOpen = (!quizStartTime || now >= quizStartTime) && (!quizEndTime || now <= quizEndTime);
+                                    
+                                    if (quizStatus === 'completed') {
+                                        return (
+                                            <div className="text-center">
+                                                <Button disabled className="w-full bg-green-600/20 text-green-500 border border-green-600/50 cursor-not-allowed">
+                                                    <CheckCircle className="mr-2 h-4 w-4" />
+                                                    Quiz Submitted
+                                                </Button>
+                                                <p className="text-xs text-gray-500 mt-2">
+                                                    You have already submitted this quiz.
+                                                </p>
+                                            </div>
+                                        );
+                                    }
+
+                                    if (isQuizOpen) {
+                                        return (
+                                            <Link href={`/events/${params.id}/quiz`}>
+                                                <Button className="w-full bg-blue-600 text-white font-semibold hover:bg-blue-700 shadow-md">
+                                                    <FileClock className="mr-2 h-4 w-4" />
+                                                    {quizStatus === 'in_progress' ? 'Resume Quiz' : 'Start Quiz'}
+                                                    <ArrowRight className="ml-2 h-4 w-4" />
+                                                </Button>
+                                            </Link>
+                                        );
+                                    } else {
+                                        return (
+                                            <div className="text-center">
+                                                <Button disabled className="w-full bg-gray-700 text-gray-400 cursor-not-allowed">
+                                                    <Clock className="mr-2 h-4 w-4" />
+                                                    Quiz {now < quizStartTime ? `starts ${formatInTimeZone(quizStartTime, TIME_ZONE, 'MMM dd, hh:mm a')}` : 'has ended'}
+                                                </Button>
+                                                <p className="text-xs text-gray-500 mt-2">
+                                                    The quiz is only available during the scheduled window.
+                                                </p>
+                                            </div>
+                                        );
+                                    }
+                                })()}
+                            </div>
+                          )}
                       </CardContent>
                   </Card>
               )
@@ -721,7 +786,7 @@ function EventDetailContent() {
                       <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-gray-400">
                         <div className="flex items-center">
                           <Tag size={16} className="mr-2 text-brand-red" />
-                          <span className="capitalize">{event.event_type?.replace('_', ' ') || 'Event'}</span>
+                          <span className="capitalize">{event.event_type === 'mcq' ? 'Quiz' : (event.event_type?.replace('_', ' ') || 'Event')}</span>
                         </div>
                         
                         <div className="flex items-center">

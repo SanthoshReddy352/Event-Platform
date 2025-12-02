@@ -134,7 +134,6 @@ function AdminEventsContent() {
                 </CardHeader>
                 
                 <CardFooter className="mt-auto flex flex-col gap-2">
-                  {/* Dashboard Link - Added at top */}
                   <Link href={`/admin/events/${event.id}/dashboard`} className="w-full">
                     <Button className="w-full bg-slate-900 text-white hover:bg-slate-800" disabled={!canManage}>
                         <LayoutDashboard size={16} className="mr-2" />
@@ -142,41 +141,16 @@ function AdminEventsContent() {
                     </Button>
                   </Link>
 
-                  {/* Original 4-button Grid restored below */}
-                  <div className="grid grid-cols-2 gap-2 w-full">
-                    <Link href={`/admin/events/${event.id}/edit`} className="w-full">
-                      <Button variant="outline" className="w-full" size="sm" disabled={!canManage}>
-                        <Edit size={16} className="mr-1" />
-                        Edit
-                      </Button>
-                    </Link>
-                    
-                    <Link href={`/admin/events/${event.id}/form-builder`} className="w-full">
-                      <Button variant="outline" className="w-full" size="sm" disabled={!canManage}>
-                        <FileEdit size={16} className="mr-1" />
-                        Form
-                      </Button>
-                    </Link>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 w-full">
-                    <Link href={`/admin/participants/${event.id}`} className="w-full">
-                      <Button variant="outline" className="w-full" size="sm" disabled={!canManage}>
-                        <Users size={16} className="mr-1" />
-                        Participants
-                      </Button>
-                    </Link>
-                    
-                    <Button
-                      variant="destructive"
-                      className="w-full"
-                      size="sm"
-                      onClick={() => handleDelete(event.id)}
-                      disabled={!canManage}
-                    >
-                      <Trash2 size={16} className="mr-1" />
-                      Delete
-                    </Button>
-                  </div>
+                  <Button
+                    variant="destructive"
+                    className="w-full"
+                    size="sm"
+                    onClick={() => handleDelete(event.id)}
+                    disabled={!canManage}
+                  >
+                    <Trash2 size={16} className="mr-1" />
+                    Delete
+                  </Button>
                 </CardFooter>
               </Card>
             )

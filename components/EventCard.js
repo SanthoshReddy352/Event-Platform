@@ -92,7 +92,7 @@ const EventCard = memo(function EventCard({ event }) {
   const club = event.club;
 
   // Format Event Type (e.g., 'hackathon' -> 'Hackathon')
-  const eventType = event.event_type ? event.event_type.replace('_', ' ') : 'Event';
+  const eventType = event.event_type === 'mcq' ? 'Quiz' : (event.event_type ? event.event_type.replace('_', ' ') : 'Event');
 
   return (
     <Card className="overflow-hidden hover:shadow-lg transition-shadow flex flex-col">

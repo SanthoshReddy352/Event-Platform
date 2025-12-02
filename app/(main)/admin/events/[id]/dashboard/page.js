@@ -280,7 +280,57 @@ export default function AdminEventDashboard() {
         </Card>
       )}
 
-      {/* Hackathon Management Section */}
+      {/* MCQ Management Section */}
+      {isMCQ && (
+        <Card className="border-blue-500/30">
+          <CardHeader>
+            <CardTitle className="text-blue-500">Quiz Management</CardTitle>
+            <CardDescription>Manage your quiz event</CardDescription>
+          </CardHeader>
+          <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Link href={`/admin/events/${event.id}/edit`}>
+              <Button variant="outline" className="w-full h-24 flex flex-col gap-2">
+                <Edit className="h-6 w-6 text-blue-500" />
+                <span className="font-semibold">Edit Event</span>
+                <span className="text-xs text-gray-400">Basic details & timing</span>
+              </Button>
+            </Link>
+
+            <Link href={`/admin/events/${event.id}/form-builder`}>
+              <Button variant="outline" className="w-full h-24 flex flex-col gap-2">
+                <FileEdit className="h-6 w-6 text-blue-500" />
+                <span className="font-semibold">Registration Form</span>
+                <span className="text-xs text-gray-400">Initial signup form</span>
+              </Button>
+            </Link>
+
+            <Link href={`/admin/events/${event.id}/quiz-builder`}>
+              <Button variant="outline" className="w-full h-24 flex flex-col gap-2">
+                <FileEdit className="h-6 w-6 text-blue-500" />
+                <span className="font-semibold">Manage Quiz</span>
+                <span className="text-xs text-gray-400">Add/Edit Questions</span>
+              </Button>
+            </Link>
+
+            <Link href={`/admin/participants/${event.id}`}>
+              <Button variant="outline" className="w-full h-24 flex flex-col gap-2">
+                <Users className="h-6 w-6 text-blue-500" />
+                <span className="font-semibold">Participants</span>
+                <span className="text-xs text-gray-400">View & approve</span>
+              </Button>
+            </Link>
+
+            <Link href={`/admin/events/${event.id}/quiz-attempts`}>
+              <Button variant="outline" className="w-full h-24 flex flex-col gap-2">
+                <FileText className="h-6 w-6 text-blue-500" />
+                <span className="font-semibold">Submissions</span>
+                <span className="text-xs text-gray-400">View Results</span>
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+      )}
+      
       {isHackathon && (
         <>
           <Card className="border-brand-red/30">

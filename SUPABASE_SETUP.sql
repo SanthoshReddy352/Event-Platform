@@ -98,6 +98,28 @@ CREATE TABLE IF NOT EXISTS profiles (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- G. Quiz Questions Table
+CREATE TABLE IF NOT EXISTS quiz_questions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    event_id UUID REFERENCES events(id) ON DELETE CASCADE,
+    question_text TEXT NOT NULL,
+    options JSONB NOT NULL, -- Array of strings or objects
+    correct_option_index INTEGER NOT NULL,
+    points INTEGER DEFAULT 1,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- H. Quiz Attempts Table
+CREATE TABLE IF NOT EXISTS quiz_attempts (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    event_id UUID REFERENCES events(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    score INTEGER NOT NULL,
+    answers JSONB NOT NULL, -- Map of question_id -> selected_option_index
+    started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    completed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- ====================================================================
 -- 3. HELPER FUNCTIONS
 -- ====================================================================
@@ -241,6 +263,19 @@ CREATE POLICY "Authenticated users can read their own admin status" ON admin_use
 CREATE POLICY "Admins can update their own profile" ON admin_users FOR UPDATE USING (public.get_admin_role() = 'super_admin' OR auth.uid() = user_id) WITH CHECK (public.get_admin_role() = 'super_admin' OR auth.uid() = user_id);
 CREATE POLICY "Users can view their own profile" ON profiles FOR SELECT USING (auth.uid() = id);
 CREATE POLICY "Users can create and update their own profile" ON profiles FOR ALL USING (auth.uid() = id) WITH CHECK (auth.uid() = id);
+
+-- Quiz Policies
+ALTER TABLE quiz_questions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE quiz_attempts ENABLE ROW LEVEL SECURITY;
+
+-- Quiz Questions: Public read (or auth read), Admin write
+CREATE POLICY "Everyone can read quiz questions" ON quiz_questions FOR SELECT USING (true);
+CREATE POLICY "Admins can manage quiz questions" ON quiz_questions FOR ALL USING (public.get_admin_role() IS NOT NULL);
+
+-- Quiz Attempts: Users read/write own, Admins read all
+CREATE POLICY "Users can view their own attempts" ON quiz_attempts FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can create their own attempts" ON quiz_attempts FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Admins can view all attempts" ON quiz_attempts FOR SELECT USING (public.get_admin_role() IS NOT NULL);
 
 -- ====================================================================
 -- 5. REALTIME & STORAGE

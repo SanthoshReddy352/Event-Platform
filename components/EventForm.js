@@ -422,7 +422,7 @@ export default function EventForm({
             </div>
           </div>
 
-          {/* 3. HACKATHON SPECIFIC SETTINGS */}
+          {/* 3. EVENT TYPE SPECIFIC SETTINGS */}
           {formData.event_type === "hackathon" && (
             <div className="space-y-4 animate-in fade-in slide-in-from-top-4 bg-brand-red/5 p-4 rounded-lg border border-brand-red/20">
               <div className="flex items-center gap-2 border-b border-brand-red/20 pb-2">
@@ -525,6 +525,40 @@ export default function EventForm({
                 </div>
               </div>
             </div>
+          )}
+
+          {formData.event_type === "mcq" && (
+             <div className="space-y-4 animate-in fade-in slide-in-from-top-4 bg-blue-500/5 p-4 rounded-lg border border-blue-500/20">
+               <div className="flex items-center gap-2 border-b border-blue-500/20 pb-2">
+                 <Clock className="text-blue-500 h-5 w-5" />
+                 <h3 className="text-lg font-semibold text-blue-500">
+                   Quiz Configuration
+                 </h3>
+               </div>
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                 <div className="space-y-2">
+                   <Label>Quiz Start Time</Label>
+                   <Input
+                     type="datetime-local"
+                     name="submission_start" // Reusing submission_start for Quiz Start
+                     value={toDateTimeLocal(formData.submission_start)}
+                     onChange={handleDateTimeLocalChange}
+                   />
+                 </div>
+                 <div className="space-y-2">
+                   <Label>Quiz End Time</Label>
+                   <Input
+                     type="datetime-local"
+                     name="submission_end" // Reusing submission_end for Quiz End
+                     value={toDateTimeLocal(formData.submission_end)}
+                     onChange={handleDateTimeLocalChange}
+                   />
+                 </div>
+               </div>
+               <p className="text-sm text-gray-500">
+                 The quiz will be available to take between these times.
+               </p>
+             </div>
           )}
 
           {/* 4. Settings */}

@@ -463,6 +463,40 @@ export async function GET(request) {
           );
         }
 
+        // Enrich with profile data and auth email
+        const userIds = data.map(p => p.user_id).filter(Boolean);
+        if (userIds.length > 0) {
+            // 1. Fetch Profiles
+            const { data: profiles } = await supabaseAdmin
+                .from("profiles")
+                .select("id, name")
+                .in("id", userIds);
+            
+            const profileMap = {};
+            if (profiles) {
+                profiles.forEach(p => { profileMap[p.id] = p; });
+            }
+
+            // 2. Fetch Auth Users (Emails) - Limit 1000 for now
+            const { data: { users }, error: usersError } = await supabaseAdmin.auth.admin.listUsers({
+                page: 1,
+                perPage: 1000
+            });
+
+            const emailMap = {};
+            if (users) {
+                users.forEach(u => { emailMap[u.id] = u.email; });
+            }
+
+            data.forEach(p => {
+                const profile = profileMap[p.user_id];
+                p.profile = profile;
+                p.participant_name = profile?.name || p.responses?.['Name'] || p.responses?.['name'] || 'N/A';
+                // Prefer auth email, fallback to response email
+                p.participant_email = emailMap[p.user_id] || p.responses?.['Email'] || p.responses?.['email'] || 'N/A';
+            });
+        }
+
         return NextResponse.json(
           { success: true, participants: data },
           { headers: corsHeaders },
