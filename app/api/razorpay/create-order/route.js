@@ -2,7 +2,7 @@ import Razorpay from "razorpay";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-// Initialize Supabase Admin Client (to read admin_users table securely)
+// Initialize Supabase Admin Client
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -10,21 +10,22 @@ const supabase = createClient(
 
 export async function POST(request) {
   try {
-    const { amount, eventId } = await request.json();
+    const { eventId, userId } = await request.json(); // Accept userId to bind order to user
 
-    if (!amount || !eventId) {
-      return NextResponse.json({ error: "Amount and Event ID required" }, { status: 400 });
+    if (!eventId) {
+      return NextResponse.json({ error: "Event ID is required" }, { status: 400 });
     }
 
-    // 1. Fetch Event Creator to find the correct Razorpay Keys
+    // 1. Fetch Event Details (Fee & Creator)
+    // SECURITY: We fetch the fee from DB. We do NOT trust the 'amount' from client.
     const { data: eventData, error: eventError } = await supabase
       .from("events")
-      .select("created_by")
+      .select("created_by, registration_fee, title")
       .eq("id", eventId)
       .single();
 
     if (eventError || !eventData) {
-      throw new Error("Event not found");
+      return NextResponse.json({ error: "Event not found" }, { status: 404 });
     }
 
     // 2. Fetch the Club's Razorpay Keys
@@ -34,43 +35,56 @@ export async function POST(request) {
       .eq("user_id", eventData.created_by)
       .single();
 
-    if (adminError || !adminData || !adminData.razorpay_key_id || !adminData.razorpay_key_secret) {
-        return NextResponse.json({ 
-            error: "Payment is not set up for this event. Please contact the organizer." 
-        }, { status: 400 });
+    if (
+      adminError ||
+      !adminData ||
+      !adminData.razorpay_key_id ||
+      !adminData.razorpay_key_secret
+    ) {
+      return NextResponse.json(
+        { error: "Payment gateway not configured for this club." },
+        { status: 400 }
+      );
     }
 
-    // 3. Initialize Razorpay instance with the CLUB'S credentials
+    // 3. Initialize Razorpay
     const razorpay = new Razorpay({
       key_id: adminData.razorpay_key_id,
       key_secret: adminData.razorpay_key_secret,
     });
 
     // 4. Create Order
-    const cleanEventId = eventId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 20);
-    const receiptId = `rcpt_${cleanEventId}_${Date.now().toString().slice(-10)}`;
-    const amountInPaisa = Math.round(amount * 100);
+    const amount = eventData.registration_fee || 0;
+    if (amount <= 0) {
+      return NextResponse.json({ error: "This is a free event." }, { status: 400 });
+    }
 
+    const cleanEventId = eventId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 15);
+    const receiptId = `rcpt_${cleanEventId}_${Date.now().toString().slice(-8)}`;
+    
     const options = {
-      amount: amountInPaisa,
+      amount: Math.round(amount * 100), // Convert to paisa
       currency: "INR",
       receipt: receiptId,
       notes: {
-          event_id: eventId 
-      }
+        event_id: eventId,
+        user_id: userId, // Meta-data for tracking
+        event_title: eventData.title.slice(0, 30)
+      },
     };
 
     const order = await razorpay.orders.create(options);
 
-    // 5. Return Order details AND the correct Key ID to the frontend
-    // The frontend needs the Key ID to open the payment modal.
     return NextResponse.json({
-        ...order,
-        key_id: adminData.razorpay_key_id 
+      ...order,
+      key_id: adminData.razorpay_key_id, // Send Key ID to frontend
     });
 
   } catch (error) {
     console.error("Razorpay Order Error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to create payment order" },
+      { status: 500 }
+    );
   }
 }
