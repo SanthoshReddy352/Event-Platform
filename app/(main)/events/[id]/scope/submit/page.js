@@ -7,12 +7,11 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button'
 import DynamicForm from '@/components/DynamicForm'
 import { 
-  ArrowLeft, Loader2, CheckCircle, XCircle, AlertTriangle
+  ArrowLeft, Loader2, CheckCircle, XCircle, AlertTriangle, FileText, Calendar, Info
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/context/AuthContext'
-import { toast } from 'sonner'
-import { isWithinInterval } from 'date-fns'
+import { isWithinInterval, format } from 'date-fns'
 
 export default function ProjectSubmissionPage() {
   const params = useParams()
@@ -53,9 +52,7 @@ export default function ProjectSubmissionPage() {
     // Check cache first
     if (cache.current[params.id]) {
         const cached = cache.current[params.id];
-        // Cache valid for 30 seconds
         if (Date.now() - cached.timestamp < 30000) {
-            console.log('Using cached submission data');
             setEvent(cached.event);
             setScopeStatus(cached.scopeStatus);
             prevStatusRef.current = cached.scopeStatus;
@@ -71,20 +68,13 @@ export default function ProjectSubmissionPage() {
       if (!scopeStatus) setLoading(true)
       
       const { data: { session } } = await supabase.auth.getSession()
-      
-      if (!session) {
-        throw new Error('Please log in')
-      }
+      if (!session) throw new Error('Please log in')
 
       // 1. Fetch event details
-      const eventRes = await fetch(`/api/events/${params.id}?t=${Date.now()}`, {
-        cache: 'no-store'
-      })
+      const eventRes = await fetch(`/api/events/${params.id}?t=${Date.now()}`, { cache: 'no-store' })
       const eventData = await eventRes.json()
       
-      if (!eventData.success) {
-        throw new Error('Event not found')
-      }
+      if (!eventData.success) throw new Error('Event not found')
       
       // 2. Fetch scope status
       const scopeRes = await fetch(`/api/events/${params.id}/scope-status?t=${Date.now()}`, {
@@ -103,7 +93,6 @@ export default function ProjectSubmissionPage() {
         return
       }
       
-      // Update State
       setEvent(eventData.event)
       setScopeStatus(scopeData)
       prevStatusRef.current = scopeData
@@ -112,7 +101,6 @@ export default function ProjectSubmissionPage() {
         setSubmitted(true)
       }
 
-      // Update Cache
       cache.current[params.id] = {
           event: eventData.event,
           scopeStatus: scopeData,
@@ -128,9 +116,7 @@ export default function ProjectSubmissionPage() {
   }, [user?.id, params.id]) 
 
   useEffect(() => {
-    if (!authLoading) {
-      fetchData()
-    }
+    if (!authLoading) fetchData()
   }, [authLoading, fetchData])
 
   const handleSubmit = async (submissionData) => {
@@ -139,9 +125,7 @@ export default function ProjectSubmissionPage() {
         return
     }
 
-    if (!confirm('Are you sure you want to submit? You can only submit once.')) {
-      return
-    }
+    if (!confirm('Are you sure you want to submit? You can only submit once.')) return
 
     setSubmitting(true)
     try {
@@ -160,13 +144,21 @@ export default function ProjectSubmissionPage() {
 
       if (data.success) {
         setSubmitted(true)
+        
+        // Update cache to reflect submission immediately
+        if (cache.current[params.id] && cache.current[params.id].scopeStatus) {
+            cache.current[params.id].scopeStatus.participant = {
+                ...cache.current[params.id].scopeStatus.participant,
+                has_submitted: true,
+                submitted_at: new Date().toISOString()
+            }
+        }
+
         if (typeof window !== 'undefined') {
           window.sessionStorage.removeItem(storageKey)
         }
-        
-        alert('Project submitted successfully! Good luck!')
-        router.refresh()
-        router.push(`/events/${params.id}/scope`)
+        // No alert, just UI update
+        window.scrollTo({ top: 0, behavior: 'smooth' })
       } else {
         alert(`Submission failed: ${data.error}`)
       }
@@ -180,10 +172,10 @@ export default function ProjectSubmissionPage() {
 
   if (authLoading || loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-black">
         <div className="text-center">
           <Loader2 className="h-12 w-12 animate-spin text-brand-red mx-auto" />
-          <p className="mt-4 text-gray-400">Loading submission form...</p>
+          <p className="mt-4 text-gray-400">Loading submission portal...</p>
         </div>
       </div>
     )
@@ -191,16 +183,16 @@ export default function ProjectSubmissionPage() {
 
   if (error) {
     return (
-      <div className="container mx-auto px-4 py-12 max-w-2xl">
-        <Card className="border-red-500">
+      <div className="min-h-screen bg-black flex items-center justify-center p-4">
+        <Card className="border-red-500/50 bg-red-950/10 max-w-md w-full glass-card">
           <CardHeader>
             <CardTitle className="text-red-500">Access Denied</CardTitle>
-            <CardDescription>{error}</CardDescription>
+            <CardDescription className="text-red-200/70">{error}</CardDescription>
           </CardHeader>
           <CardContent>
             <Link href={`/events/${params.id}/scope`}>
-              <Button variant="outline" className="gap-2">
-                <ArrowLeft className="h-4 w-4" />
+              <Button variant="outline" className="w-full border-red-500/30 hover:bg-red-950/30 text-red-400">
+                <ArrowLeft className="h-4 w-4 mr-2" />
                 Back to Scope
               </Button>
             </Link>
@@ -210,9 +202,7 @@ export default function ProjectSubmissionPage() {
     )
   }
 
-  if (!event || !scopeStatus) {
-    return null
-  }
+  if (!event || !scopeStatus) return null
 
   const submissionOpen = event?.submission_start && event?.submission_end
     ? isWithinInterval(new Date(), {
@@ -224,166 +214,178 @@ export default function ProjectSubmissionPage() {
   const hasSubmitted = submitted || scopeStatus.participant?.has_submitted
   const submissionFormFields = event.submission_form_fields || []
 
-  return (
-    <div className="min-h-screen bg-background">
-      <div className="bg-brand-gradient py-12">
-        <div className="container mx-auto px-4 max-w-4xl">
-          <Link href={`/events/${params.id}/scope`}>
-            <Button variant="ghost" className="text-white hover:bg-white/10 mb-4">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Scope
-            </Button>
-          </Link>
-          <h1 className="text-4xl font-bold text-white mb-2">Final Project Submission</h1>
-          <p className="text-white/80">Submit your completed hackathon project</p>
+  // --- SUCCESS STATE ---
+  if (hasSubmitted) {
+      return (
+        <div className="min-h-screen bg-black flex items-center justify-center p-4 relative overflow-hidden">
+            {/* Background Glow */}
+            <div className="absolute inset-0 bg-green-500/10 blur-[100px]" />
+            
+            <div className="glass-card max-w-2xl w-full p-12 rounded-3xl text-center relative z-10 border-green-500/30">
+                <div className="w-24 h-24 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-6 animate-in zoom-in duration-500">
+                    <CheckCircle className="h-12 w-12 text-green-500" />
+                </div>
+                <h1 className="text-4xl font-bold text-white mb-4">Submission Received!</h1>
+                <p className="text-xl text-gray-300 mb-8">
+                    Your project has been successfully submitted to <span className="text-brand-orange">{event.title}</span>.
+                </p>
+                <div className="bg-white/5 rounded-xl p-6 mb-8 text-left">
+                    <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-2">Next Steps</h3>
+                    <ul className="space-y-2 text-gray-300">
+                        <li className="flex items-start gap-2">
+                            <span className="text-green-500">•</span>
+                            Wait for the judges to review your submission.
+                        </li>
+                        <li className="flex items-start gap-2">
+                            <span className="text-green-500">•</span>
+                            Keep an eye on your email for any announcements.
+                        </li>
+                        <li className="flex items-start gap-2">
+                            <span className="text-green-500">•</span>
+                            Prepare for the final presentation if shortlisted.
+                        </li>
+                    </ul>
+                </div>
+                <Link href={`/events/${params.id}/scope`}>
+                    <Button className="bg-white text-black hover:bg-gray-200 font-bold px-8 py-6 text-lg rounded-xl">
+                        Return to Dashboard
+                    </Button>
+                </Link>
+            </div>
         </div>
+      )
+  }
+
+  return (
+    <div className="min-h-screen bg-black text-white selection:bg-brand-red/30">
+      {/* Header */}
+      <div className="bg-brand-gradient h-64 relative">
+         <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" />
+         <div className="container mx-auto px-4 py-8 relative z-10">
+            <Link href={`/events/${params.id}/scope`}>
+                <Button variant="ghost" className="text-white/70 hover:text-white hover:bg-white/10 mb-6 -ml-4">
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back to Dashboard
+                </Button>
+            </Link>
+            <h1 className="text-4xl font-bold text-white mb-2">Final Submission</h1>
+            <p className="text-white/80">Showcase your hard work.</p>
+         </div>
       </div>
 
-      <div className="container mx-auto px-4 py-8 max-w-4xl space-y-6">
-        
-        {hasSubmitted ? (
-          <Card className="border-green-500 bg-green-500/5">
-            <CardContent className="py-6">
-              <div className="flex items-center gap-4">
-                <div className="bg-green-500/20 p-3 rounded-full">
-                  <CheckCircle className="h-6 w-6 text-green-500" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-green-500 mb-1">Project Submitted Successfully</h3>
-                  <p className="text-sm text-gray-400">
-                    Your project has been submitted. Thank you for participating! Good luck!
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ) : !submissionOpen ? (
-          <Card className="border-orange-500 bg-orange-500/5">
-            <CardContent className="py-6">
-              <div className="flex items-center gap-4">
-                <div className="bg-orange-500/20 p-3 rounded-full">
-                  <AlertTriangle className="h-6 w-6 text-orange-500" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-orange-500 mb-1">Submission Window Closed</h3>
-                  <p className="text-sm text-gray-400">
-                    The submission window is currently closed. Please wait for the scheduled submission time.
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ) : (
-          <Card className="border-blue-500 bg-blue-500/5">
-            <CardContent className="py-6">
-              <div className="flex items-center gap-4">
-                <div className="bg-blue-500/20 p-3 rounded-full">
-                  <CheckCircle className="h-6 w-6 text-blue-500" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-blue-500 mb-1">Submission Window Open</h3>
-                  <p className="text-sm text-gray-400">
-                    Fill out the form below to submit your project. <span className="font-semibold text-white">You can only submit once</span>, so make sure all information is correct.
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+      <div className="container mx-auto px-4 -mt-20 relative z-20 pb-12">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            {/* LEFT COL: Context */}
+            <div className="lg:col-span-1 space-y-6">
+                {/* Status Card */}
+                <div className="glass-card p-6 rounded-2xl">
+                    <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+                        <Info className="text-brand-orange" size={20} />
+                        Submission Status
+                    </h3>
+                    
+                    {!submissionOpen ? (
+                        <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 flex items-center gap-3 text-red-400">
+                            <XCircle size={24} />
+                            <div>
+                                <p className="font-semibold">Window Closed</p>
+                                <p className="text-xs opacity-80">Submissions are not currently accepted.</p>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-4 flex items-center gap-3 text-green-400">
+                            <CheckCircle size={24} />
+                            <div>
+                                <p className="font-semibold">Window Open</p>
+                                <p className="text-xs opacity-80">You can submit your project now.</p>
+                            </div>
+                        </div>
+                    )}
 
-        {!hasSubmitted && submissionOpen && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Submission Guidelines</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm text-gray-400">
-              <p>• Fill out all required fields in the form below</p>
-              <p>• Double-check all your information before submitting</p>
-              <p>• You can only submit <span className="text-brand-red font-semibold">ONCE</span> - there are no revisions allowed</p>
-              <p>• Make sure all links are working and accessible</p>
-              <p>• Your submission will be timestamped automatically</p>
-            </CardContent>
-          </Card>
-        )}
+                    <div className="mt-6 space-y-4">
+                        <div className="flex items-center justify-between text-sm">
+                            <span className="text-gray-400">Opens</span>
+                            <span className="font-mono">{event.submission_start ? format(new Date(event.submission_start), 'MMM d, HH:mm') : 'TBA'}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-sm">
+                            <span className="text-gray-400">Closes</span>
+                            <span className="font-mono text-brand-orange">{event.submission_end ? format(new Date(event.submission_end), 'MMM d, HH:mm') : 'TBA'}</span>
+                        </div>
+                    </div>
+                </div>
 
-        {hasSubmitted ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>Submission Complete</CardTitle>
-              <CardDescription>Your project has been successfully submitted</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-6 text-center">
-                <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
-                <h3 className="text-xl font-semibold text-green-500 mb-2">Thank You!</h3>
-                <p className="text-gray-400">
-                  Your project submission has been recorded. The organizers will review all submissions after the deadline.
-                </p>
-              </div>
-              
-              <div className="flex justify-center">
-                <Link href={`/events/${params.id}/scope`}>
-                  <Button variant="outline">
-                    <ArrowLeft className="h-4 w-4 mr-2" />
-                    Back to Hackathon Scope
-                  </Button>
-                </Link>
-              </div>
-            </CardContent>
-          </Card>
-        ) : !submissionOpen ? (
-          <Card>
-            <CardContent className="py-12 text-center">
-              <XCircle className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-xl font-semibold mb-2">Submission Not Available</h3>
-              <p className="text-gray-400 mb-6">
-                The submission window will open at the scheduled time.
-              </p>
-              <Link href={`/events/${params.id}/scope`}>
-                <Button variant="outline">
-                  <ArrowLeft className="h-4 w-4 mr-2" />
-                  Back to Hackathon Scope
-                </Button>
-              </Link>
-            </CardContent>
-          </Card>
-        ) : submissionFormFields.length === 0 ? (
-          <Card className="border-yellow-500">
-            <CardHeader>
-              <CardTitle className="text-yellow-500">No Submission Form Available</CardTitle>
-              <CardDescription>
-                The organizers have not created a submission form yet. Please check back later or contact the organizers.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Link href={`/events/${params.id}/scope`}>
-                <Button variant="outline">
-                  <ArrowLeft className="h-4 w-4 mr-2" />
-                  Back to Hackathon Scope
-                </Button>
-              </Link>
-            </CardContent>
-          </Card>
-        ) : (
-          <Card>
-            <CardHeader>
-              <CardTitle>Project Submission Form</CardTitle>
-              <CardDescription>
-                Fill out all the required information about your project. Logged in as: {user?.email}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <DynamicForm
-                fields={submissionFormFields}
-                onSubmit={handleSubmit}
-                eventId={params.id}
-                formData={formData}
-                onFormChange={setAndStoreFormData}
-                submitLabel="Submit Project"
-              />
-            </CardContent>
-          </Card>
-        )}
+                {/* Guidelines */}
+                <div className="glass-card p-6 rounded-2xl relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-4 opacity-5">
+                        <FileText size={80} />
+                    </div>
+                    <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
+                        <FileText className="text-brand-orange" size={20} />
+                        Guidelines
+                    </h3>
+                    <ul className="space-y-4">
+                        <li className="flex gap-3">
+                            <div className="w-6 h-6 rounded-full bg-brand-orange/20 text-brand-orange flex items-center justify-center text-xs font-bold shrink-0">1</div>
+                            <p className="text-sm text-gray-300">Fill out all required fields accurately. Double-check your links.</p>
+                        </li>
+                        <li className="flex gap-3">
+                            <div className="w-6 h-6 rounded-full bg-brand-orange/20 text-brand-orange flex items-center justify-center text-xs font-bold shrink-0">2</div>
+                            <p className="text-sm text-gray-300">Ensure your demo video and repo links are <span className="text-white font-semibold">publicly accessible</span>.</p>
+                        </li>
+                        <li className="flex gap-3">
+                            <div className="w-6 h-6 rounded-full bg-red-500/20 text-red-500 flex items-center justify-center text-xs font-bold shrink-0">3</div>
+                            <p className="text-sm text-gray-300">You can only submit <span className="text-red-400 font-bold">ONCE</span>. No edits allowed after submission.</p>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            {/* RIGHT COL: Form */}
+            <div className="lg:col-span-2">
+                <div className="glass-card p-8 rounded-2xl border-t-4 border-t-brand-orange">
+                    {!submissionOpen ? (
+                        <div className="text-center py-12">
+                            <AlertTriangle className="h-16 w-16 text-gray-600 mx-auto mb-4" />
+                            <h2 className="text-2xl font-bold text-gray-500 mb-2">Submission Locked</h2>
+                            <p className="text-gray-600">Please wait for the submission window to open.</p>
+                        </div>
+                    ) : submissionFormFields.length === 0 ? (
+                        <div className="text-center py-12">
+                            <FileText className="h-16 w-16 text-gray-600 mx-auto mb-4" />
+                            <h2 className="text-2xl font-bold text-gray-500 mb-2">No Form Configured</h2>
+                            <p className="text-gray-600">The organizers haven't set up the submission form yet.</p>
+                        </div>
+                    ) : (
+                        <>
+                            <div className="mb-8">
+                                <h2 className="text-2xl font-bold mb-2">Project Details</h2>
+                                <p className="text-gray-400">Please provide all necessary information for the judges.</p>
+                            </div>
+                            
+                            {/* 
+                                Note: We are wrapping DynamicForm. 
+                                Since DynamicForm likely uses standard Shadcn components, 
+                                we can try to style them via global CSS or just accept the default look 
+                                but wrapped in our glass card.
+                            */}
+                            <div className="submission-form-wrapper">
+                                <DynamicForm
+                                    fields={submissionFormFields}
+                                    onSubmit={handleSubmit}
+                                    eventId={params.id}
+                                    formData={formData}
+                                    onFormChange={setAndStoreFormData}
+                                    submitLabel={submitting ? "Submitting..." : "Submit Project"}
+                                    className="space-y-6"
+                                />
+                            </div>
+                        </>
+                    )}
+                </div>
+            </div>
+
+        </div>
       </div>
     </div>
   )

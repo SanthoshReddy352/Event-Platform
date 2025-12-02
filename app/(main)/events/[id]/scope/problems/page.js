@@ -6,8 +6,9 @@ import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
 import { 
-  ArrowLeft, Loader2, Users, CheckCircle, XCircle, AlertTriangle, Lock
+  ArrowLeft, Loader2, Users, CheckCircle, XCircle, AlertTriangle, Lock, Search, Filter
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/context/AuthContext'
@@ -22,10 +23,12 @@ export default function ProblemSelectionPage() {
   const [loading, setLoading] = useState(true)
   const [problems, setProblems] = useState([])
   const [event, setEvent] = useState(null)
-  const [participant, setParticipant] = useState(null) // Direct participant state
+  const [participant, setParticipant] = useState(null)
   const [selecting, setSelecting] = useState(false)
   const [error, setError] = useState(null)
   const [selectedProblemDetails, setSelectedProblemDetails] = useState(null)
+  
+  const [searchTerm, setSearchTerm] = useState('')
   
   // Cache ref
   const cache = useRef({})
@@ -36,9 +39,7 @@ export default function ProblemSelectionPage() {
     // Check cache first
     if (cache.current[params.id]) {
         const cached = cache.current[params.id];
-        // Cache valid for 30 seconds (realtime updates will handle changes anyway)
         if (Date.now() - cached.timestamp < 30000) {
-            console.log('Using cached problems data');
             setEvent(cached.event);
             setParticipant(cached.participant);
             setProblems(cached.problems);
@@ -54,15 +55,13 @@ export default function ProblemSelectionPage() {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) throw new Error('Please log in')
 
-      // 1. Fetch Event Details (API or DB - API is fine for config)
-      const eventRes = await fetch(`/api/events/${params.id}?t=${Date.now()}`, {
-        cache: 'no-store'
-      })
+      // 1. Fetch Event Details
+      const eventRes = await fetch(`/api/events/${params.id}?t=${Date.now()}`, { cache: 'no-store' })
       const eventData = await eventRes.json()
       
       if (!eventData.success) throw new Error('Event not found')
 
-      // 2. Fetch Current User's Participant Record (Direct DB)
+      // 2. Fetch Participant
       const { data: participantData, error: participantError } = await supabase
         .from('participants')
         .select('*')
@@ -77,7 +76,7 @@ export default function ProblemSelectionPage() {
          return
       }
 
-      // 3. Fetch Problem Statements (Direct DB)
+      // 3. Fetch Problems
       const { data: problemsData, error: problemsError } = await supabase
         .from('problem_statements')
         .select('*')
@@ -86,8 +85,7 @@ export default function ProblemSelectionPage() {
 
       if (problemsError) throw problemsError
 
-      // 4. Calculate Selection Counts (Direct DB)
-      // Note: This relies on RLS allowing you to read other participants' selection data.
+      // 4. Calculate Selection Counts
       const { data: allParticipants } = await supabase
         .from('participants')
         .select('selected_problem_id')
@@ -101,26 +99,22 @@ export default function ProblemSelectionPage() {
         })
       }
 
-      // Merge counts into problem data
       const problemsWithCounts = problemsData.map(p => ({
         ...p,
         current_selections: selectionCounts[p.id] || 0,
         is_full: (selectionCounts[p.id] || 0) >= p.max_selections
       }))
 
-      // Set selected problem details if applicable
       let selectedDetails = null;
       if (participantData.selected_problem_id) {
         selectedDetails = problemsWithCounts.find(p => p.id === participantData.selected_problem_id)
       }
 
-      // Update State
       setEvent(eventData.event)
       setParticipant(participantData)
       setProblems(problemsWithCounts)
       setSelectedProblemDetails(selectedDetails)
 
-      // Update Cache
       cache.current[params.id] = {
           event: eventData.event,
           participant: participantData,
@@ -137,53 +131,30 @@ export default function ProblemSelectionPage() {
     }
   }, [user?.id, params.id]) 
 
-  // Initial Fetch
   useEffect(() => {
-    if (!authLoading) {
-      fetchData()
-    }
+    if (!authLoading) fetchData()
   }, [authLoading, fetchData])
 
-  // --- REALTIME LISTENER ---
-  // Listens for ANY change to participants in this event (e.g., someone selects a problem)
-  // This updates the 'current_selections' count in real-time.
+  // Realtime Listener
   useEffect(() => {
     if (!params.id) return
-
     const channel = supabase
       .channel(`problems_realtime:${params.id}`)
       .on(
         'postgres_changes',
-        {
-          event: '*', // Listen for INSERT and UPDATE
-          schema: 'public',
-          table: 'participants',
-          filter: `event_id=eq.${params.id}`
-        },
-        (payload) => {
-          console.log('Realtime change detected:', payload)
-          // Refetch data to update counts and user status
-          fetchData()
-        }
+        { event: '*', schema: 'public', table: 'participants', filter: `event_id=eq.${params.id}` },
+        (payload) => { fetchData() }
       )
       .subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
-    }
+    return () => { supabase.removeChannel(channel) }
   }, [params.id, fetchData])
 
   const handleSelectProblem = async (problemId) => {
-    if (!confirm('Are you sure? Once selected, you CANNOT change your problem statement. This decision is permanent.')) {
-      return
-    }
+    if (!confirm('Are you sure? Once selected, you CANNOT change your problem statement. This decision is permanent.')) return
 
     setSelecting(true)
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      
-      // We still use the API endpoint for the selection action because it likely 
-      // contains the logic (check_and_select_problem) and validation.
       const response = await fetchWithTimeout(`/api/events/${params.id}/select-problem`, {
         method: 'POST',
         headers: {
@@ -197,7 +168,6 @@ export default function ProblemSelectionPage() {
       const data = await response.json()
 
       if (data.success) {
-        // The Realtime listener will likely pick this up, but we fetch immediately just in case
         await fetchData()
         alert('Problem statement selected successfully! Your selection is now locked.')
         router.push(`/events/${params.id}/scope`)
@@ -207,11 +177,7 @@ export default function ProblemSelectionPage() {
       }
     } catch (err) {
       console.error('Selection error:', err)
-      if (err.name === 'AbortError') {
-        alert("Selection timed out. Please try again.");
-      } else {
-        alert(`Error: ${err.message}`)
-      }
+      alert(`Error: ${err.message}`)
     } finally {
       setSelecting(false)
     }
@@ -219,10 +185,10 @@ export default function ProblemSelectionPage() {
 
   if (authLoading || loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-black">
         <div className="text-center">
           <Loader2 className="h-12 w-12 animate-spin text-brand-red mx-auto" />
-          <p className="mt-4 text-gray-400">Loading problem statements...</p>
+          <p className="mt-4 text-gray-400">Loading challenges...</p>
         </div>
       </div>
     )
@@ -230,16 +196,16 @@ export default function ProblemSelectionPage() {
 
   if (error) {
     return (
-      <div className="container mx-auto px-4 py-12 max-w-2xl">
-        <Card className="border-red-500">
+      <div className="min-h-screen bg-black flex items-center justify-center p-4">
+        <Card className="border-red-500/50 bg-red-950/10 max-w-md w-full glass-card">
           <CardHeader>
             <CardTitle className="text-red-500">Access Denied</CardTitle>
-            <CardDescription>{error}</CardDescription>
+            <CardDescription className="text-red-200/70">{error}</CardDescription>
           </CardHeader>
           <CardContent>
             <Link href={`/events/${params.id}`}>
-              <Button variant="outline" className="gap-2">
-                <ArrowLeft className="h-4 w-4" />
+              <Button variant="outline" className="w-full border-red-500/30 hover:bg-red-950/30 text-red-400">
+                <ArrowLeft className="h-4 w-4 mr-2" />
                 Back to Event
               </Button>
             </Link>
@@ -250,7 +216,6 @@ export default function ProblemSelectionPage() {
   }
 
   const alreadySelected = !!participant?.selected_problem_id
-  
   const selectionOpen = event?.problem_selection_start && event?.problem_selection_end
   ? isWithinInterval(new Date(), {
       start: new Date(event.problem_selection_start),
@@ -258,192 +223,147 @@ export default function ProblemSelectionPage() {
     })
   : false
 
+  // Filter problems
+  const filteredProblems = problems.filter(p => 
+    p.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    p.description?.toLowerCase().includes(searchTerm.toLowerCase())
+  )
+
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="bg-brand-gradient py-12">
-        <div className="container mx-auto px-4 max-w-5xl">
-          <Link href={`/events/${params.id}`}>
-            <Button variant="ghost" className="text-white hover:bg-white/10 mb-4">
+    <div className="min-h-screen bg-black text-white selection:bg-brand-red/30">
+      
+      {/* --- HEADER --- */}
+      <div className="bg-brand-gradient relative overflow-hidden">
+        <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" />
+        <div className="container mx-auto px-4 py-12 relative z-10">
+          <Link href={`/events/${params.id}/scope`}>
+            <Button variant="ghost" className="text-white/70 hover:text-white hover:bg-white/10 mb-6 -ml-4">
               <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Event
+              Back to Dashboard
             </Button>
           </Link>
-          <h1 className="text-4xl font-bold text-white mb-2">Problem Statements</h1>
-          <p className="text-white/80">Choose your challenge</p>
+          <h1 className="text-4xl md:text-5xl font-bold text-white mb-2">Problem Statements</h1>
+          <p className="text-xl text-white/80">Choose your challenge wisely.</p>
         </div>
       </div>
 
-      <div className="container mx-auto px-4 py-8 max-w-5xl space-y-6">
+      <div className="container mx-auto px-4 py-8 -mt-8 relative z-20 space-y-6">
         
-        {/* Status Banner */}
-        {alreadySelected ? (
-          <Card className="border-green-500 bg-green-500/5">
-            <CardContent className="py-6">
-              <div className="flex items-center gap-4">
-                <div className="bg-green-500/20 p-3 rounded-full">
-                  <Lock className="h-6 w-6 text-green-500" />
+        {/* --- STATUS & FILTERS --- */}
+        <div className="glass-card p-4 rounded-xl flex flex-col md:flex-row items-center justify-between gap-4 sticky top-4 z-30 shadow-2xl backdrop-blur-xl bg-black/80 border-white/10">
+            <div className="flex items-center gap-4 w-full md:w-auto">
+                <div className="relative w-full md:w-64">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
+                    <Input 
+                        placeholder="Search problems..." 
+                        className="pl-9 bg-white/5 border-white/10 text-white placeholder:text-gray-500 focus:border-brand-orange/50"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
                 </div>
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-green-500 mb-1">Problem Statement Locked</h3>
-                  <p className="text-sm text-gray-400">
-                    You have already selected your problem statement. Your selection is permanent and cannot be changed.
-                  </p>
-                  {selectedProblemDetails && (
-                    <p className="text-sm text-gray-300 mt-2">
-                      <span className="font-semibold">Selected:</span> {selectedProblemDetails.title}
-                    </p>
-                  )}
+                <div className="hidden md:flex items-center gap-2 text-sm text-gray-400">
+                    <Filter className="h-4 w-4" />
+                    <span>{filteredProblems.length} available</span>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        ) : !selectionOpen ? (
-          <Card className="border-orange-500 bg-orange-500/5">
-            <CardContent className="py-6">
-              <div className="flex items-center gap-4">
-                <div className="bg-orange-500/20 p-3 rounded-full">
-                  <AlertTriangle className="h-6 w-6 text-orange-500" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-orange-500 mb-1">Selection Window Closed</h3>
-                  <p className="text-sm text-gray-400">
-                    The problem selection window is currently closed. You can only view the available problems.
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ) : (
-          <Card className="border-blue-500 bg-blue-500/5">
-            <CardContent className="py-6">
-              <div className="flex items-center gap-4">
-                <div className="bg-blue-500/20 p-3 rounded-full">
-                  <CheckCircle className="h-6 w-6 text-blue-500" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-blue-500 mb-1">Selection Window Open</h3>
-                  <p className="text-sm text-gray-400">
-                    Choose wisely! Once you select a problem, your choice is <span className="font-semibold text-white">permanent and cannot be changed</span>.
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+            </div>
 
-        {/* Instructions */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Instructions</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm text-gray-400">
-            <p>• Review all problem statements carefully before making your selection</p>
-            <p>• Each problem has a maximum number of participants that can select it</p>
-            <p>• Once you select a problem, your choice is <span className="text-brand-red font-semibold">PERMANENT</span> and cannot be reverted</p>
-            <p>• If a problem reaches its maximum limit, it will be locked for further selections</p>
-          </CardContent>
-        </Card>
+            <div className="flex items-center gap-4 w-full md:w-auto justify-between md:justify-end">
+                {alreadySelected ? (
+                    <Badge className="bg-green-500/20 text-green-500 border-green-500/20 px-4 py-2">
+                        <CheckCircle className="h-4 w-4 mr-2" />
+                        Selection Locked
+                    </Badge>
+                ) : selectionOpen ? (
+                    <Badge className="bg-brand-orange text-white px-4 py-2 animate-pulse">
+                        Selection Open
+                    </Badge>
+                ) : (
+                    <Badge variant="outline" className="text-gray-500 border-gray-700 px-4 py-2">
+                        Selection Closed
+                    </Badge>
+                )}
+            </div>
+        </div>
 
-        {/* Problem Statements List */}
-        {problems.length === 0 ? (
-          <Card>
-            <CardContent className="py-12 text-center text-gray-400">
-              <p>No problem statements have been added yet. Please check back later.</p>
-            </CardContent>
-          </Card>
+        {/* --- GRID --- */}
+        {filteredProblems.length === 0 ? (
+          <div className="text-center py-20">
+             <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-white/5 mb-4">
+                <Search className="h-8 w-8 text-gray-500" />
+             </div>
+             <h3 className="text-xl font-semibold text-white mb-2">No problems found</h3>
+             <p className="text-gray-400">Try adjusting your search terms.</p>
+          </div>
         ) : (
-          <div className="space-y-4">
-            <h2 className="text-xl font-semibold">Available Problem Statements ({problems.length})</h2>
-            
-            {problems.map((problem, index) => {
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredProblems.map((problem, index) => {
               const isSelected = problem.id === participant?.selected_problem_id
               const isFull = problem.is_full && !isSelected
               const canSelect = selectionOpen && !alreadySelected && !isFull
 
               return (
-                <Card 
+                <div 
                   key={problem.id} 
                   className={`
-                    ${isSelected ? 'border-green-500 bg-green-500/5' : ''}
-                    ${isFull ? 'opacity-60' : ''}
-                    hover:border-brand-red/50 transition-colors
+                    group relative flex flex-col
+                    glass-card rounded-2xl p-6
+                    transition-all duration-300
+                    ${isSelected ? 'border-green-500/50 bg-green-500/5' : 'hover:border-brand-orange/30 hover:bg-white/5 hover:-translate-y-1'}
+                    ${isFull ? 'opacity-60 grayscale-[0.5]' : ''}
                   `}
                 >
-                  <CardHeader>
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
-                          <Badge variant="outline" className="text-xs">#{index + 1}</Badge>
-                          {isSelected && (
-                            <Badge className="bg-green-500 text-white">Your Selection</Badge>
-                          )}
-                          {isFull && (
-                            <Badge variant="destructive" className="flex items-center gap-1">
-                              <Lock size={12} /> Full
-                            </Badge>
-                          )}
-                        </div>
-                        <CardTitle className="text-xl">{problem.title}</CardTitle>
-                      </div>
-                      
-                      {/* Selection Indicator */}
-                      <div className="text-center min-w-[100px]">
-                        <div className="flex items-center justify-center gap-2 text-sm mb-1">
-                          <Users size={16} className={problem.is_full ? 'text-red-500' : 'text-gray-400'} />
-                          <span className={`font-semibold ${problem.is_full ? 'text-red-500' : ''}`}>
-                            {problem.current_selections} / {problem.max_selections}
-                          </span>
-                        </div>
-                        <p className="text-xs text-gray-400">Participants</p>
-                      </div>
+                  {/* Header */}
+                  <div className="flex justify-between items-start mb-4">
+                    <Badge variant="outline" className="bg-white/5 border-white/10 text-white/60">
+                        #{index + 1}
+                    </Badge>
+                    <div className="flex items-center gap-1 text-xs font-medium bg-black/40 px-2 py-1 rounded-full border border-white/5">
+                        <Users size={12} className={isFull ? 'text-red-400' : 'text-brand-orange'} />
+                        <span className={isFull ? 'text-red-400' : 'text-gray-300'}>
+                            {problem.current_selections}/{problem.max_selections}
+                        </span>
                     </div>
-                  </CardHeader>
-                  
-                  <CardContent className="space-y-4">
-                    <div>
-                      <h4 className="font-semibold text-sm text-gray-400 mb-2">Description</h4>
-                      <p className="text-gray-300 whitespace-pre-wrap">
-                        {problem.description || 'No description provided.'}
-                      </p>
-                    </div>
+                  </div>
 
-                    {canSelect && (
-                      <Button
-                        onClick={() => handleSelectProblem(problem.id)}
-                        disabled={selecting}
-                        className="w-full bg-brand-gradient text-white font-semibold hover:opacity-90"
-                      >
-                        {selecting ? (
-                          <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Selecting...
-                          </>
-                        ) : (
-                          'Select This Problem'
-                        )}
-                      </Button>
-                    )}
+                  {/* Content */}
+                  <h3 className="text-xl font-bold text-white mb-3 group-hover:text-brand-orange transition-colors">
+                    {problem.title}
+                  </h3>
+                  <p className="text-gray-400 text-sm line-clamp-4 mb-6 flex-1">
+                    {problem.description || 'No description provided.'}
+                  </p>
 
-                    {isSelected && (
-                      <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-4">
-                        <div className="flex items-center gap-2 text-green-500">
-                          <CheckCircle size={20} />
-                          <span className="font-semibold">You have selected this problem</span>
+                  {/* Footer / Action */}
+                  <div className="mt-auto pt-4 border-t border-white/5">
+                    {isSelected ? (
+                        <div className="w-full py-3 rounded-xl bg-green-500/20 text-green-500 flex items-center justify-center font-semibold border border-green-500/20">
+                            <CheckCircle className="mr-2 h-5 w-5" />
+                            Selected
                         </div>
-                      </div>
-                    )}
-
-                    {isFull && !isSelected && (
-                      <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4">
-                        <div className="flex items-center gap-2 text-red-500">
-                          <XCircle size={20} />
-                          <span className="font-semibold">This problem has reached its participant limit</span>
+                    ) : isFull ? (
+                        <div className="w-full py-3 rounded-xl bg-red-500/10 text-red-400 flex items-center justify-center font-semibold border border-red-500/10 cursor-not-allowed">
+                            <Lock className="mr-2 h-5 w-5" />
+                            Full
                         </div>
-                      </div>
+                    ) : canSelect ? (
+                        <Button
+                            onClick={() => handleSelectProblem(problem.id)}
+                            disabled={selecting}
+                            className="w-full bg-white text-black hover:bg-brand-gradient hover:text-white font-bold transition-all duration-300"
+                        >
+                            {selecting ? (
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                                'Select Challenge'
+                            )}
+                        </Button>
+                    ) : (
+                        <Button disabled className="w-full bg-white/5 text-gray-500 border border-white/5">
+                            Unavailable
+                        </Button>
                     )}
-                  </CardContent>
-                </Card>
+                  </div>
+                </div>
               )
             })}
           </div>
