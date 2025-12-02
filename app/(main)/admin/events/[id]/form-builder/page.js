@@ -12,6 +12,7 @@ import { ArrowLeft, Loader2, Save } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
 import { toast } from 'sonner' // Assuming you have sonner or use alert
 import LastWordGradientText from '@/components/LastWordGradientText'
+import { fetchWithTimeout } from '@/lib/utils'
 
 function FormBuilderContent() {
   const router = useRouter()
@@ -87,13 +88,14 @@ function FormBuilderContent() {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) throw new Error('Not authenticated')
 
-      const response = await fetch(`/api/events/${id}`, {
+      const response = await fetchWithTimeout(`/api/events/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({ form_fields: fields }),
+        timeout: 15000
       })
 
       const data = await response.json()
@@ -109,7 +111,11 @@ function FormBuilderContent() {
       }
     } catch (err) {
       console.error('Save error:', err)
-      alert(`Error: ${err.message}`)
+      if (err.name === 'AbortError') {
+        alert("Save timed out. Please try again.");
+      } else {
+        alert(`Error: ${err.message}`)
+      }
     } finally {
       setIsSaving(false)
     }
@@ -120,7 +126,7 @@ function FormBuilderContent() {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
         <div>
           <div className="flex items-center gap-2 mb-2">
-             <Link href="/admin/events" className="text-gray-400 hover:text-white transition-colors">
+             <Link href={`/admin/events/${id}/dashboard`} className="text-gray-400 hover:text-white transition-colors">
                 <ArrowLeft size={20} />
              </Link>
              <h1 className="text-3xl font-bold">

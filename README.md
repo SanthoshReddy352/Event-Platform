@@ -12,6 +12,7 @@ A modern, full-featured website for managing student club hackathons and tech ev
 - 📧 Email notifications for registration approval/rejection
 - 💬 Contact form to reach organizers
 - 📱 Fully responsive design
+- 💳 **Secure Payments** - Pay for paid events seamlessly via Razorpay.
 
 ### For Admins
 - 🔐 Secure authentication (Supabase Auth)
@@ -32,6 +33,7 @@ A modern, full-featured website for managing student club hackathons and tech ev
 - 📧 **Email Notifications** - Automated emails for admin alerts and participant status changes.
 - 📥 Export participant data to CSV
 - 🖼️ Upload event banners (Supabase Storage) or use URLs
+- 💳 **Payment Integration** - Accept payments via Razorpay (configure keys in Club Profile).
 
 ### For Super Admins
 - 🔓 Full system access - manage ALL events and clubs
@@ -104,41 +106,55 @@ This user can now login to the admin dashboard at `/admin/login`.
 ```
 /app
 ├── app/
-│   ├── page.js                    # Home page
-│   ├── layout.js                  # Root layout
-│   ├── globals.css                # Global styles
-│   │
-│   ├── events/
-│   │   ├── page.js                # All events listing
-│   │   └── [id]/page.js           # Event detail + registration
-│   │
-│   ├── admin/
-│   │   ├── page.js                # Admin dashboard
-│   │   ├── login/page.js          # Admin login
-│   │   ├── club-profile/page.js   # Admin's club profile
+│   ├── (main)/                    # Main application layout
+│   │   ├── page.js                # Home page
 │   │   ├── events/
-│   │   │   ├── page.js            # Manage events
-│   │   │   ├── new/page.js        # Create event
-│   │   │   └── [id]/
-│   │   │       ├── page.js        # Edit event
-│   │   │       └── form-builder/page.js  # Form builder
-│   │   └── participants/
-│   │       └── [eventId]/page.js  # View participants
-│   ├── contact/page.js            # Contact page
-│   └── api/
-│       └── [[...path]]/route.js   # All API endpoints
+│   │   │   ├── page.js            # All events listing
+│   │   │   └── [id]/page.js       # Event detail + registration
+│   │   ├── admin/
+│   │   │   ├── page.js            # Admin dashboard
+│   │   │   ├── login/page.js      # Admin login
+│   │   │   ├── club-profile/page.js # Club profile & payment settings
+│   │   │   ├── events/
+│   │   │   │   ├── page.js        # Manage events
+│   │   │   │   ├── new/page.js    # Create event
+│   │   │   │   └── [id]/
+│   │   │   │       ├── page.js    # Edit event
+│   │   │   │       └── form-builder/page.js  # Form builder
+│   │   │   ├── participants/
+│   │   │   │   └── [eventId]/page.js  # View participants per event
+│   │   │   └── registrations/     # Global registrations view
+│   │   ├── contact/page.js        # Contact page
+│   │   ├── profile/page.js        # User profile
+│   │   └── registered-events/     # User's registered events
+│   ├── auth/                      # Authentication
+│   │   └── page.js                # Login/Signup page
+│   ├── update_password/           # Password reset
+│   ├── api/
+│   │   ├── events/                # Events API
+│   │   ├── razorpay/              # Payment API
+│   │   │   ├── create-order/
+│   │   │   └── verify/
+│   │   └── [[...path]]/route.js   # Catch-all API
+│   ├── globals.css                # Global styles
+│   └── layout.js                  # Root layout
 ├── components/
+│   ├── ui/                        # shadcn/ui components
 │   ├── Navbar.js                  # Navigation bar
 │   ├── Footer.js                  # Footer
 │   ├── EventCard.js               # Event card component
+│   ├── EventForm.js               # Event creation form
 │   ├── DynamicForm.js             # Dynamic form renderer
 │   ├── FormBuilder.js             # Form builder for admins
-│   └── ProtectedRoute.js          # Auth wrapper
+│   ├── ProtectedRoute.js          # Auth wrapper
+│   └── ...GradientText.js         # Text styling components
 ├── lib/
 │   ├── supabase/
 │   │   ├── client.js              # Client-side Supabase
 │   │   └── server.js              # Server-side Supabase
+│   ├── email.js                   # Email utility
 │   └── utils.js                   # Utility functions
+├── backend_test.py                # Backend testing script
 └── SUPABASE_SETUP.sql             # Database schema
 ```
 
@@ -203,6 +219,17 @@ This information is then displayed on the homepage and on all EventCard componen
 3. Add environment variables from `.env.local`
 4. Deploy!
 
+## 🧪 Testing
+
+The project includes a Python script for testing the backend API endpoints.
+
+```bash
+# Run backend tests
+python backend_test.py
+```
+
+This script tests all CRUD operations, authentication flows (simulated), and error handling.
+
 ## 📝 API Endpoints
 | Endpoint                 | Method | Description                                  |
 |--------------------------|--------|----------------------------------------------|
@@ -225,7 +252,7 @@ This information is then displayed on the homepage and on all EventCard componen
 ## 🔄 Future Enhancements
 Potential features for future releases:
 
-- [ ] Payment integration (Razorpay/Stripe)
+
 - [ ] Certificate generation
 - [ ] Results/leaderboard system
 - [ ] Team management

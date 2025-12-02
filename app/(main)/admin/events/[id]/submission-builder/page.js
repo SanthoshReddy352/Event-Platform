@@ -8,6 +8,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Button } from '@/components/ui/button'
 import { ArrowLeft, Save, Loader2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
+import { fetchWithTimeout } from '@/lib/utils'
 
 export default function SubmissionFormBuilderPage() {
   const params = useParams()
@@ -75,13 +76,14 @@ export default function SubmissionFormBuilderPage() {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) throw new Error('Not authenticated')
 
-      const response = await fetch(`/api/events/${id}`, {
+      const response = await fetchWithTimeout(`/api/events/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({ submission_form_fields: fields }),
+        timeout: 15000
       })
 
       const data = await response.json()
@@ -96,7 +98,11 @@ export default function SubmissionFormBuilderPage() {
       }
     } catch (err) {
       console.error('Save error:', err)
-      alert(`Error: ${err.message}`)
+      if (err.name === 'AbortError') {
+        alert("Save timed out. Please try again.");
+      } else {
+        alert(`Error: ${err.message}`)
+      }
     } finally {
       setIsSaving(false)
     }

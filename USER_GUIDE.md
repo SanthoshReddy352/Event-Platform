@@ -48,7 +48,7 @@ If you need to cancel your registration for an event:
 -   Go to `My Account` → `My Events`.
 -   Select the registration you wish to cancel.
 -   Click the `Cancel` button.
--   **Refunds**: Any refunds for paid events are handled by the event administrators through the platform's payment dashboard (once implemented). Refund eligibility and processing are subject to the event's specific cancellation and refund policy.
+-   **Refunds**: Any refunds for paid events are handled by the event administrators through the platform's payment dashboard. Refund eligibility and processing are subject to the event's specific cancellation and refund policy.
 
 ---
 

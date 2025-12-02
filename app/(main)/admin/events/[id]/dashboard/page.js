@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -13,6 +13,7 @@ import {
 import { format } from 'date-fns'
 import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/context/AuthContext'
+import { fetchWithTimeout } from '@/lib/utils'
 
 export default function AdminEventDashboard() {
   const params = useParams()
@@ -20,10 +21,35 @@ export default function AdminEventDashboard() {
   const [event, setEvent] = useState(null)
   const [stats, setStats] = useState({ total: 0, approved: 0, pending: 0, rejected: 0 })
   const [loading, setLoading] = useState(true)
-  const { user, isSuperAdmin } = useAuth()
+  const { user, isSuperAdmin, loading: authLoading } = useAuth()
+
+  // Cache ref to store data and prevent re-fetching on simple re-renders
+  const cache = useRef({})
 
   const fetchData = useCallback(async () => {
-    if (!params.id) return
+    // Debugging logs
+    console.log('fetchData called. Params:', params, 'User:', user?.id);
+
+    if (!params.id) {
+      console.error('No event ID found in params');
+      setLoading(false);
+      return;
+    }
+
+    if (!user) {
+      console.log('No user found in fetchData');
+      setLoading(false);
+      return;
+    }
+
+    // Check cache first
+    if (cache.current[params.id]) {
+        console.log('Using cached dashboard data');
+        setEvent(cache.current[params.id].event);
+        setStats(cache.current[params.id].stats);
+        setLoading(false);
+        return;
+    }
     
     try {
       setLoading(true)
@@ -36,12 +62,11 @@ export default function AdminEventDashboard() {
         .single()
 
       if (eventError) throw eventError
-      setEvent(eventData)
-
+      
       // Check permissions
-      // --- FIX: Access properties safely ---
-      const canManage = isSuperAdmin || eventData.created_by === user?.id
+      const canManage = isSuperAdmin || eventData.created_by === user.id
       if (!canManage) {
+        console.warn('User not authorized to manage this event');
         router.push('/admin/events')
         return
       }
@@ -52,30 +77,53 @@ export default function AdminEventDashboard() {
         .select('status')
         .eq('event_id', params.id)
 
+      let newStats = { total: 0, approved: 0, pending: 0, rejected: 0 };
       if (participants) {
         const total = participants.length
         const approved = participants.filter(p => p.status === 'approved').length
         const pending = participants.filter(p => p.status === 'pending').length
         const rejected = participants.filter(p => p.status === 'rejected').length
-        setStats({ total, approved, pending, rejected })
+        newStats = { total, approved, pending, rejected };
       }
+
+      // Update State
+      setEvent(eventData);
+      setStats(newStats);
+
+      // Update Cache
+      cache.current[params.id] = {
+          event: eventData,
+          stats: newStats,
+          timestamp: Date.now()
+      };
 
     } catch (error) {
       console.error('Error fetching dashboard data:', error)
     } finally {
       setLoading(false)
     }
-  }, [params.id, user?.id, isSuperAdmin, router]) // --- FIX: Changed dependency to user?.id ---
+  }, [params.id, user, isSuperAdmin, router])
 
   useEffect(() => {
-    if (user?.id) fetchData()
-  }, [user?.id, fetchData]) // --- FIX: Changed dependency to user?.id ---
+    console.log('Dashboard Effect. AuthLoading:', authLoading, 'User:', user?.id);
+    if (!authLoading) {
+      if (user?.id) {
+        fetchData()
+      } else {
+        // Not authenticated, redirect or stop loading
+        console.log('User not authenticated, stopping loading');
+        setLoading(false)
+      }
+    }
+  }, [user?.id, authLoading, fetchData])
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <div className="container mx-auto px-4 py-12 text-center">
         <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-brand-red"></div>
-        <p className="mt-4 text-gray-400">Loading dashboard...</p>
+        <p className="mt-4 text-gray-400">
+          {authLoading ? 'Verifying access...' : 'Loading dashboard...'}
+        </p>
       </div>
     )
   }

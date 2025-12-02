@@ -171,7 +171,7 @@ function ParticipantsContent() {
     <div className="container mx-auto px-4 py-12">
       <Button
         variant="ghost"
-        onClick={() => router.push('/admin/events')}
+        onClick={() => router.push(`/admin/events/${params.eventId}/dashboard`)}
         className="mb-4"
       >
         <ArrowLeft size={20} className="mr-2" />

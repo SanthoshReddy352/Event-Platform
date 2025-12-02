@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 
+import { fetchWithTimeout } from "@/lib/utils";
+
 function NewEventContent() {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -20,13 +22,14 @@ function NewEventContent() {
         data: { session },
       } = await supabase.auth.getSession();
 
-      const response = await fetch(`/api/events`, {
+      const response = await fetchWithTimeout(`/api/events`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${session.access_token}`,
         },
         body: JSON.stringify(formData),
+        timeout: 15000
       });
 
       const data = await response.json();
@@ -35,14 +38,18 @@ function NewEventContent() {
         if (typeof window !== "undefined") {
           window.sessionStorage.removeItem(STORAGE_KEY);
         }
-        // Redirect to the Dashboard so they can add problems immediately
-        router.push(`/admin/events/${data.event.id}`);
+        // Redirect to the Events List
+        router.push(`/admin/events`);
       } else {
         alert(`Failed to create event: ${data.error}`);
       }
     } catch (error) {
       console.error("Error creating event:", error);
-      alert("An error occurred");
+      if (error.name === 'AbortError') {
+        alert("Request timed out. Please try again.");
+      } else {
+        alert("An error occurred");
+      }
     } finally {
       setIsSubmitting(false);
     }

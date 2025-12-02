@@ -26,7 +26,8 @@ The EventX project follows a standard Next.js application structure with API rou
 ├── SUPABASE_SETUP.sql    # Database schema for Supabase
 ├── .env.local.example    # Example environment variables
 ├── README.md             # Project overview and quick start
-└── package.json          # Project dependencies and scripts
+├── package.json          # Project dependencies and scripts
+└── backend_test.py       # Python script for backend API testing
 ```
 
 ## Getting Started (Local Development)
@@ -98,7 +99,13 @@ SENDGRID_API_KEY=SG...          # For SendGrid (alternative)
 # Supabase Edge Function URL (if deploying email function)
 NEXT_PUBLIC_SUPABASE_FUNCTION_URL=https://<your-project-id>.supabase.co/functions/v1/send-email
 ```
+# Supabase Edge Function URL (if deploying email function)
+NEXT_PUBLIC_SUPABASE_FUNCTION_URL=https://<your-project-id>.supabase.co/functions/v1/send-email
+```
 *Note: `NEXT_PUBLIC_` prefixed variables are exposed to the browser, others are server-side only.*
+
+**Note on Payment Keys:**
+Razorpay API keys are **NOT** stored in environment variables. They are configured by admins via the UI and stored securely in the `admin_users` table. This allows different clubs to have their own payment gateways.
 
 ## API Conventions
 EventX uses Next.js API Routes for its backend logic.
@@ -119,6 +126,24 @@ Unit and integration tests are crucial for maintaining code quality.
     # or npm test
     ```
 -   **CI/CD**: Continuous Integration pipelines should include steps for running tests, linting, building the frontend, and performing security checks.
+
+### Backend API Testing
+A Python script `backend_test.py` is provided to test the API endpoints end-to-end.
+
+**Prerequisites:**
+- Python 3.x
+- `requests` library (`pip install requests`)
+
+**Running the tests:**
+```bash
+python backend_test.py
+```
+This script verifies:
+- API Health Check
+- Event CRUD operations
+- Participant Registration
+- Contact Form Submission
+- Error Handling scenarios
 
 ## Coding Standards
 To ensure consistency and maintainability:

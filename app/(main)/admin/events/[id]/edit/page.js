@@ -9,6 +9,8 @@ import { ArrowLeft, Loader2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
 import LastWordGradientText from '@/components/LastWordGradientText'
 
+import { fetchWithTimeout } from '@/lib/utils'
+
 function EditEventContent() {
   const router = useRouter()
   const params = useParams()
@@ -51,13 +53,14 @@ function EditEventContent() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       
-      const response = await fetch(`/api/events/${id}`, {
+      const response = await fetchWithTimeout(`/api/events/${id}`, {
         method: 'PUT',
         headers: { 
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${session.access_token}`
         },
         body: JSON.stringify(submissionData),
+        timeout: 15000
       })
 
       const data = await response.json()
@@ -67,13 +70,17 @@ function EditEventContent() {
             window.sessionStorage.removeItem(STORAGE_KEY);
         }
         alert('Event updated successfully!')
-        router.push('/admin/events')
+        router.push(`/admin/events/${id}/dashboard`)
       } else {
         alert(`Failed to update event: ${data.error}`) 
       }
     } catch (error) {
       console.error('Error updating event:', error)
-      alert('An error occurred during update')
+      if (error.name === 'AbortError') {
+        alert("Update timed out. Please try again.");
+      } else {
+        alert('An error occurred during update');
+      }
     } finally {
       setIsSubmitting(false)
     }
@@ -91,7 +98,7 @@ function EditEventContent() {
     <div className="container mx-auto px-4 py-12 max-w-3xl">
       <Button
         variant="ghost"
-        onClick={() => router.push('/admin/events')}
+        onClick={() => router.push(`/admin/events/${id}/dashboard`)}
         className="mb-4"
       >
         <ArrowLeft size={20} className="mr-2" />

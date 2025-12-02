@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import ProtectedRoute from '@/components/ProtectedRoute'
@@ -19,6 +19,9 @@ function AdminEventsContent() {
   const [loading, setLoading] = useState(true)
   const { user, isSuperAdmin } = useAuth() 
 
+  // Cache ref
+  const cache = useRef({ data: null, timestamp: 0 })
+
   useEffect(() => {
     if (user) {
       fetchEvents()
@@ -26,17 +29,29 @@ function AdminEventsContent() {
   }, [user?.id, isSuperAdmin]) 
 
   const fetchEvents = async () => {
+    // Check cache (valid for 5 minutes for list)
+    const now = Date.now();
+    if (cache.current.data && (now - cache.current.timestamp < 300000)) {
+         setEvents(cache.current.data);
+         setLoading(false);
+         return;
+    }
+
     try {
       const response = await fetch('/api/events')
       const data = await response.json()
       if (data.success) {
         const allEvents = data.events;
+        let finalEvents = [];
         if (isSuperAdmin) {
-          setEvents(allEvents)
+          finalEvents = allEvents;
         } else {
-          const myEvents = allEvents.filter(event => event.created_by === user.id);
-          setEvents(myEvents);
+          finalEvents = allEvents.filter(event => event.created_by === user.id);
         }
+        setEvents(finalEvents);
+        
+        // Update cache
+        cache.current = { data: finalEvents, timestamp: now };
       }
     } catch (error) {
       console.error('Error fetching events:', error)
@@ -105,7 +120,13 @@ function AdminEventsContent() {
                     </Link>
                     <div className="flex gap-2">
                        {event.event_type === 'hackathon' && <Badge variant="secondary">Hackathon</Badge>}
-                       {event.is_active ? <Badge className="bg-green-500">Active</Badge> : <Badge variant="outline">Inactive</Badge>}
+                       {isCompleted ? (
+                         <Badge variant="secondary" className="bg-gray-500 text-white hover:bg-gray-600">Completed</Badge>
+                       ) : event.is_active ? (
+                         <Badge className="bg-green-500 hover:bg-green-600">Active</Badge>
+                       ) : (
+                         <Badge variant="outline">Inactive</Badge>
+                       )}
                     </div>
                   </div>
                   <CardDescription className="line-clamp-2">{event.description || 'No description'}</CardDescription>

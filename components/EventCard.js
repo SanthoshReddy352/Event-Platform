@@ -1,9 +1,11 @@
 'use client'
 
+import { memo } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import { Calendar, CheckCircle, XCircle, FileClock } from 'lucide-react'
+import { Calendar, CheckCircle, XCircle, FileClock, Clock } from 'lucide-react'
 import { parseISO, format } from 'date-fns'; 
 import { formatInTimeZone } from 'date-fns-tz'; 
 import { Badge } from '@/components/ui/badge'
@@ -36,6 +38,7 @@ const getEventStatus = (event) => {
   const eventEndDate = event.event_end_date ? parseISO(event.event_end_date) : null;
   const regStartDate = event.registration_start ? parseISO(event.registration_start) : null;
   const regEndDate = event.registration_end ? parseISO(event.registration_end) : null;
+  const eventStartDate = event.event_date ? parseISO(event.event_date) : null;
 
   if (eventEndDate && now > eventEndDate) {
     return { text: 'Completed', color: 'bg-gray-500', icon: <CheckCircle size={16} /> };
@@ -43,6 +46,11 @@ const getEventStatus = (event) => {
   
   if (!event.is_active) {
     return { text: 'Inactive', color: 'bg-gray-400' };
+  }
+
+  // Check if event is currently ongoing
+  if (eventStartDate && eventEndDate && now >= eventStartDate && now <= eventEndDate) {
+      return { text: 'Ongoing', color: 'bg-blue-600', icon: <Clock size={16} /> };
   }
 
   if (regStartDate && now < regStartDate) {
@@ -68,8 +76,8 @@ const getEventStatus = (event) => {
   return { text: 'Closed', color: 'bg-red-500', icon: <XCircle size={16} /> };
 }
 
-
-export default function EventCard({ event }) {
+// [OPTIMIZED] Wrapped in React.memo to prevent unnecessary re-renders
+const EventCard = memo(function EventCard({ event }) {
   const TIME_ZONE = 'Asia/Kolkata'; 
   
   const eventStartDate = event.event_date ? parseISO(event.event_date) : null;
@@ -95,6 +103,7 @@ export default function EventCard({ event }) {
             src={event.banner_url}
             alt={event.title}
             className="w-full h-full object-cover"
+            loading="lazy"
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-white text-2xl font-bold p-4 text-center">
@@ -144,6 +153,7 @@ export default function EventCard({ event }) {
               src={club.club_logo_url || 'https://via.placeholder.com/40'} 
               alt={`${club.club_name} logo`}
               className="w-8 h-8 rounded-full object-contain border border-border"
+              loading="lazy"
             />
             <span className="text-sm font-medium text-gray-300">{club.club_name}</span>
           </div>
@@ -161,4 +171,6 @@ export default function EventCard({ event }) {
       </CardFooter>
     </Card>
   )
-}
+});
+
+export default EventCard

@@ -281,11 +281,19 @@ CREATE POLICY "Admin Delete Objects" ON storage.objects FOR DELETE USING (public
 -- ====================================================================
 -- 7. INDEXES & TRIGGERS
 -- ====================================================================
+-- Single Column Indexes
 CREATE INDEX IF NOT EXISTS idx_events_is_active ON events(is_active);
 CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_participants_event_id ON participants(event_id);
 CREATE INDEX IF NOT EXISTS idx_participants_user_id ON participants(user_id);
 CREATE INDEX IF NOT EXISTS idx_participants_status ON participants(status);
+
+-- [NEW] Composite Indexes for Query Optimization
+CREATE INDEX IF NOT EXISTS idx_participants_event_user ON participants(event_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_participants_status_event ON participants(status, event_id);
+CREATE INDEX IF NOT EXISTS idx_events_active_created ON events(is_active, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_admin_users_user_id ON admin_users(user_id);
+CREATE INDEX IF NOT EXISTS idx_events_created_by ON events(created_by);
 
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$

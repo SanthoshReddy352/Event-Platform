@@ -44,9 +44,29 @@ export default function ProjectSubmissionPage() {
     }
   }
 
+  // Cache ref
+  const cache = useRef({})
+
   const fetchData = useCallback(async () => {
     if (!user || !params.id) return
     
+    // Check cache first
+    if (cache.current[params.id]) {
+        const cached = cache.current[params.id];
+        // Cache valid for 30 seconds
+        if (Date.now() - cached.timestamp < 30000) {
+            console.log('Using cached submission data');
+            setEvent(cached.event);
+            setScopeStatus(cached.scopeStatus);
+            prevStatusRef.current = cached.scopeStatus;
+            if (cached.scopeStatus.participant?.has_submitted) {
+                setSubmitted(true);
+            }
+            setLoading(false);
+            return;
+        }
+    }
+
     try {
       if (!scopeStatus) setLoading(true)
       
@@ -65,8 +85,7 @@ export default function ProjectSubmissionPage() {
       if (!eventData.success) {
         throw new Error('Event not found')
       }
-      setEvent(eventData.event)
-
+      
       // 2. Fetch scope status
       const scopeRes = await fetch(`/api/events/${params.id}/scope-status?t=${Date.now()}`, {
         headers: { 
@@ -84,12 +103,21 @@ export default function ProjectSubmissionPage() {
         return
       }
       
-      prevStatusRef.current = scopeData
+      // Update State
+      setEvent(eventData.event)
       setScopeStatus(scopeData)
+      prevStatusRef.current = scopeData
 
       if (scopeData.participant?.has_submitted) {
         setSubmitted(true)
       }
+
+      // Update Cache
+      cache.current[params.id] = {
+          event: eventData.event,
+          scopeStatus: scopeData,
+          timestamp: Date.now()
+      };
 
     } catch (err) {
       console.error('Error fetching data:', err)

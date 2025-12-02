@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, Suspense } from 'react'
+import { useState, useEffect, useCallback, Suspense, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import DynamicForm from '@/components/DynamicForm'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card' 
@@ -12,6 +12,7 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client' 
 import { useAuth } from '@/context/AuthContext' 
 import Script from 'next/script'
+import { fetchWithTimeout } from '@/lib/utils'
 
 // ... [Keep your helper functions formatEventDate and getEventStatus here] ...
 
@@ -43,6 +44,7 @@ const getEventStatus = (event) => {
   const eventEndDate = event.event_end_date ? parseISO(event.event_end_date) : null;
   const regStartDate = event.registration_start ? parseISO(event.registration_start) : null;
   const regEndDate = event.registration_end ? parseISO(event.registration_end) : null;
+  const eventStartDate = event.event_date ? parseISO(event.event_date) : null;
 
   if (eventEndDate && now > eventEndDate) {
     return { text: 'Completed', color: 'bg-gray-500', icon: <CheckCircle size={16} /> };
@@ -50,6 +52,11 @@ const getEventStatus = (event) => {
   
   if (!event.is_active) {
     return { text: 'Inactive', color: 'bg-gray-400' };
+  }
+
+  // Check if event is currently ongoing
+  if (eventStartDate && eventEndDate && now >= eventStartDate && now <= eventEndDate) {
+      return { text: 'Ongoing', color: 'bg-blue-600', icon: <Clock size={16} /> };
   }
 
   if (regStartDate && now < regStartDate) {
@@ -130,38 +137,72 @@ function EventDetailContent() {
   };
 
   // --- 3. DATA FETCHING ---
+  // --- 3. DATA FETCHING ---
+  // --- 3. DATA FETCHING ---
+  // Cache ref
+  const cache = useRef({})
+
   useEffect(() => {
     let mounted = true;
+    const controller = new AbortController();
 
     async function loadPageData() {
         if (authLoading) return;
 
-        // Fetch fresh data even if we have cache, but don't show spinner if we have event
-        // Note: We use the functional update or check a ref if we want to be strictly sure about 'event' state,
-        // but checking the state directly here is usually fine for this pattern.
-        // We only force loading spinner if we strictly have NO event data.
-        
-        // However, since state updates are async, 'event' might technically be null here on first run 
-        // if the cache effect hasn't committed yet. 
-        // To be safe, we usually let the UI handle the "loading" visual based on the state variables.
+        // Check in-memory cache first (for tab switching)
+        if (cache.current[params.id]) {
+             const cached = cache.current[params.id];
+             // Simple expiration check (e.g. 1 minute)
+             if (Date.now() - cached.timestamp < 60000) {
+                 setEvent(cached.event);
+                 setIsRegistered(cached.isRegistered);
+                 setRegistrationStatus(cached.registrationStatus);
+                 setRejectionHistory(cached.rejectionHistory);
+                 setLoading(false);
+                 return;
+             }
+        }
 
         try {
-            const fetchEventPromise = fetch(`/api/events/${params.id}`).then(res => res.json());
+            // Helper to safely fetch and ignore abort errors
+            const safeFetch = (promise) => promise.catch(err => {
+                if (err.name === 'AbortError') return { aborted: true };
+                throw err;
+            });
+
+            // Fetch Event
+            const fetchEventPromise = safeFetch(
+                fetch(`/api/events/${params.id}`, {
+                    signal: controller.signal,
+                    cache: 'no-store'
+                }).then(res => res.json())
+            );
             
             let fetchParticipantPromise = Promise.resolve(null);
             
-            if (user) {
+            if (user?.id) {
                 const { data: { session } } = await supabase.auth.getSession();
-                if (session) {
-                    fetchParticipantPromise = fetch(`/api/participants/${params.id}?userId=${user.id}`, {
-                        headers: { 'Authorization': `Bearer ${session.access_token}` }
-                    }).then(res => res.json());
+                if (session?.access_token) {
+                    fetchParticipantPromise = safeFetch(
+                        fetch(`/api/participants/${params.id}?userId=${user.id}`, {
+                            headers: { 'Authorization': `Bearer ${session.access_token}` },
+                            signal: controller.signal,
+                            cache: 'no-store'
+                        }).then(res => {
+                            if (res.status === 403) {
+                                 console.warn("Participant fetch returned 403 Forbidden");
+                                 return { success: false, error: "Forbidden" };
+                            }
+                            return res.json();
+                        })
+                    );
                 }
             }
 
-            const [eventData, participantData] = await Promise.all([fetchEventPromise, fetchParticipantPromise]);
+            const [eventResult, participantResult] = await Promise.all([fetchEventPromise, fetchParticipantPromise]);
 
             if (!mounted) return;
+            if (eventResult?.aborted || participantResult?.aborted) return;
 
             // Prepare new state objects
             let newEvent = null;
@@ -169,22 +210,19 @@ function EventDetailContent() {
             let newRegistrationStatus = null;
             let newRejectionHistory = null;
 
-            if (eventData.success) {
-                newEvent = eventData.event;
+            if (eventResult && eventResult.success) {
+                newEvent = eventResult.event;
                 setEvent(newEvent);
             } else {
-                // Only set to null if we don't have a stale event? 
-                // Or if fetch explicitly failed, we should probably show error.
-                // Keeping original logic:
                 setEvent(null);
             }
 
-            if (participantData && participantData.success && participantData.participants.length > 0) {
-                const mostRecent = participantData.participants[participantData.participants.length - 1];
+            if (participantResult && participantResult.success && participantResult.participants && participantResult.participants.length > 0) {
+                const mostRecent = participantResult.participants[participantResult.participants.length - 1];
                 newIsRegistered = true;
                 newRegistrationStatus = mostRecent.status;
                 
-                const rejected = participantData.participants
+                const rejected = participantResult.participants
                     .filter(p => p.status === 'rejected')
                     .pop();
                 newRejectionHistory = rejected || null;
@@ -193,12 +231,13 @@ function EventDetailContent() {
                 setRegistrationStatus(newRegistrationStatus);
                 setRejectionHistory(newRejectionHistory);
             } else {
+                // If we failed to fetch participant (e.g. 403) or no participants, reset
                 setIsRegistered(false);
                 setRegistrationStatus(null);
                 setRejectionHistory(null);
             }
 
-            // Save to storage
+            // Save to storage and memory cache
             if (newEvent) {
                 const cacheData = {
                     event: newEvent,
@@ -208,11 +247,14 @@ function EventDetailContent() {
                     timestamp: Date.now()
                 };
                 window.sessionStorage.setItem(EVENT_STORAGE_KEY, JSON.stringify(cacheData));
+                cache.current[params.id] = cacheData;
             }
 
         } catch (error) {
-            console.error("Error loading page data:", error);
-            if (mounted) setEvent(null); // Or handle error state
+            if (error.name !== 'AbortError') {
+                console.error("Error loading page data:", error);
+                if (mounted) setEvent(null);
+            }
         } finally {
             if (mounted) setLoading(false);
         }
@@ -220,8 +262,11 @@ function EventDetailContent() {
 
     loadPageData();
 
-    return () => { mounted = false; };
-  }, [params.id, authLoading, user]); // Kept original deps
+    return () => { 
+        mounted = false; 
+        controller.abort();
+    };
+  }, [params.id, authLoading, user?.id]); // Use user.id for stability
 
   const checkRegistrationStatus = useCallback(async (userId, eventId) => {
       try {
@@ -347,7 +392,8 @@ function EventDetailContent() {
             throw new Error("No active session. Please log in again.");
         }
       
-        const response = await fetch('/api/participants', {
+        // Use fetchWithTimeout to prevent hanging
+        const response = await fetchWithTimeout('/api/participants', {
             method: 'POST',
             headers: { 
                 'Content-Type': 'application/json',
@@ -358,6 +404,7 @@ function EventDetailContent() {
                 user_id: user.id,
                 responses: submitData
             }),
+            timeout: 20000 // 20s timeout for registration
         });
         
         const data = await response.json();
@@ -365,13 +412,16 @@ function EventDetailContent() {
         if (data.success) {
             setSubmitted(true);
             window.sessionStorage.removeItem(formStorageKey); 
-            // Update cache to reflect pending status immediately if needed, or just let re-check handle it
         } else {
             alert(`Registration failed: ${data.error}`);
         }
     } catch (error) {
         console.error('Registration error:', error);
-        alert(`An error occurred: ${error.message}`);
+        if (error.name === 'AbortError') {
+             alert("Registration timed out. Please check your connection and try again.");
+        } else {
+             alert(`An error occurred: ${error.message}`);
+        }
     }
   }
 

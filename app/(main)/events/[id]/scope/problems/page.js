@@ -12,6 +12,7 @@ import {
 import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/context/AuthContext'
 import { isWithinInterval } from 'date-fns'
+import { fetchWithTimeout } from '@/lib/utils'
 
 export default function ProblemSelectionPage() {
   const params = useParams()
@@ -26,15 +27,29 @@ export default function ProblemSelectionPage() {
   const [error, setError] = useState(null)
   const [selectedProblemDetails, setSelectedProblemDetails] = useState(null)
   
-  // Ref to track if we have loaded initial data
-  const loadedRef = useRef(false)
+  // Cache ref
+  const cache = useRef({})
 
   const fetchData = useCallback(async () => {
     if (!user || !params.id) return
+
+    // Check cache first
+    if (cache.current[params.id]) {
+        const cached = cache.current[params.id];
+        // Cache valid for 30 seconds (realtime updates will handle changes anyway)
+        if (Date.now() - cached.timestamp < 30000) {
+            console.log('Using cached problems data');
+            setEvent(cached.event);
+            setParticipant(cached.participant);
+            setProblems(cached.problems);
+            setSelectedProblemDetails(cached.selectedProblemDetails);
+            setLoading(false);
+            return;
+        }
+    }
     
     try {
-      // Only show full page loader on first load
-      if (!loadedRef.current) setLoading(true)
+      setLoading(true)
       
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) throw new Error('Please log in')
@@ -46,7 +61,6 @@ export default function ProblemSelectionPage() {
       const eventData = await eventRes.json()
       
       if (!eventData.success) throw new Error('Event not found')
-      setEvent(eventData.event)
 
       // 2. Fetch Current User's Participant Record (Direct DB)
       const { data: participantData, error: participantError } = await supabase
@@ -62,7 +76,6 @@ export default function ProblemSelectionPage() {
          setError("You are not registered for this event.")
          return
       }
-      setParticipant(participantData)
 
       // 3. Fetch Problem Statements (Direct DB)
       const { data: problemsData, error: problemsError } = await supabase
@@ -95,15 +108,26 @@ export default function ProblemSelectionPage() {
         is_full: (selectionCounts[p.id] || 0) >= p.max_selections
       }))
 
-      setProblems(problemsWithCounts)
-
       // Set selected problem details if applicable
+      let selectedDetails = null;
       if (participantData.selected_problem_id) {
-        const selected = problemsWithCounts.find(p => p.id === participantData.selected_problem_id)
-        setSelectedProblemDetails(selected)
+        selectedDetails = problemsWithCounts.find(p => p.id === participantData.selected_problem_id)
       }
 
-      loadedRef.current = true
+      // Update State
+      setEvent(eventData.event)
+      setParticipant(participantData)
+      setProblems(problemsWithCounts)
+      setSelectedProblemDetails(selectedDetails)
+
+      // Update Cache
+      cache.current[params.id] = {
+          event: eventData.event,
+          participant: participantData,
+          problems: problemsWithCounts,
+          selectedProblemDetails: selectedDetails,
+          timestamp: Date.now()
+      };
 
     } catch (err) {
       console.error('Error fetching data:', err)
@@ -160,13 +184,14 @@ export default function ProblemSelectionPage() {
       
       // We still use the API endpoint for the selection action because it likely 
       // contains the logic (check_and_select_problem) and validation.
-      const response = await fetch(`/api/events/${params.id}/select-problem`, {
+      const response = await fetchWithTimeout(`/api/events/${params.id}/select-problem`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`
         },
-        body: JSON.stringify({ problem_id: problemId })
+        body: JSON.stringify({ problem_id: problemId }),
+        timeout: 15000
       })
 
       const data = await response.json()
@@ -182,7 +207,11 @@ export default function ProblemSelectionPage() {
       }
     } catch (err) {
       console.error('Selection error:', err)
-      alert(`Error: ${err.message}`)
+      if (err.name === 'AbortError') {
+        alert("Selection timed out. Please try again.");
+      } else {
+        alert(`Error: ${err.message}`)
+      }
     } finally {
       setSelecting(false)
     }
@@ -208,10 +237,10 @@ export default function ProblemSelectionPage() {
             <CardDescription>{error}</CardDescription>
           </CardHeader>
           <CardContent>
-            <Link href={`/events/${params.id}/scope`}>
+            <Link href={`/events/${params.id}`}>
               <Button variant="outline" className="gap-2">
                 <ArrowLeft className="h-4 w-4" />
-                Back to Scope
+                Back to Event
               </Button>
             </Link>
           </CardContent>
@@ -234,10 +263,10 @@ export default function ProblemSelectionPage() {
       {/* Header */}
       <div className="bg-brand-gradient py-12">
         <div className="container mx-auto px-4 max-w-5xl">
-          <Link href={`/events/${params.id}/scope`}>
+          <Link href={`/events/${params.id}`}>
             <Button variant="ghost" className="text-white hover:bg-white/10 mb-4">
               <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Scope
+              Back to Event
             </Button>
           </Link>
           <h1 className="text-4xl font-bold text-white mb-2">Problem Statements</h1>

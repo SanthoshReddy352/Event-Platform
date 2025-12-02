@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import ProtectedRoute from '@/components/ProtectedRoute'
@@ -23,6 +23,9 @@ function AdminDashboardContent() {
   })
   const [loading, setLoading] = useState(true)
 
+  // Cache ref
+  const cache = useRef({ data: null, timestamp: 0 })
+
   useEffect(() => {
     if (user) {
       fetchUserAndStats()
@@ -31,6 +34,14 @@ function AdminDashboardContent() {
   }, [user?.id, isSuperAdmin])
 
   const fetchUserAndStats = async () => {
+    // Check cache (valid for 5 minutes)
+    const now = Date.now();
+    if (cache.current.data && (now - cache.current.timestamp < 300000)) {
+         setStats(cache.current.data);
+         setLoading(false);
+         return;
+    }
+
     setLoading(true)
     try {
       const { data: { session } } = await supabase.auth.getSession()
@@ -57,12 +68,17 @@ function AdminDashboardContent() {
           return acc + (event.approved_count || 0);
         }, 0);
 
-        setStats({
+        const newStats = {
           totalEvents: allEvents.length,
           activeEvents: activeEventsList.length,
           totalParticipants, 
           myEvents: myEvents.length,
-        })
+        };
+
+        setStats(newStats);
+        
+        // Update cache
+        cache.current = { data: newStats, timestamp: now };
       }
     } catch (error) {
       console.error('Error fetching stats:', error)

@@ -46,9 +46,10 @@ async function verifyAuth(request) {
   }
 
   const token = authHeader.split(" ")[1];
+  
+  // 1. Try Local Verification (Fast)
   try {
     const { payload } = await jwtVerify(token, JWT_SECRET);
-    // Map JWT payload to a user-like object
     const user = {
       id: payload.sub,
       email: payload.email,
@@ -57,7 +58,17 @@ async function verifyAuth(request) {
     };
     return { user, error: null };
   } catch (err) {
-    return { user: null, error: "Invalid token" };
+    // 2. Fallback to Supabase API (Slower but works if secret is missing/rotated)
+    // console.warn("[Auth] Local verification failed, using Supabase API:", err.message);
+    
+    const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
+    
+    if (error || !user) {
+      console.error("[Auth] Token verification failed:", error?.message || "User not found");
+      return { user: null, error: "Invalid token" };
+    }
+    
+    return { user, error: null };
   }
 }
 
@@ -155,6 +166,7 @@ export async function GET(request) {
           `
           id, title, description, event_date, event_end_date, banner_url,
           is_active, registration_open, is_paid, registration_fee, event_type,
+          registration_start, registration_end,
           created_by,
           club:created_by(club_name, club_logo_url)
         `
@@ -456,6 +468,51 @@ export async function GET(request) {
           { headers: corsHeaders },
         );
       }
+    }
+
+    // GET /api/participants/pending - [NEW] Admin view pending registrations
+    if (segments[0] === "participants" && segments[1] === "pending") {
+      const { user, role, error: adminError } = await getAdminUser(request);
+      if (adminError || !user) {
+        return NextResponse.json(
+          { success: false, error: adminError?.message || "Unauthorized" },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+
+      // [OPTIMIZED] Single query with JOIN to fetch event details
+      let query = supabaseAdmin
+        .from("participants")
+        .select(`
+          *,
+          event:events!inner(
+            id,
+            title,
+            created_by,
+            form_fields
+          )
+        `)
+        .order("created_at", { ascending: false });
+
+      // Filter based on role
+      if (role !== "super_admin") {
+        // Regular admins only see registrations for their events
+        query = query.eq("event.created_by", user.id);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        return NextResponse.json(
+          { success: false, error: error.message },
+          { status: 500, headers: corsHeaders }
+        );
+      }
+
+      return NextResponse.json(
+        { success: true, participants: data },
+        { headers: corsHeaders }
+      );
     }
 
     if (segments.length === 0) {

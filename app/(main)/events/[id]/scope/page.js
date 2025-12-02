@@ -27,10 +27,27 @@ export default function HackathonScopePage() {
   
   const [now, setNow] = useState(new Date())
 
+  // Cache ref
+  const cache = useRef({})
+
   // --- Main Data Fetcher ---
   const fetchScopeStatus = useCallback(async () => {
     if (!user || !params.id) return
     
+    // Check cache first
+    if (cache.current[params.id]) {
+        const cached = cache.current[params.id];
+        // Simple expiration check (e.g. 30 seconds for scope status as it can change)
+        if (Date.now() - cached.timestamp < 30000) {
+            console.log('Using cached scope data');
+            setEvent(cached.event);
+            setParticipant(cached.participant);
+            setSelectedProblem(cached.selectedProblem);
+            setLoading(false);
+            return;
+        }
+    }
+
     try {
       if (!event) setLoading(true)
       
@@ -62,13 +79,6 @@ export default function HackathonScopePage() {
          return
       }
 
-      setEvent(eventData.event)
-
-      if (eventData.event.event_type !== 'hackathon') {
-        router.push(`/events/${params.id}`)
-        return
-      }
-
       // 2. Fetch Participant DIRECTLY from Supabase
       // We select specific fields including the ones you confirmed exist in DB
       const { data: participantData, error: participantError } = await supabase
@@ -91,10 +101,9 @@ export default function HackathonScopePage() {
           setError('You must be an approved participant to access the hackathon scope.')
           return
       }
-
-      setParticipant(participantData)
       
       // 3. Fetch Selected Problem Details (if user has selected one)
+      let problemDetails = null;
       if (participantData.selected_problem_id) {
           const { data: problemData } = await supabase
             .from('problem_statements')
@@ -103,11 +112,28 @@ export default function HackathonScopePage() {
             .single()
           
           if (problemData) {
-            setSelectedProblem(problemData)
+            problemDetails = problemData;
           }
       }
 
-      setNow(new Date()) 
+      // Update State
+      setEvent(eventData.event);
+      setParticipant(participantData);
+      setSelectedProblem(problemDetails);
+      setNow(new Date());
+
+      if (eventData.event.event_type !== 'hackathon') {
+        router.push(`/events/${params.id}`)
+        return
+      }
+
+      // Update Cache
+      cache.current[params.id] = {
+          event: eventData.event,
+          participant: participantData,
+          selectedProblem: problemDetails,
+          timestamp: Date.now()
+      };
       
     } catch (err) {
       console.error('Error fetching scope status:', err)

@@ -84,18 +84,24 @@ Administrators can oversee participant registrations for their events:
 
 ---
 
-## Payments (Future Enhancement)
-The EventX platform is designed with future payment integration in mind. Currently, payment processing features are under development.
+## Payment Configuration
+The EventX platform supports payment processing via Razorpay. To enable payments for your events:
 
--   **Current Status:** Payment integration is a planned feature (e.g., Razorpay/Stripe).
--   **Future Capabilities:** Once implemented, admins with appropriate permissions will be able to:
-    -   Enable/Disable payment requirements for individual events.
-    -   Set event fees and currency.
-    -   Manage transactions and initiate refunds (subject to the platform's payment gateway policy).
--   **Recommended Flow (Planned):**
-    1.  Configure payment gateway API keys in **Settings → Payments**.
-    2.  Enable 'Require Payment' on an event-by-event basis.
-    3.  Utilize the Admin Payments Dashboard to monitor transactions and manage refunds.
+1.  **Obtain Razorpay Keys**:
+    -   Log in to your [Razorpay Dashboard](https://dashboard.razorpay.com/).
+    -   Go to **Settings** → **API Keys** → **Generate New Key**.
+    -   Copy your `Key ID` and `Key Secret`.
+
+2.  **Configure in EventX**:
+    -   Log in to the EventX Admin Dashboard.
+    -   Navigate to **Club Profile** (in the navbar).
+    -   Scroll down to the **Payment Gateway (Razorpay)** section.
+    -   Enter your `Key ID` and `Key Secret`.
+    -   Click **Save All Changes**.
+
+3.  **Enable for Events**:
+    -   When creating or editing an event, set a **Registration Fee** greater than 0.
+    -   The system will automatically use your configured Razorpay keys to process payments for that event.
 
 ---
 
@@ -111,30 +117,21 @@ Admins can personalize their club's presence on the platform:
 -   **Registrations Missing?**
     -   Verify the event's capacity. If it's reached, no new registrations will be accepted.
     -   Check the **Registration Open** and **Registration Close** dates to ensure the event is still open for registration.
--   **Payment Failed?** (Once implemented)
-    -   Confirm that the payment gateway (e.g., Razorpay) API keys are correctly configured in the system settings.
-    -   Review payment transaction logs for specific error messages from the payment gateway.
+-   **Payment Failed?**
+    -   Ensure you have configured your Razorpay API Keys correctly in the **Club Profile** section.
+    -   Verify that your Razorpay account is active and in the correct mode (Test vs Live).
 -   **File Uploads Failing?**
     -   Ensure that the allowed file types configured for the form field match the files being uploaded.
     -   Check the available storage quota in Supabase Storage.
 
 ---
 
-## Useful CLI Commands (for Backend System Admins)
-These commands are typically run by system administrators managing the backend infrastructure.
-```/dev/null/command_line#L1-10
-# Apply database migrations after schema changes
-python manage.py migrate
+## System Administration
+For backend system administration, primarily managed via the Supabase Dashboard:
 
-# Create a superuser account for backend administration
-python manage.py createsuperuser
-
-# Run all backend tests to ensure system integrity
-python manage.py test
-
-# Collect static files for deployment (e.g., CSS, JavaScript, images)
-python manage.py collectstatic --noinput
-```
+-   **Database**: Use the Supabase SQL Editor for schema changes or querying data directly.
+-   **Storage**: Manage buckets and files in the Supabase Storage section.
+-   **Auth**: Manage users and email templates in the Supabase Authentication section.
 
 ---
 _Last updated: 2024-07-30

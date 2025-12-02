@@ -50,6 +50,7 @@ Follow these steps to get EventX running on your local development machine:
         EMAIL_FROM="EventX <noreply@eventx.com>"
         ```
     -   For `RESEND_API_KEY` or `SENDGRID_API_KEY`, ensure these are also set as [Supabase Secrets](https://supabase.com/docs/guides/functions/secrets) if you are using the Supabase Edge Function for email.
+    -   **Note**: Razorpay API keys are **NOT** set here. They are configured in the Admin Dashboard under "Club Profile".
 
 4.  **Install Dependencies**:
     ```bash

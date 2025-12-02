@@ -1,6 +1,5 @@
-'use client'
 
-import { useState } from 'react'
+import { useState, useCallback, memo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -9,13 +8,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox'
 import { Card, CardContent } from '@/components/ui/card'
 
-// Added `submitLabel` to props
-export default function DynamicForm({ fields = [], onSubmit, eventId, formData, onFormChange, submitLabel }) {
+// [OPTIMIZED] Wrapped in React.memo to prevent unnecessary re-renders
+const DynamicForm = memo(function DynamicForm({ fields = [], onSubmit, eventId, formData, onFormChange, submitLabel }) {
   
   const [errors, setErrors] = useState({})
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const handleInputChange = (fieldId, value) => {
+  // [OPTIMIZED] useCallback to prevent function recreation on every render
+  const handleInputChange = useCallback((fieldId, value) => {
     if (onFormChange) {
       onFormChange({ ...formData, [fieldId]: value });
     }
@@ -23,9 +23,9 @@ export default function DynamicForm({ fields = [], onSubmit, eventId, formData, 
     if (errors[fieldId]) {
       setErrors({ ...errors, [fieldId]: null })
     }
-  }
+  }, [formData, errors, onFormChange])
 
-  const validateForm = () => {
+  const validateForm = useCallback(() => {
     const newErrors = {}
     fields.forEach((field) => {
       const fieldKey = field.id; 
@@ -35,9 +35,9 @@ export default function DynamicForm({ fields = [], onSubmit, eventId, formData, 
     })
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
-  }
+  }, [fields, formData])
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = useCallback(async (e) => {
     e.preventDefault()
     
     if (!validateForm()) {
@@ -52,9 +52,9 @@ export default function DynamicForm({ fields = [], onSubmit, eventId, formData, 
     } finally {
       setIsSubmitting(false)
     }
-  }
+  }, [validateForm, onSubmit, formData])
 
-  const renderField = (field) => {
+  const renderField = useCallback((field) => {
     const fieldId = field.id 
     const value = formData[fieldId] || ''
 
@@ -170,7 +170,7 @@ export default function DynamicForm({ fields = [], onSubmit, eventId, formData, 
       default:
         return null
     }
-  }
+  }, [formData, errors, handleInputChange])
 
   if (fields.length === 0) {
     return (
@@ -196,4 +196,6 @@ export default function DynamicForm({ fields = [], onSubmit, eventId, formData, 
       </Button>
     </form>
   )
-}
+});
+
+export default DynamicForm
