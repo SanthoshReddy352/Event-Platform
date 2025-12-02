@@ -5,101 +5,81 @@ A modern, full-featured website for managing student club hackathons and tech ev
 ## 🌟 Features
 
 ### For Participants
-- 📅 **Browse Events** - View upcoming hackathons and tech events.
+- 📅 Browse upcoming hackathons and events
 - 🏠 **Browse by Club** - Filter events by the club that posted them.
-- 📝 **Dynamic Registration** - Register with custom forms tailored for each event.
-- 🔔 **Status Tracking** - View approval status (Pending/Approved/Rejected).
-- 📧 **Notifications** - Receive email updates on registration status.
-- 💬 **Contact Organizers** - Reach out to event organizers directly.
-- 📱 **Responsive Design** - Works seamlessly on desktop and mobile.
-- 💳 **Secure Payments** - Pay for paid events via Razorpay.
+- 📝 Register with custom dynamic forms per event
+- 🔔 **Registration Status Tracking** - View approval status (Pending/Approved/Rejected)
+- 📧 Email notifications for registration approval/rejection
+- 💬 Contact form to reach organizers
+- 📱 Fully responsive design
+- 💳 **Secure Payments** - Pay for paid events seamlessly via Razorpay.
 
 ### For Admins
-- 🔐 **Secure Authentication** - Role-based access via Supabase Auth.
-- 👥 **Role Management** - Admin and Super Admin permissions.
-- 🏢 **Club Profile** - Manage club identity (name, logo) visible on event cards.
-- ✏️ **Event Management** - Create, edit, draft, and publish events.
-- 🎨 **Form Builder** - Drag-and-drop builder for custom registration forms.
-  - Fields: Text, Email, Number, URL, Dropdown, Checkbox, Textarea, Date, File Upload.
-  - Validation: Required/Optional, Max Length, File Types.
-  - Reordering: Move fields up/down.
-- ✅ **Registration Workflow** - Review, approve, or reject participant applications.
-- 📊 **Analytics** - Dashboard with event and participant statistics.
-- 📥 **Data Export** - Export participant data to CSV.
-- 🖼️ **Banner Management** - Upload event banners via Supabase Storage.
-- 💳 **Payment Integration** - Configure Razorpay keys per club.
+- 🔐 Secure authentication (Supabase Auth)
+- 👥 **Role-based Access Control** - Admin vs Super Admin permissions
+- 🏢 **Club Profile Management** - Admins can update their club's name and logo, which appears on the homepage and event cards.
+- ✏️ **Draft/Publish Workflow** - Events are created as "drafts" (inactive) by default and must be manually "published" (set to active) to become visible to the public.
+- 🎨 **Dynamic Form Builder** - Create custom registration forms per event
+  - Support for: text, email, number, URL, dropdown, checkbox, textarea, date fields
+  - Field validation (required/optional)
+  - **Field Reordering** with "Move Up/Down" buttons.
+  - **Auto-saving** to session storage to prevent data loss.
+- ✅ **Registration Approval Workflow**
+  - Review pending registrations.
+  - **User-Friendly Details:** View participant submissions in a clean dialog that shows field labels in the correct order.
+  - Approve or reject applications
+  - Track approval history
+- 📊 **Enhanced Dashboard** - Role-specific analytics
+- 📧 **Email Notifications** - Automated emails for admin alerts and participant status changes.
+- 📥 Export participant data to CSV
+- 🖼️ Upload event banners (Supabase Storage) or use URLs
+- 💳 **Payment Integration** - Accept payments via Razorpay (configure keys in Club Profile).
 
 ### For Super Admins
-- 🔓 **Full System Access** - Manage all events, clubs, and users.
-- 👁️ **Global Oversight** - View and moderate all registrations.
-- ⚙️ **System Settings** - Configure global platform settings.
+- 🔓 Full system access - manage ALL events and clubs
+- 👁️ View and approve registrations for any event
+- 📊 System-wide analytics and oversight
 
 ## 🛠️ Tech Stack
 
 - **Frontend**: Next.js 14 (App Router), React 18
-- **Styling**: Tailwind CSS, shadcn/ui components, Framer Motion
+- **Styling**: Tailwind CSS + shadcn/ui components
 - **Backend**: Next.js API Routes
 - **Database**: Supabase (PostgreSQL)
 - **Auth**: Supabase Auth
 - **Storage**: Supabase Storage
-- **Payments**: Razorpay
-- **Deployment**: Vercel
+- **Hosting**: Vercel-ready
 
-## 📁 Project Structure
+## 📋 Prerequisites
 
-```
-/
-├── app/
-│   ├── (main)/                # Main application routes
-│   │   ├── page.js            # Home page
-│   │   ├── events/            # Event listing and details
-│   │   ├── admin/             # Admin dashboard
-│   │   ├── contact/           # Contact page
-│   │   ├── profile/           # User profile
-│   │   └── registered-events/ # User's registrations
-│   ├── api/                   # Backend API routes
-│   ├── auth/                  # Authentication pages (Login/Signup)
-│   ├── update_password/       # Password reset flow
-│   ├── globals.css            # Global styles
-│   └── layout.js              # Root layout
-├── components/                # Reusable UI components
-│   ├── ui/                    # shadcn/ui primitives
-│   └── ...                    # Custom components (Navbar, EventCard, etc.)
-├── lib/                       # Utilities and configurations
-│   ├── supabase/              # Supabase client/server setup
-│   └── utils.js               # Helper functions
-├── public/                    # Static assets
-├── supabase/                  # Supabase functions and config
-├── tests/                     # Test files
-├── .env.local                 # Environment variables
-├── package.json               # Dependencies and scripts
-└── README.md                  # Project documentation
-```
+- Node.js 18+ and Yarn
+- Supabase account and project
+- (Already configured in this project)
 
 ## 🚀 Quick Start
 
-### 1. Prerequisites
-- Node.js 18+
-- Yarn or npm
-- Supabase account
+### 1. Database Setup
 
-### 2. Database Setup
-1.  Log in to [Supabase Dashboard](https://supabase.com/dashboard).
-2.  Create a new project.
-3.  Go to **SQL Editor**.
-4.  Copy the content of `SUPABASE_SETUP.sql` from this project.
-5.  Run the script to create tables, policies, and buckets.
+**IMPORTANT: Run this first!**
 
-### 3. Environment Variables
-Create a `.env.local` file in the root directory:
+1. Go to your Supabase Dashboard: https://supabase.com/dashboard
+2. Navigate to your project
+3. Go to SQL Editor (left sidebar)
+4. Copy the entire content of `SUPABASE_SETUP.sql` file
+5. Paste and run it in the SQL Editor
+6. This will create all necessary tables, policies, and storage buckets (`event-banners`, `club-logos`).
 
+### 2. Environment Variables
+
+Already configured in `.env.local`:
 ```env
 NEXT_PUBLIC_SUPABASE_URL=your-project-url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-key
 ```
 
-### 4. Install & Run
+### 3. Install & Run
+
 ```bash
 # Install dependencies
 yarn install
@@ -107,19 +87,177 @@ yarn install
 # Run development server
 yarn dev
 ```
-Visit http://localhost:3000
+Visit: http://localhost:3000
 
-### 5. Create Admin User
-1.  Sign up a new user in the app or create one in Supabase Auth.
-2.  In Supabase Database, add a row to `admin_users` table linking the `user_id` to a role (`admin` or `super_admin`).
+### 4. Create Admin Account
+**IMPORTANT: Create your first admin user**
 
-## 📚 Documentation
-- [Setup Instructions](SETUP_INSTRUCTIONS.md)
-- [Developer Guide](DEVELOPER_GUIDE.md)
-- [Admin Guide](ADMIN_GUIDE.md)
-- [User Guide](USER_GUIDE.md)
+Go to your Supabase Dashboard → Authentication → Users
+
+Click "Add user" → "Create new user"
+
+Enter email and password
+
+Click "Create user"
+
+This user can now login to the admin dashboard at `/admin/login`.
+
+## 📁 Project Structure
+```
+/app
+├── app/
+│   ├── (main)/                    # Main application layout
+│   │   ├── page.js                # Home page
+│   │   ├── events/
+│   │   │   ├── page.js            # All events listing
+│   │   │   └── [id]/page.js       # Event detail + registration
+│   │   ├── admin/
+│   │   │   ├── page.js            # Admin dashboard
+│   │   │   ├── login/page.js      # Admin login
+│   │   │   ├── club-profile/page.js # Club profile & payment settings
+│   │   │   ├── events/
+│   │   │   │   ├── page.js        # Manage events
+│   │   │   │   ├── new/page.js    # Create event
+│   │   │   │   └── [id]/
+│   │   │   │       ├── page.js    # Edit event
+│   │   │   │       └── form-builder/page.js  # Form builder
+│   │   │   ├── participants/
+│   │   │   │   └── [eventId]/page.js  # View participants per event
+│   │   │   └── registrations/     # Global registrations view
+│   │   ├── contact/page.js        # Contact page
+│   │   ├── profile/page.js        # User profile
+│   │   └── registered-events/     # User's registered events
+│   ├── auth/                      # Authentication
+│   │   └── page.js                # Login/Signup page
+│   ├── update_password/           # Password reset
+│   ├── api/
+│   │   ├── events/                # Events API
+│   │   ├── razorpay/              # Payment API
+│   │   │   ├── create-order/
+│   │   │   └── verify/
+│   │   └── [[...path]]/route.js   # Catch-all API
+│   ├── globals.css                # Global styles
+│   └── layout.js                  # Root layout
+├── components/
+│   ├── ui/                        # shadcn/ui components
+│   ├── Navbar.js                  # Navigation bar
+│   ├── Footer.js                  # Footer
+│   ├── EventCard.js               # Event card component
+│   ├── EventForm.js               # Event creation form
+│   ├── DynamicForm.js             # Dynamic form renderer
+│   ├── FormBuilder.js             # Form builder for admins
+│   ├── ProtectedRoute.js          # Auth wrapper
+│   └── ...GradientText.js         # Text styling components
+├── lib/
+│   ├── supabase/
+│   │   ├── client.js              # Client-side Supabase
+│   │   └── server.js              # Server-side Supabase
+│   ├── email.js                   # Email utility
+│   └── utils.js                   # Utility functions
+├── backend_test.py                # Backend testing script
+└── SUPABASE_SETUP.sql             # Database schema
+```
+
+## 🎯 Key Features Explained
+### Dynamic Form Builder
+Admins can create custom registration forms for each event:
+
+1. Go to Admin → Events → Click event → "Edit Form"
+2. Add fields: text, email, number, URL, dropdown, checkbox, textarea, date
+3. Set field properties (label, required, options for dropdown)
+4. Reorder fields using the "Move Up" / "Move Down" buttons.
+5. Auto-Save: Your work is automatically saved to your browser session. If you refresh, the form will still be there.
+6. Click "Save Form to Database" to make it final.
+
+### Club Profile Management
+Normal admins (non-super-admins) can visit the "Club Profile" link in the navbar.
+
+On this page, they can set their Club Name and Upload a Club Logo.
+
+This information is then displayed on the homepage and on all EventCard components for events they create.
+
+## 🔒 Security
+- Row Level Security (RLS) enabled on all tables
+- Authenticated-only access to admin features
+- Public read for `is_active` events
+- Service role key used only on server-side
+- CORS configured properly
+
+## 📊 Database Tables
+- `events`
+  - `id`, `title`, `description`, `banner_url`
+  - `event_date`, `is_active` (defaults to false)
+  - `registration_open`, `form_fields` (JSONB)
+  - `created_at`, `created_by` (FK to `auth.users`)
+- `participants`
+  - `id`, `event_id` (FK), `user_id` (FK)
+  - `responses` (JSONB) - stores form submission data
+  - `status` ('pending', 'approved', 'rejected')
+  - `created_at`, `reviewed_by`, `reviewed_at`
+- `admin_users`
+  - `user_id` (PK, FK to `auth.users`), `role` ('admin', 'super_admin')
+  - `club_name` (TEXT)
+  - `club_logo_url` (TEXT)
+- `contact_submissions`
+  - `id`, `name`, `email`, `message`, `created_at`
+- `profiles`
+  - `id` (PK, FK to `auth.users`), `name`, `phone_number`
+
+## 🐛 Troubleshooting
+- **"Relation does not exist" error**
+  - Make sure you ran `SUPABASE_SETUP.sql` in Supabase SQL Editor
+- **Can't login as admin**
+  - Create user in Supabase Dashboard → Authentication → Users
+  - Ensure the user's `user_id` is added to the `admin_users` table (this is not automatic).
+- **Images not uploading**
+  - Check storage buckets exist: `event-banners` and `club-logos`.
+
+## 🚀 Deployment
+### Vercel Deployment
+1. Push to GitHub
+2. Import project in Vercel
+3. Add environment variables from `.env.local`
+4. Deploy!
+
+## 🧪 Testing
+
+The project includes a Python script for testing the backend API endpoints.
+
+```bash
+# Run backend tests
+python backend_test.py
+```
+
+This script tests all CRUD operations, authentication flows (simulated), and error handling.
+
+## 📝 API Endpoints
+| Endpoint                 | Method | Description                                  |
+|--------------------------|--------|----------------------------------------------|
+| `/api/clubs`             | GET    | Get all clubs with profiles                  |
+| `/api/events`            | GET    | Get all events (add `?active=true` for public) |
+| `/api/events`            | POST   | Create event (Admin)                         |
+| `/api/events/:id`        | GET    | Get single event                             |
+| `/api/events/:id`        | PUT    | Update event (Admin)                         |
+| `/api/events/:id`        | DELETE | Delete event (Admin)                         |
+| `/api/participants`      | POST   | Register participant                         |
+| `/api/participants/:eventId` | GET    | Get event participants (Admin)               |
+| `/api/participants/pending` | GET    | Get pending registrations (Admin)            |
+| `/api/participants/count` | GET    | Get total participant count                  |
+| `/api/participants/:id/approve` | PUT    | Approve registration (Admin)                 |
+| `/api/participants/:id/reject` | PUT    | Reject registration (Admin)                  |
+| `/api/profile`           | GET    | Get user profile                             |
+| `/api/profile`           | PUT    | Update user profile                          |
+| `/api/contact`           | POST   | Submit contact form                          |
+
+## 🔄 Future Enhancements
+Potential features for future releases:
+
+
+- [ ] Certificate generation
+- [ ] Results/leaderboard system
+- [ ] Team management
+- [ ] Event check-in system
+- [ ] SMS notifications
 
 ## 📄 License
-MIT License
-
-_Last updated: December 2025_
+MIT License - Feel free to use for your club!
