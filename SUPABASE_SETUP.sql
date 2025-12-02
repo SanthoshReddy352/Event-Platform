@@ -177,6 +177,25 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- [FIX START] Helper Function for RLS to prevent recursion
+-- This function runs with elevated privileges (SECURITY DEFINER) to check
+-- participation without triggering the RLS policy on the participants table again.
+CREATE OR REPLACE FUNCTION public.is_event_participant(_event_id UUID)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1
+    FROM participants
+    WHERE event_id = _event_id
+    AND user_id = auth.uid()
+  );
+END;
+$$;
+-- [FIX END]
+
 -- ====================================================================
 -- 4. ROW LEVEL SECURITY (RLS) POLICIES
 -- ====================================================================
@@ -244,20 +263,16 @@ CREATE POLICY "Participants can be created by authenticated users"
     ON participants FOR INSERT
     WITH CHECK (auth.uid() IS NOT NULL);
 
--- This policy allows users to see ALL participants for events they are part of.
--- Essential for calculating "5/10 slots filled" and receiving Realtime updates.
+-- [FIX START] Updated Policy using the helper function
+-- This allows users to see ALL participants for events they are part of.
 CREATE POLICY "Participants can view event peers"
     ON participants FOR SELECT
     USING (
         (public.get_admin_role() IS NOT NULL) OR
         (user_id = auth.uid()) OR
-        (EXISTS (
-            SELECT 1
-            FROM participants AS p_check
-            WHERE p_check.event_id = participants.event_id
-            AND p_check.user_id = auth.uid()
-        ))
+        (public.is_event_participant(event_id)) -- Uses the non-recursive function
     );
+-- [FIX END]
 
 CREATE POLICY "Admins can update participants for events they own"
     ON participants FOR UPDATE
