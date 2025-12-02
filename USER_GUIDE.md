@@ -9,12 +9,13 @@ This guide provides participants with all the necessary information to navigate 
 Follow these simple steps to start engaging with events on EventX:
 
 1.  **Browse Events**: Visit the homepage or navigate to the `Events` section to view upcoming hackathons and tech events.
-2.  **Select Event**: Click on an event card to view its full details, including description, schedule, and venue.
-3.  **Register**: If registration is open, click the `Register` button to access the event's custom registration form.
-4.  **Complete Form**: Fill out all required fields accurately and upload any necessary documents.
-5.  **Submit Registration**: Review your submission and click `Submit`.
-6.  **Payment (If Applicable)**: If the event requires a fee, you will be redirected to a payment gateway (e.g., Razorpay) to complete the transaction. A payment confirmation will be displayed upon success.
-7.  **Await Approval**: Some events require manual approval. You will receive an email notification regarding the status of your registration (pending, approved, or rejected).
+2.  **Browse by Club**: You can also filter events by the club that posted them to find events from your favorite organizations.
+3.  **Select Event**: Click on an event card to view its full details, including description, schedule, and venue.
+4.  **Register**: If registration is open, click the `Register` button to access the event's custom registration form.
+5.  **Complete Form**: Fill out all required fields accurately and upload any necessary documents.
+6.  **Submit Registration**: Review your submission and click `Submit`.
+7.  **Payment (If Applicable)**: If the event requires a fee, you will be redirected to a payment gateway (e.g., Razorpay) to complete the transaction. A payment confirmation will be displayed upon success.
+8.  **Await Approval**: Some events require manual approval. You will receive an email notification regarding the status of your registration (pending, approved, or rejected).
 
 ---
 
@@ -59,4 +60,4 @@ If you encounter any issues or have questions:
 -   **General Support**: For platform-wide assistance or technical issues, please contact `support@eventx.com`.
 
 ---
-_Last updated: 2024-07-30_
+_Last updated: December 2025_

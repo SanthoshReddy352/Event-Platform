@@ -16,7 +16,7 @@
 
 ### 1. Database Migration (CRITICAL) ⚠️
 
-Run in Supabase SQL Editor:
+Run in Supabase SQL Editor (Note: These are already included in `SUPABASE_SETUP.sql`, but verify they exist):
 
 \`\`\`sql
 CREATE INDEX IF NOT EXISTS idx_participants_event_user ON participants(event_id, user_id);

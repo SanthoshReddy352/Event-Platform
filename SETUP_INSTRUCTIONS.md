@@ -63,7 +63,10 @@ Follow these steps to get EventX running on your local development machine:
     yarn dev
     # or npm run dev
     ```
+    ```
     Your application will be available at `http://localhost:3000`.
+    
+    *Note: The `dev` script uses `cross-env` to increase memory limit (`--max-old-space-size=512`) to prevent out-of-memory errors during development.*
 
 6.  **Create Admin Account**:
     -   Go to your Supabase Dashboard → `Authentication` → `Users`.
@@ -124,4 +127,4 @@ If you are using the Supabase Edge Function for email notifications (`send-email
 -   **Alerting**: Set up alerts in Vercel and Supabase for critical events such as high error rates, low storage, or database performance degradation.
 
 ---
-_Last updated: 2024-07-30_
+_Last updated: December 2025_

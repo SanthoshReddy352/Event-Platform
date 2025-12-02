@@ -276,4 +276,4 @@ After completing the setup, perform the following tests to verify email function
 -   [SendGrid Documentation](https://docs.sendgrid.com/)
 
 ---
-_Last updated: 2024-07-30_
+_Last updated: December 2025_

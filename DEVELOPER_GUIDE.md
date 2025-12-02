@@ -9,17 +9,19 @@ The EventX project follows a standard Next.js application structure with API rou
 ```
 /
 ├── app/                  # Next.js App Router root
-│   ├── (auth)/           # Authentication related routes (e.g., login, register)
-│   ├── admin/            # Admin dashboard and management pages
-│   │   ├── events/       # Event creation/editing, form builder
-│   │   └── participants/ # Participant management
-│   ├── events/           # Public event listing and detail pages
+│   ├── (main)/           # Main application layout group
+│   │   ├── admin/        # Admin dashboard and management pages
+│   │   ├── events/       # Public event listing and detail pages
+│   │   ├── contact/      # Contact page
+│   │   ├── profile/      # User profile page
+│   │   └── page.js       # Landing page
+│   ├── auth/             # Authentication routes (Login/Signup)
 │   ├── api/              # Next.js API Routes for backend logic
 │   │   └── [[...path]]/  # Catch-all API route handler
 │   ├── components/       # Reusable UI components
 │   ├── lib/              # Utility functions, Supabase client/server setup
 │   ├── styles/           # Global CSS and Tailwind configuration
-│   └── page.tsx          # Root public page
+│   └── layout.js         # Root layout
 ├── public/               # Static assets (images, favicon)
 ├── hooks/                # Custom React hooks
 ├── types/                # TypeScript type definitions
@@ -75,6 +77,8 @@ To set up the EventX project for local development:
     # or npm run dev
     ```
     The application will be accessible at `http://localhost:3000`.
+    
+    *Note: The `dev` script uses `cross-env` to increase memory limit (`--max-old-space-size=512`) to prevent out-of-memory errors during development.*
 
 6.  **Create Admin Account (Important):**
     -   Go to your Supabase Dashboard → **Authentication** → **Users**.
@@ -99,9 +103,7 @@ SENDGRID_API_KEY=SG...          # For SendGrid (alternative)
 # Supabase Edge Function URL (if deploying email function)
 NEXT_PUBLIC_SUPABASE_FUNCTION_URL=https://<your-project-id>.supabase.co/functions/v1/send-email
 ```
-# Supabase Edge Function URL (if deploying email function)
-NEXT_PUBLIC_SUPABASE_FUNCTION_URL=https://<your-project-id>.supabase.co/functions/v1/send-email
-```
+
 *Note: `NEXT_PUBLIC_` prefixed variables are exposed to the browser, others are server-side only.*
 
 **Note on Payment Keys:**
@@ -197,4 +199,4 @@ If utilizing the Supabase Edge Function for email notifications:
 -   **Dependency Audits**: Regularly check for vulnerabilities in project dependencies using tools like `npm audit` or `yarn audit`.
 
 ---
-_Last updated: 2024-07-30_
+_Last updated: December 2025_

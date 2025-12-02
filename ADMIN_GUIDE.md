@@ -134,4 +134,4 @@ For backend system administration, primarily managed via the Supabase Dashboard:
 -   **Auth**: Manage users and email templates in the Supabase Authentication section.
 
 ---
-_Last updated: 2024-07-30
+_Last updated: December 2025_
