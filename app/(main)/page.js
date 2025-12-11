@@ -145,7 +145,7 @@ export default function Home() {
                     style={{ display: "inline-block", marginRight: "0.5rem" }}
                   >
                     Event
-                    <span style={{ color: "rgb(26, 22, 22)" }}>X</span>
+                    <span style={{ color: "rgba(255, 253, 253, 1)" }}>X</span>
                   </motion.span>
                 );
               }

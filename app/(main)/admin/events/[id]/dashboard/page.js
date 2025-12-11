@@ -276,6 +276,13 @@ export default function AdminEventDashboard() {
                 <span>View Participants</span>
               </Button>
             </Link>
+
+            <Link href={`/admin/events/${event.id}/gallery`}>
+               <Button variant="outline" className="w-full h-20 flex flex-col gap-2">
+                 <Upload className="h-6 w-6" />
+                 <span>Manage Gallery</span>
+               </Button>
+             </Link>
           </CardContent>
         </Card>
       )}
@@ -325,6 +332,14 @@ export default function AdminEventDashboard() {
                 <FileText className="h-6 w-6 text-blue-500" />
                 <span className="font-semibold">Submissions</span>
                 <span className="text-xs text-gray-400">View Results</span>
+              </Button>
+            </Link>
+
+            <Link href={`/admin/events/${event.id}/gallery`}>
+              <Button variant="outline" className="w-full h-24 flex flex-col gap-2">
+                <Upload className="h-6 w-6 text-blue-500" />
+                <span className="font-semibold">Gallery</span>
+                <span className="text-xs text-gray-400">Event Photos</span>
               </Button>
             </Link>
           </CardContent>
@@ -384,6 +399,14 @@ export default function AdminEventDashboard() {
                   <FileText className="h-6 w-6 text-brand-red" />
                   <span className="font-semibold">View Submissions</span>
                   <span className="text-xs text-gray-400">Final projects</span>
+                </Button>
+              </Link>
+
+              <Link href={`/admin/events/${event.id}/gallery`}>
+                <Button variant="outline" className="w-full h-24 flex flex-col gap-2">
+                  <Upload className="h-6 w-6 text-brand-red" />
+                  <span className="font-semibold">Gallery</span>
+                  <span className="text-xs text-gray-400">Event Photos</span>
                 </Button>
               </Link>
             </CardContent>

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, Suspense, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { useParams, useRouter } from 'next/navigation'
 import DynamicForm from '@/components/DynamicForm'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card' 
@@ -105,6 +106,9 @@ function EventDetailContent() {
 
   // Form Data
   const [formData, setFormData] = useState({});
+
+  // Gallery Lightbox State
+  const [selectedImage, setSelectedImage] = useState(null)
 
   // --- 2. LOAD CACHE ON MOUNT (CLIENT ONLY) ---
   useEffect(() => {
@@ -506,6 +510,70 @@ function EventDetailContent() {
   
   const registrationContent = () => {
       if (isCompleted) {
+           if (event.gallery_images && event.gallery_images.length > 0) {
+               return (
+                   <div className="space-y-6">
+                       <Card>
+                          <CardHeader>
+                              <CardTitle>Event Gallery</CardTitle>
+                              <CardDescription>Highlights from the event</CardDescription>
+                          </CardHeader>
+                          <CardContent>
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                  {event.gallery_images.map((url, index) => (
+                                      <div key={index} className="relative aspect-video rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800 border cursor-pointer" onClick={() => setSelectedImage(url)}>
+                                          <img 
+                                              src={url} 
+                                              alt={`Event Gallery ${index + 1}`} 
+                                              className="w-full h-full object-cover transition-transform hover:scale-105"
+                                              loading="lazy"
+                                              referrerPolicy="no-referrer"
+                                          />
+                                      </div>
+                                  ))}
+                              </div>
+                          </CardContent>
+                       </Card>
+
+                       {/* Lightbox Overlay */}
+                       {/* Lightbox Overlay */}
+                       {selectedImage && typeof document !== 'undefined' && createPortal(
+                           <div 
+                               className="fixed inset-0 z-[9999] bg-black/95 flex items-center justify-center p-4 backdrop-blur-sm"
+                               onClick={() => setSelectedImage(null)}
+                           >
+                               {/* Close Button - Fixed Top Right */}
+                               <button 
+                                   onClick={() => setSelectedImage(null)} 
+                                   className="fixed top-4 right-4 text-white hover:text-red-500 transition-colors z-[10000] p-2 bg-black/50 rounded-full hover:bg-black/70"
+                                   aria-label="Close Preview"
+                               >
+                                   <XCircle size={40} />
+                               </button>
+
+                               <div className="relative w-full max-w-7xl max-h-[90vh] flex items-center justify-center">
+                                   <img 
+                                       src={selectedImage} 
+                                       alt="Gallery Fullscreen" 
+                                       className="w-auto h-auto max-w-full max-h-[90vh] object-contain rounded-md shadow-2xlSelect"
+                                       referrerPolicy="no-referrer"
+                                       onClick={(e) => e.stopPropagation()} 
+                                   />
+                               </div>
+                           </div>,
+                           document.body
+                       )}
+                       
+                       <Card>
+                           <CardContent className="py-6 text-center text-gray-500">
+                               <CheckCircle size={24} className="mx-auto mb-2 text-gray-400" />
+                               <p className="font-medium">Event Completed</p>
+                           </CardContent>
+                       </Card>
+                   </div>
+               )
+           }
+
            return (
               <Card>
                   <CardContent className="py-12 text-center text-gray-500">

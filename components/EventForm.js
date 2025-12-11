@@ -76,6 +76,9 @@ const mapDataToForm = (data) => ({
   submission_start: data.submission_start
     ? new Date(data.submission_start)
     : null,
+  submission_start: data.submission_start
+    ? new Date(data.submission_start)
+    : null,
   submission_end: data.submission_end ? new Date(data.submission_end) : null,
 });
 
@@ -96,6 +99,7 @@ const defaultFormState = {
   problem_selection_end: null,
   ppt_template_url: "",
   ppt_release_time: null,
+  submission_start: null,
   submission_start: null,
   submission_end: null,
 };
@@ -163,9 +167,22 @@ export default function EventForm({
 
   const handleChange = (e) => {
     const { name, value } = e.target;
+    
+    let finalValue = value;
+
+    // Google Drive Image Link Transformation for banner_url
+    if (name === 'banner_url') {
+      const driveRegex = /\/file\/d\/([-_\w]+)/;
+      const match = value.match(driveRegex);
+      if (match && match[1]) {
+        // Convert to lh3 direct link
+        finalValue = `https://lh3.googleusercontent.com/d/${match[1]}`;
+      }
+    }
+
     setFormData((prev) => ({
       ...prev,
-      [name]: value,
+      [name]: finalValue,
     }));
   };
 
@@ -366,6 +383,17 @@ export default function EventForm({
                 onChange={handleChange}
                 placeholder="https://example.com/my-banner.png"
               />
+              {formData.banner_url && (
+                <div className="mt-2 relative aspect-video w-full max-w-sm rounded-lg overflow-hidden border bg-gray-100">
+                  <img 
+                    src={formData.banner_url} 
+                    alt="Banner Preview" 
+                    className="w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
+                    onError={(e) => e.target.style.display = 'none'}
+                  />
+                </div>
+              )}
             </div>
           </div>
 
