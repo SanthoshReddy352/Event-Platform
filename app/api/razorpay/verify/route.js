@@ -75,6 +75,9 @@ export async function POST(request) {
           order_id: razorpay_order_id,
           payment_status: "paid",
           updated_at: new Date().toISOString(), // Track when they paid
+          
+          // [NEW] Store User Email
+          email: userDetails?.email, 
         },
         { onConflict: "event_id, user_id" } // Update if exists, Insert if new
       );

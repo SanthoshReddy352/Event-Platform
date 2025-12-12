@@ -12,8 +12,16 @@ import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
 import { 
   ArrowLeft, Plus, Trash2, Users, Loader2, 
-  Target, Lightbulb, Sparkles, AlertCircle
+  Target, Lightbulb, Sparkles, AlertCircle, Eye, Pencil
 } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog"
 import { toast } from 'sonner'
 import LastWordGradientText from '@/components/LastWordGradientText'
 import { useAuth } from '@/context/AuthContext'
@@ -100,7 +108,166 @@ function TipsCard() {
 // ============================================================================
 // Problem Card Component
 // ============================================================================
-function ProblemCard({ problem, onDelete, index }) {
+// ============================================================================
+// View Problem Modal
+// ============================================================================
+function ViewProblemModal({ problem, isOpen, onClose }) {
+  if (!problem) return null
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl bg-black/95 border-brand-red/20 max-h-[85vh] overflow-hidden flex flex-col">
+        <DialogHeader>
+          <DialogTitle className="text-2xl font-bold flex items-center gap-2">
+            <Target className="h-6 w-6 text-brand-red" />
+            {problem.title}
+          </DialogTitle>
+          <div className="flex items-center gap-2 mt-2">
+            <Badge variant="outline" className="text-brand-red border-brand-red/30 bg-brand-red/5">
+              <Users className="h-3 w-3 mr-1" />
+              Max Teams: {problem.max_selections}
+            </Badge>
+          </div>
+        </DialogHeader>
+        
+        <div className="flex-1 overflow-y-auto pr-2 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-brand-red/20 hover:[&::-webkit-scrollbar-thumb]:bg-brand-red/40 [&::-webkit-scrollbar-thumb]:rounded-full mt-4">
+          <div className="space-y-4 text-muted-foreground whitespace-pre-wrap leading-relaxed">
+            {problem.description}
+          </div>
+        </div>
+
+        <DialogFooter className="mt-6 border-t border-border/50 pt-4">
+            <Button onClick={onClose} variant="ghost">Close</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ============================================================================
+// Edit Problem Modal
+// ============================================================================
+function EditProblemModal({ problem, isOpen, onClose, onUpdate, eventId }) {
+  const { session } = useAuth()
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [formData, setFormData] = useState({
+    title: problem?.title || '',
+    description: problem?.description || '',
+    max_selections: problem?.max_selections || 1
+  })
+
+  // Update form data when problem changes
+  if (problem && formData.title !== problem.title && !isSubmitting) {
+      // This logic is slightly flawed for edits in progress if parent re-renders, 
+      // but fine for a simple modal that mounts/unmounts or relies on key.
+      // Better to use useEffect in a real component, or keying the modal.
+  }
+  
+  // Use a key on the component instance in parent to reset state, 
+  // or useEffect here. Let's use useEffect for safety.
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const [localProblemId, setLocalProblemId] = useState(problem?.id)
+  
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  if (problem?.id !== localProblemId) {
+      setFormData({
+        title: problem?.title || '',
+        description: problem?.description || '',
+        max_selections: problem?.max_selections || 1
+      })
+      setLocalProblemId(problem?.id)
+  }
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!formData.title) return
+
+    try {
+      setIsSubmitting(true)
+      const response = await fetchWithTimeout(`/api/events/${eventId}/problems/${problem.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`
+        },
+        body: JSON.stringify(formData),
+      })
+
+      const data = await response.json()
+      if (!data.success) throw new Error(data.error)
+
+      toast.success('Problem statement updated!')
+      onUpdate(data.data) // Pass back the updated problem
+      onClose()
+    } catch (error) {
+      console.error('Error updating problem:', error)
+      toast.error('Failed to update problem')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-xl bg-black/95 border-brand-red/20">
+        <DialogHeader>
+          <DialogTitle>Edit Problem Statement</DialogTitle>
+          <DialogDescription>Make changes to the problem details below.</DialogDescription>
+        </DialogHeader>
+        
+        <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-title">Problem Title <span className="text-brand-red">*</span></Label>
+              <Input 
+                id="edit-title"
+                value={formData.title}
+                onChange={(e) => setFormData({...formData, title: e.target.value})}
+                className="border-muted-foreground/20 focus:border-brand-red/50"
+                required
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="edit-desc">Description</Label>
+              <Textarea 
+                id="edit-desc"
+                rows={8}
+                value={formData.description}
+                onChange={(e) => setFormData({...formData, description: e.target.value})}
+                className="border-muted-foreground/20 focus:border-brand-red/50 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-brand-red/20 hover:[&::-webkit-scrollbar-thumb]:bg-brand-red/40 [&::-webkit-scrollbar-thumb]:rounded-full"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-limit">Selection Limit <span className="text-brand-red">*</span></Label>
+              <Input 
+                id="edit-limit"
+                type="number"
+                min="1"
+                value={formData.max_selections}
+                onChange={(e) => setFormData({...formData, max_selections: e.target.value})}
+                className="border-muted-foreground/20 focus:border-brand-red/50"
+                required
+              />
+            </div>
+
+            <DialogFooter>
+                <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>Cancel</Button>
+                <Button type="submit" className="bg-brand-gradient" disabled={isSubmitting}>
+                    {isSubmitting ? <Loader2 className="animate-spin h-4 w-4" /> : 'Save Changes'}
+                </Button>
+            </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ============================================================================
+// Problem Card Component
+// ============================================================================
+function ProblemCard({ problem, onDelete, onEdit, onView, index }) {
+
   const [isDeleting, setIsDeleting] = useState(false)
 
   const handleDelete = async () => {
@@ -131,19 +298,38 @@ function ProblemCard({ problem, onDelete, index }) {
               </div>
               <CardTitle className="text-lg font-bold">{problem.title}</CardTitle>
             </div>
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              className="text-muted-foreground hover:text-red-600 hover:bg-red-100/50 -mr-2 -mt-2 opacity-0 group-hover:opacity-100 transition-all duration-200"
-              onClick={handleDelete}
-              disabled={isDeleting}
-            >
-              {isDeleting ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Trash2 className="h-4 w-4" />
-              )}
-            </Button>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="text-muted-foreground hover:text-brand-red hover:bg-brand-red/10"
+                onClick={() => onView(problem)}
+                title="View Details"
+              >
+                <Eye className="h-4 w-4" />
+              </Button>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="text-muted-foreground hover:text-blue-500 hover:bg-blue-500/10"
+                onClick={() => onEdit(problem)}
+                title="Edit Problem"
+              >
+                <Pencil className="h-4 w-4" />
+              </Button>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="text-muted-foreground hover:text-red-600 hover:bg-red-100/50"
+                onClick={handleDelete}
+                disabled={isDeleting}
+                title="Delete Problem"
+              >
+                {isDeleting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4" />
+                )}
+              </Button>
           </div>
         </CardHeader>
         <CardContent className="space-y-3 relative">
@@ -291,7 +477,7 @@ function AddProblemForm({ eventId, onSuccess }) {
                 placeholder="e.g., AI for Healthcare"
                 value={newProblem.title}
                 onChange={(e) => setNewProblem({...newProblem, title: e.target.value})}
-                className="border-muted-foreground/20 focus:border-brand-red/50 transition-colors"
+                className="border-muted-foreground/20 focus:border-brand-red/50 transition-colors h-12 text-base"
                 required
               />
             </div>
@@ -301,10 +487,10 @@ function AddProblemForm({ eventId, onSuccess }) {
               <Textarea 
                 id="desc"
                 placeholder="Detailed explanation of the problem, expected outcomes, and any constraints..."
-                rows={4}
+                rows={10}
                 value={newProblem.description}
                 onChange={(e) => setNewProblem({...newProblem, description: e.target.value})}
-                className="border-muted-foreground/20 focus:border-brand-red/50 transition-colors resize-none"
+                className="border-muted-foreground/20 focus:border-brand-red/50 transition-colors text-base [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-brand-red/20 hover:[&::-webkit-scrollbar-thumb]:bg-brand-red/40 [&::-webkit-scrollbar-thumb]:rounded-full"
               />
             </div>
 
@@ -368,7 +554,15 @@ function AddProblemForm({ eventId, onSuccess }) {
 export default function ProblemsClient({ initialEvent, initialProblems }) {
   const { session } = useAuth()
   const router = useRouter()
+  /* State for Modals */
+  const [editingProblem, setEditingProblem] = useState(null)
+  const [viewingProblem, setViewingProblem] = useState(null)
   const [problems, setProblems] = useState(initialProblems)
+
+  /* Update problem in list after edit */
+  const handleUpdateSuccess = (updatedProblem) => {
+    setProblems(prev => prev.map(p => p.id === updatedProblem.id ? updatedProblem : p))
+  }
 
   // Calculate stats
   const totalProblems = problems.length
@@ -485,6 +679,8 @@ export default function ProblemsClient({ initialEvent, initialProblems }) {
                     key={problem.id} 
                     problem={problem} 
                     onDelete={handleDelete}
+                    onEdit={setEditingProblem}
+                    onView={setViewingProblem}
                     index={index}
                   />
                 ))}
@@ -493,6 +689,21 @@ export default function ProblemsClient({ initialEvent, initialProblems }) {
           )}
         </div>
       </div>
+
+      {/* Modals */}
+      <EditProblemModal 
+        isOpen={!!editingProblem}
+        onClose={() => setEditingProblem(null)}
+        problem={editingProblem}
+        eventId={initialEvent.id}
+        onUpdate={handleUpdateSuccess}
+      />
+      
+      <ViewProblemModal
+        isOpen={!!viewingProblem}
+        onClose={() => setViewingProblem(null)}
+        problem={viewingProblem}
+      />
 
       {/* Footer tip */}
       <motion.div

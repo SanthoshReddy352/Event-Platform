@@ -48,40 +48,52 @@ const getEventStatus = (event) => {
   const regEndDate = event.registration_end ? parseISO(event.registration_end) : null;
   const eventStartDate = event.event_date ? parseISO(event.event_date) : null;
 
+  // Check if event has completed
   if (eventEndDate && now > eventEndDate) {
-    return { text: 'Completed', color: 'bg-gray-500', icon: <CheckCircle size={16} /> };
+    return { text: 'Completed', color: 'bg-gray-500', icon: <CheckCircle size={16} />, registrationAllowed: false };
   }
   
   if (!event.is_active) {
-    return { text: 'Inactive', color: 'bg-gray-400' };
+    return { text: 'Inactive', color: 'bg-gray-400', registrationAllowed: false };
   }
 
   // Check if event is currently ongoing
-  if (eventStartDate && eventEndDate && now >= eventStartDate && now <= eventEndDate) {
-      return { text: 'Ongoing', color: 'bg-blue-600', icon: <Clock size={16} /> };
-  }
+  const isOngoing = eventStartDate && eventEndDate && now >= eventStartDate && now <= eventEndDate;
 
+  // Check registration status
   if (regStartDate && now < regStartDate) {
     return { 
       text: `Opens ${format(regStartDate, 'MMM dd')}`, 
       color: 'bg-blue-500',
-      icon: <FileClock size={16} />
+      icon: <FileClock size={16} />,
+      registrationAllowed: false
     };
   }
 
+  // Registration is closed if end date passed OR registration_open is false
   if ((regEndDate && now > regEndDate) || !event.registration_open) {
-    return { text: 'Registration Closed', color: 'bg-red-500', icon: <XCircle size={16} /> };
+    // If ongoing but registration closed, show ongoing status
+    if (isOngoing) {
+      return { text: 'Ongoing', color: 'bg-blue-600', icon: <Clock size={16} />, registrationAllowed: false };
+    }
+    return { text: 'Registration Closed', color: 'bg-red-500', icon: <XCircle size={16} />, registrationAllowed: false };
+  }
+
+  // Registration is open - check if event is ongoing or just in registration phase
+  if (isOngoing) {
+    // Event is ongoing AND registration is still open
+    return { text: 'Ongoing', color: 'bg-blue-600', icon: <Clock size={16} />, registrationAllowed: true };
   }
 
   if (regStartDate && regEndDate && now >= regStartDate && now < regEndDate && event.registration_open) {
-     return { text: 'Registration Open', color: 'bg-green-500', icon: <CheckCircle size={16} /> };
+     return { text: 'Registration Open', color: 'bg-green-500', icon: <CheckCircle size={16} />, registrationAllowed: true };
   }
   
   if (event.registration_open && !regStartDate && !regEndDate) {
-     return { text: 'Registration Open', color: 'bg-green-500', icon: <CheckCircle size={16} /> };
+     return { text: 'Registration Open', color: 'bg-green-500', icon: <CheckCircle size={16} />, registrationAllowed: true };
   }
 
-  return { text: 'Closed', color: 'bg-red-500', icon: <XCircle size={16} /> };
+  return { text: 'Closed', color: 'bg-red-500', icon: <XCircle size={16} />, registrationAllowed: false };
 }
 
 export default function EventClient({ initialEvent }) {
@@ -437,7 +449,7 @@ export default function EventClient({ initialEvent }) {
   
   const status = getEventStatus(event);
   const isCompleted = status.text === 'Completed';
-  const isRegistrationAvailable = status.color === 'bg-green-500';
+  const isRegistrationAvailable = status.registrationAllowed === true;
   
   const statusBadge = (
       <span 
@@ -542,7 +554,8 @@ export default function EventClient({ initialEvent }) {
       
       if (isRegistered) {
           if (registrationStatus === 'approved') {
-              const isHackathon = event.event_type === 'hackathon';
+              const eventType = (event.event_type || '').toLowerCase();
+              const isHackathon = eventType === 'hackathon';
               const now = new Date();
               const scopeStartTime = event.problem_selection_start 
                   ? parseISO(event.problem_selection_start) 
@@ -583,7 +596,7 @@ export default function EventClient({ initialEvent }) {
                             </div>
                           )}
 
-                          {event.event_type === 'mcq' && (
+                          {(eventType === 'mcq' || eventType === 'quiz') && (
                             <div className="mt-6 pt-4 border-t border-border">
                                 {(() => {
                                     const quizStartTime = event.submission_start ? parseISO(event.submission_start) : null;

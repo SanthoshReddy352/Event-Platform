@@ -780,6 +780,7 @@ export async function POST(request) {
         user_id: participantUserId,
         responses: body.responses,
         status: "approved",
+        email: user.email, // [NEW] Store User Email
       };
 
       console.log(`[Participans API] Attempting registration for Event: ${body.event_id}, Key User: ${participantUserId}`);

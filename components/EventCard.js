@@ -37,7 +37,7 @@ const formatEventDate = (start, end, timeZone) => {
   return `${startDate} ${startTime} - ${endDate} ${endTime} ${tz}`;
 }
 
-// Helper function to get event status (unchanged)
+// Helper function to get event status (updated to handle ongoing events with open registration)
 const getEventStatus = (event) => {
   const now = new Date();
   const eventEndDate = event.event_end_date ? parseISO(event.event_end_date) : null;
@@ -45,6 +45,7 @@ const getEventStatus = (event) => {
   const regEndDate = event.registration_end ? parseISO(event.registration_end) : null;
   const eventStartDate = event.event_date ? parseISO(event.event_date) : null;
 
+  // Check if event has completed
   if (eventEndDate && now > eventEndDate) {
     return { text: 'Completed', color: 'bg-gray-500', icon: <CheckCircle size={16} /> };
   }
@@ -54,10 +55,9 @@ const getEventStatus = (event) => {
   }
 
   // Check if event is currently ongoing
-  if (eventStartDate && eventEndDate && now >= eventStartDate && now <= eventEndDate) {
-      return { text: 'Ongoing', color: 'bg-blue-600', icon: <Clock size={16} /> };
-  }
+  const isOngoing = eventStartDate && eventEndDate && now >= eventStartDate && now <= eventEndDate;
 
+  // Check registration status
   if (regStartDate && now < regStartDate) {
     return { 
       text: `Opens ${format(regStartDate, 'MMM dd')}`, 
@@ -66,8 +66,19 @@ const getEventStatus = (event) => {
     };
   }
 
+  // Registration is closed if end date passed OR registration_open is false
   if ((regEndDate && now > regEndDate) || !event.registration_open) {
+    // If ongoing but registration closed, show ongoing status
+    if (isOngoing) {
+      return { text: 'Ongoing', color: 'bg-blue-600', icon: <Clock size={16} /> };
+    }
     return { text: 'Registration Closed', color: 'bg-red-500', icon: <XCircle size={16} /> };
+  }
+
+  // Registration is open - check if event is ongoing or just in registration phase
+  if (isOngoing) {
+    // Event is ongoing AND registration is still open
+    return { text: 'Ongoing', color: 'bg-blue-600', icon: <Clock size={16} /> };
   }
 
   if (regStartDate && regEndDate && now >= regStartDate && now < regEndDate && event.registration_open) {
