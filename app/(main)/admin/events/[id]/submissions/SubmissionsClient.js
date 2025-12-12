@@ -353,7 +353,7 @@ export default function SubmissionsClient({
                             <div className="flex items-center gap-2">
                               <Mail size={14} className="text-muted-foreground" />
                               <span className="truncate max-w-[180px]">
-                                {submission.participant_email || 'N/A'}
+                                {submission.participant_email || submission.email || 'N/A'}
                               </span>
                             </div>
                           </TableCell>

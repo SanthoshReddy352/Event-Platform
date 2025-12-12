@@ -62,10 +62,31 @@ export default async function SubmissionsPage({ params }) {
     .eq('event_id', params.id)
     .order('submitted_at', { ascending: false })
 
-  // 6. Filter for participants who have submitted
+  // 6. Enrich Participants with Email from Auth (if available)
+  if (allParticipants && allParticipants.length > 0) {
+      const userIds = allParticipants.map(p => p.user_id).filter(Boolean);
+      
+      // Fetch Auth Users (Emails) - Limit 1000 for now to be safe
+      const { data: { users }, error: usersError } = await supabaseAdmin.auth.admin.listUsers({
+          page: 1,
+          perPage: 1000
+      });
+
+      const emailMap = {};
+      if (users) {
+          users.forEach(u => { emailMap[u.id] = u.email; });
+      }
+
+      allParticipants.forEach(p => {
+          // Prefer auth email, fallback to response email
+          p.participant_email = emailMap[p.user_id] || p.responses?.['Email'] || p.responses?.['email'] || 'N/A';
+      });
+  }
+
+  // 7. Filter for participants who have submitted
   const submissions = allParticipants?.filter(p => p.submitted_at && p.submission_data) || []
 
-  // 7. Calculate Stats
+  // 8. Calculate Stats
   const now = new Date()
   const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000)
   
@@ -74,14 +95,14 @@ export default async function SubmissionsPage({ params }) {
     recent24h: submissions.filter(s => new Date(s.submitted_at) > twentyFourHoursAgo).length
   }
 
-  // 8. Extract Dynamic Fields from Event Submission Form Fields
+  // 9. Extract Dynamic Fields from Event Submission Form Fields
   const formFields = event.submission_form_fields || []
   const dynamicFields = formFields.map(f => ({
     label: f.label,
     key: f.id
   }))
 
-  // 9. Render Client Component with SSR Data
+  // 10. Render Client Component with SSR Data
   return (
     <SubmissionsClient 
       event={event} 

@@ -118,7 +118,7 @@ export default function QuizClient({
     
     const timer = setTimeout(() => {
       saveProgress();
-    }, 2000);
+    }, 120000); // Debounce increased to 2 minutes to prevent DB storm
 
     return () => clearTimeout(timer);
   }, [answers, markedForReview, session, submitting]);
@@ -140,7 +140,12 @@ export default function QuizClient({
   // Auto-submit when time runs out
   useEffect(() => {
     if (timeLeft === 0 && !submitting) {
-      handleSubmit();
+      // Add random jitter (0-10s) to prevent thundering herd on DB
+      const delay = Math.random() * 10000;
+      const timer = setTimeout(() => {
+        handleSubmit();
+      }, delay);
+      return () => clearTimeout(timer);
     }
   }, [timeLeft, submitting]);
 
