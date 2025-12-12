@@ -1,205 +1,221 @@
-'use client'
-
-import { useEffect, useState, useRef } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import ProtectedRoute from '@/components/ProtectedRoute'
+import { redirect } from 'next/navigation'
 import GradientText from '@/components/GradientText'
-import { supabase } from '@/lib/supabase/client'
+import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Calendar, Users, LogOut, TrendingUp } from 'lucide-react'
-import { useAuth } from '@/context/AuthContext'
+import { Calendar, Users, LogOut, TrendingUp, ShieldCheck, Activity } from 'lucide-react'
 import LastWordGradientText from '@/components/LastWordGradientText'
+import ClientLogoutButton from '@/components/admin/ClientLogoutButton' // We'll need to create this
 
-function AdminDashboardContent() {
-  const router = useRouter()
-  const { user, isSuperAdmin } = useAuth()
-  const [stats, setStats] = useState({
+export const metadata = {
+  title: 'Admin Dashboard | EventX',
+  description: 'Manage events and participants',
+}
+
+export default async function AdminDashboard() {
+  const supabase = createClient()
+  
+  // 1. Auth Check
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
+    redirect('/login')
+  }
+
+  // 2. Fetch Admin Role
+  const { data: adminUser } = await supabase
+    .from('admin_users')
+    .select('role')
+    .eq('user_id', user.id)
+    .maybeSingle()
+  
+  const role = adminUser?.role
+  const isSuperAdmin = role === 'super_admin'
+  
+  if (!role || (role !== 'admin' && role !== 'super_admin')) {
+    redirect('/') // Not an admin
+  }
+
+  // 3. Fetch Events & Stats
+  // We mirror the optimized logic from /api/events route but run it here on the server
+  let query = supabase
+    .from("events")
+    .select("id, is_active, event_end_date, created_by")
+  
+  // Regular admins only see their own events for "My Events" count
+  // But for "Total Events" system-wide stats, we might want to restrict plain admins?
+  // The original client code did:
+  // myEvents = isSuperAdmin ? allEvents : filter(created_by === me)
+  // stats.myEvents = myEvents.length
+  // stats.activeEvents = myEvents.filter(isActive).length
+  // So standard admins ONLY saw stats for THEIR events. Let's keep that safely.
+  
+  if (!isSuperAdmin) {
+    query = query.eq('created_by', user.id)
+  }
+
+  const { data: events, error } = await query
+  
+  let stats = {
     totalEvents: 0,
     activeEvents: 0,
     totalParticipants: 0,
-    myEvents: 0, // For normal admins
-  })
-  const [loading, setLoading] = useState(true)
-
-  // Cache ref
-  const cache = useRef({ data: null, timestamp: 0 })
-
-  useEffect(() => {
-    if (user) {
-      fetchUserAndStats()
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, isSuperAdmin])
-
-  const fetchUserAndStats = async () => {
-    // Check cache (valid for 5 minutes)
-    const now = Date.now();
-    if (cache.current.data && (now - cache.current.timestamp < 300000)) {
-         setStats(cache.current.data);
-         setLoading(false);
-         return;
-    }
-
-    setLoading(true)
-    try {
-      const { data: { session } } = await supabase.auth.getSession()
-      
-      const eventsRes = await fetch('/api/events')
-      const eventsData = await eventsRes.json()
-
-      if (eventsData.success) {
-        const allEvents = eventsData.events
-        
-        const myEvents = isSuperAdmin 
-          ? allEvents 
-          : allEvents.filter(e => e.created_by === user.id)
-        
-        const now = new Date();
-        const activeEventsList = myEvents.filter(e => {
-          const eventEndDate = e.event_end_date ? new Date(e.event_end_date) : null;
-          const isCompleted = eventEndDate && now > eventEndDate;
-          return e.is_active && !isCompleted; 
-        });
-        
-        // Sum the pre-calculated approved_count from the API
-        const totalParticipants = myEvents.reduce((acc, event) => {
-          return acc + (event.approved_count || 0);
-        }, 0);
-
-        const newStats = {
-          totalEvents: allEvents.length,
-          activeEvents: activeEventsList.length,
-          totalParticipants, 
-          myEvents: myEvents.length,
-        };
-
-        setStats(newStats);
-        
-        // Update cache
-        cache.current = { data: newStats, timestamp: now };
-      }
-    } catch (error) {
-      console.error('Error fetching stats:', error)
-    } finally {
-      setLoading(false)
-    }
+    myEvents: 0
   }
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut()
-    router.push('/')
-  }
+  if (events) {
+    const now = new Date()
+    
+    // Calculate Active Events
+    const activeEventsList = events.filter(e => {
+        const eventEndDate = e.event_end_date ? new Date(e.event_end_date) : null;
+        // Logic: Must be marked is_active AND (no end date OR end date is in future)
+        const isExpired = eventEndDate && now > eventEndDate;
+        return e.is_active && !isExpired; 
+    })
 
-  if (loading) {
-    return (
-      <div className="container mx-auto px-4 py-12">
-        <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-brand-red"></div>
-          <p className="mt-4 text-gray-400">Loading dashboard...</p>
-        </div>
-      </div>
-    )
+    // Calculate Total Participants
+    // We need a separate query for this to be accurate and fast
+    // Using the RPC if available is best, or a simple count query
+    // Since we are iterating, let's just count participants for these events
+    const eventIds = events.map(e => e.id)
+    let totalParticipants = 0
+    
+    if (eventIds.length > 0) {
+        // Use RPC if possible, else simple count
+        // For simplicity and speed in this refactor, let's use the efficient count query
+        const { count } = await supabase
+            .from('participants')
+            .select('*', { count: 'exact', head: true })
+            .in('event_id', eventIds)
+            // .eq('status', 'approved') // Optionally only count approved? original code summed 'approved_count'
+            // The original logic summed `approved_count` from api, which usually implies approved.
+            // Let's count all or just approved? Let's match original intent: "Total Registrations" usually means all attempts or approved?
+            // "Total Registrations" usually implies distinct signups.
+            // Let's count *approved* to be safe and consistent with "participants" meaning "people attending".
+            .eq('status', 'approved') 
+            
+        totalParticipants = count || 0
+    }
+
+    stats = {
+      totalEvents: events.length, // This is effectively "My Events" for regular admins, or "All" for super
+      activeEvents: activeEventsList.length,
+      totalParticipants: totalParticipants,
+      myEvents: events.length
+    }
   }
 
   return (
-    <div className="container mx-auto px-4 py-12">
-      <div className="flex justify-between items-center mb-8">
+    <div className="container mx-auto px-4 py-12 min-h-screen">
+      {/* Header Section */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-12 gap-4">
         <div>
-          <h1 className="text-4xl font-bold" data-testid="admin-dashboard-title">
+          <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight mb-2">
             <LastWordGradientText>{isSuperAdmin ? 'Super Admin Dashboard' : 'Admin Dashboard'}</LastWordGradientText>
           </h1>
-          <p className="text-gray-400 mt-2">Welcome back, {user?.email}</p>
-          {isSuperAdmin && (
-            <p className="text-sm text-brand-orange font-medium mt-1">You have full system access</p>
-          )}
+          <div className="flex items-center gap-2 text-gray-400">
+             <ShieldCheck size={16} className={isSuperAdmin ? "text-brand-orange" : "text-blue-400"} />
+             <span>Welcome back, <span className="font-semibold text-gray-200">{user.email}</span></span>
+          </div>
         </div>
-        <Button onClick={handleLogout} variant="outline" data-testid="logout-button">
-          <LogOut size={20} className="mr-2" />
-          Logout
-        </Button>
+        
+        {/* Client Component for Logout to handle client-side router */}
+        <ClientLogoutButton /> 
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-        <Card data-testid="stat-my-events">
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
+        <Card className="border-gray-800 bg-black/40 backdrop-blur-md hover:bg-black/60 transition-all duration-300 group">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">
-              <LastWordGradientText>{isSuperAdmin ? 'All Events' : 'My Events'}</LastWordGradientText>
+            <CardTitle className="text-sm font-medium text-gray-400 group-hover:text-white transition-colors">
+              {isSuperAdmin ? 'Total System Events' : 'My Events'}
             </CardTitle>
-            <Calendar className="text-brand-orange" size={20} />
+            <Calendar className="text-brand-orange group-hover:scale-110 transition-transform duration-300" size={20} />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{stats.myEvents}</div>
-            <p className="text-xs text-gray-400 mt-1">
-              <LastWordGradientText>{isSuperAdmin ? 'System-wide' : 'Created by you'}</LastWordGradientText>
+            <div className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">
+                {stats.myEvents}
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              {isSuperAdmin ? 'Managed across the platform' : 'Created by you'}
             </p>
           </CardContent>
         </Card>
 
-        <Card data-testid="stat-active-events">
+        <Card className="border-gray-800 bg-black/40 backdrop-blur-md hover:bg-black/60 transition-all duration-300 group">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium"><LastWordGradientText>Active Events</LastWordGradientText></CardTitle>
-            <TrendingUp className="text-green-500" size={20} />
+            <CardTitle className="text-sm font-medium text-gray-400 group-hover:text-white transition-colors">
+              Active Events
+            </CardTitle>
+            <Activity className="text-green-400 group-hover:scale-110 transition-transform duration-300" size={20} />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{stats.activeEvents}</div>
-            <p className="text-xs text-gray-400 mt-1"><LastWordGradientText>Currently running</LastWordGradientText></p>
+             <div className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-green-400 to-emerald-600">
+                {stats.activeEvents}
+            </div>
+            <p className="text-xs text-gray-500 mt-1">Currently live & running</p>
           </CardContent>
         </Card>
 
-        <Card data-testid="stat-total-participants">
+        <Card className="border-gray-800 bg-black/40 backdrop-blur-md hover:bg-black/60 transition-all duration-300 group">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium"><LastWordGradientText>Total Registrations</LastWordGradientText></CardTitle>
-            <Users className="text-purple-400" size={20} />
+            <CardTitle className="text-sm font-medium text-gray-400 group-hover:text-white transition-colors">
+              Total Registrations
+            </CardTitle>
+            <Users className="text-purple-400 group-hover:scale-110 transition-transform duration-300" size={20} />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{stats.totalParticipants}</div>
-            <p className="text-xs text-gray-400 mt-1"><LastWordGradientText>Total participants</LastWordGradientText></p>
+             <div className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-pink-600">
+                {stats.totalParticipants}
+            </div>
+            <p className="text-xs text-gray-500 mt-1">Confirmed participants</p>
           </CardContent>
         </Card>
       </div>
+
+      {/* Quick Actions */}
+      <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
+          <TrendingUp className="text-brand-red" size={24} />
+          <span className="text-white">Quick Actions</span>
+      </h2>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
-        <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => router.push('/admin/events')} data-testid="manage-events-card">
-          <CardHeader>
-            <CardTitle><LastWordGradientText>Manage Events</LastWordGradientText></CardTitle>
-            <CardDescription>
-              Create, edit, and delete events. Build custom registration forms.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Link href="/admin/events">
-              <Button className="bg-brand-gradient text-white font-semibold hover:opacity-90 transition-opacity" data-testid="go-to-events-button">Go to Events</Button>
-            </Link>
-          </CardContent>
-        </Card>
-
-        <Card className="hover:shadow-lg transition-shadow" data-testid="view-participants-card">
-          <CardHeader>
-            <CardTitle><LastWordGradientText>View Participants</LastWordGradientText></CardTitle>
-            <CardDescription>
-              See all registrations and export data to CSV.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-gray-400 mb-4">
-              Select an event from the events page to view its participants
-            </p>
-            <Link href="/admin/events">
-              <Button variant="outline" data-testid="select-event-button">Select Event</Button>
-            </Link>
-          </CardContent>
-        </Card>
+        <Link href="/admin/events" className="block group">
+            <Card className="h-full border-gray-800 bg-gradient-to-br from-gray-900 to-black hover:from-gray-800 hover:to-gray-900 transition-all duration-300 hover:shadow-xl hover:shadow-brand-red/10 border-l-4 border-l-brand-red">
+            <CardHeader>
+                <CardTitle className="text-xl group-hover:text-brand-red transition-colors">Manage Events</CardTitle>
+                <CardDescription className="text-gray-400">
+                Create, edit, and delete events. Build custom registration forms and manage event lifecycles.
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                <div className="flex items-center text-sm font-semibold text-brand-red mt-2">
+                    Access Event Control <span className="ml-2 group-hover:translate-x-1 transition-transform">→</span>
+                </div>
+            </CardContent>
+            </Card>
+        </Link>
+        
+         {/* Note: The old 'View Participants' card was just a shallow link to events page anyway. 
+             If we want distinct functionality, we can link to a participants summary, but linking to events is fine.
+             Let's make it look distinct. */}
+        <Link href="/admin/events" className="block group">
+            <Card className="h-full border-gray-800 bg-gradient-to-br from-gray-900 to-black hover:from-gray-800 hover:to-gray-900 transition-all duration-300 hover:shadow-xl hover:shadow-blue-500/10 border-l-4 border-l-blue-500">
+            <CardHeader>
+                <CardTitle className="text-xl group-hover:text-blue-400 transition-colors">View Participants</CardTitle>
+                <CardDescription className="text-gray-400">
+                See all registrations, approve/reject candidates, and export data.
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                 <div className="flex items-center text-sm font-semibold text-blue-400 mt-2">
+                    View Data <span className="ml-2 group-hover:translate-x-1 transition-transform">→</span>
+                </div>
+            </CardContent>
+            </Card>
+        </Link>
       </div>
     </div>
-  )
-}
-
-export default function AdminDashboard() {
-  return (
-    <ProtectedRoute>
-      <AdminDashboardContent />
-    </ProtectedRoute>
   )
 }

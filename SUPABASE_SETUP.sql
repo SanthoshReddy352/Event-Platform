@@ -286,6 +286,10 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_publication_rel WHERE prpubid = (SELECT oid FROM pg_publication WHERE pubname = 'supabase_realtime') AND prrelid = 'participants'::regclass) THEN
         ALTER PUBLICATION supabase_realtime ADD TABLE participants;
     END IF;
+    -- [NEW] Add events table to realtime for live status updates
+    IF NOT EXISTS (SELECT 1 FROM pg_publication_rel WHERE prpubid = (SELECT oid FROM pg_publication WHERE pubname = 'supabase_realtime') AND prrelid = 'events'::regclass) THEN
+        ALTER PUBLICATION supabase_realtime ADD TABLE events;
+    END IF;
 END $$;
 
 INSERT INTO storage.buckets (id, name, public) VALUES ('event-banners', 'event-banners', true) ON CONFLICT (id) DO NOTHING;

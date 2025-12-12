@@ -127,6 +127,63 @@ export async function GET(request) {
       return NextResponse.json({ success: true, cleaned: 0 }, { headers: corsHeaders });
     }
 
+    // [NEW] ROUTE: Update expired events - automatically close registrations and deactivate events
+    // This uses the update_all_expired_events RPC function for realtime-compatible updates
+    if (segments[0] === "cron" && segments[1] === "update-events") {
+      try {
+        // Call the RPC function to update all expired events
+        const { data: updatedEvents, error: rpcError } = await supabaseAdmin
+          .rpc('update_all_expired_events');
+        
+        if (rpcError) {
+          // If RPC doesn't exist, fall back to direct update
+          console.log("[CRON] RPC not found, using direct update:", rpcError.message);
+          
+          const now = new Date().toISOString();
+          
+          // Update registration_open for events where registration_end has passed
+          const { data: regClosed, error: regError } = await supabaseAdmin
+            .from("events")
+            .update({ registration_open: false, updated_at: now })
+            .lt("registration_end", now)
+            .eq("registration_open", true)
+            .select("id, title");
+          
+          // Update is_active for events where event_end_date has passed
+          const { data: eventsDeactivated, error: activeError } = await supabaseAdmin
+            .from("events")
+            .update({ is_active: false, updated_at: now })
+            .lt("event_end_date", now)
+            .eq("is_active", true)
+            .select("id, title");
+          
+          return NextResponse.json({ 
+            success: true, 
+            method: "direct_update",
+            registrations_closed: regClosed?.length || 0,
+            events_deactivated: eventsDeactivated?.length || 0,
+            details: {
+              registration_closed: regClosed || [],
+              events_deactivated: eventsDeactivated || []
+            }
+          }, { headers: corsHeaders });
+        }
+        
+        return NextResponse.json({ 
+          success: true, 
+          method: "rpc",
+          updated_events: updatedEvents?.length || 0,
+          details: updatedEvents || []
+        }, { headers: corsHeaders });
+      } catch (err) {
+        console.error("[CRON] Update events error:", err);
+        return NextResponse.json({ 
+          success: false, 
+          error: err.message 
+        }, { status: 500, headers: corsHeaders });
+      }
+    }
+
     // GET /api/clubs
     if (segments[0] === "clubs" && !segments[1]) {
       const { data, error } = await supabaseAdmin

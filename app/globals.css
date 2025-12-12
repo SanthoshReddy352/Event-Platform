@@ -3,132 +3,176 @@
 @tailwind utilities;
 
 body {
-    margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
-        "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans",
-        "Helvetica Neue", sans-serif;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
+    "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans",
+    "Helvetica Neue", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 code {
-    font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New",
-        monospace;
+  font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New",
+    monospace;
 }
 
 .App {
-    text-align: center;
+  text-align: center;
 }
 
 .App-logo {
-    height: 40vmin;
-    pointer-events: none;
+  height: 40vmin;
+  pointer-events: none;
 }
 
 @media (prefers-reduced-motion: no-preference) {
-    .App-logo {
-        animation: App-logo-spin infinite 20s linear;
-    }
+  .App-logo {
+    animation: App-logo-spin infinite 20s linear;
+  }
 }
 
 .App-header {
-    background-color: #0f0f10;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    font-size: calc(10px + 2vmin);
-    color: white;
+  background-color: #0f0f10;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(10px + 2vmin);
+  color: white;
 }
 
 .App-link {
-    color: #61dafb;
+  color: #61dafb;
 }
 
 @keyframes App-logo-spin {
-    from {
-        transform: rotate(0deg);
-    }
-    to {
-        transform: rotate(360deg);
-    }
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 
 
 @layer base {
   :root {
-        /* Base (light) theme - Red/White */
-        --background: 0 0% 100%; /* white */
-        --foreground: 0 0% 3.9%; /* black */
-        --card: 0 0% 100%; /* white */
-        --card-foreground: 0 0% 3.9%; /* black */
-        --popover: 0 0% 100%; /* white */
-        --popover-foreground: 0 0% 3.9%; /* black */
-        --primary: 0 100% 60.2%; /* #ff3131 */
-        --primary-foreground: 0 0% 100%; /* white */
-        --secondary: 0 0% 96.1%; /* light grey */
-        --secondary-foreground: 0 0% 9%; /* dark grey */
-        --muted: 0 0% 96.1%; /* light grey */
-        --muted-foreground: 0 0% 45.1%; /* medium grey */
-        --accent: 0 0% 96.1%; /* light grey */
-        --accent-foreground: 0 0% 9%; /* dark grey */
-        --destructive: 0 100% 60.2%; /* #ff3131 */
-        --destructive-foreground: 0 0% 100%; /* white */
-        --border: 0 0% 89.8%; /* light grey border */
-        --input: 0 0% 89.8%; /* light grey input */
-        --ring: 0 100% 60.2%; /* #ff3131 */
-        --chart-1: 0 100% 60.2%;
-        --chart-2: 24 100% 64.9%; /* #ff914d */
-        --chart-3: 0 0% 63.9%;
-        --chart-4: 0 0% 3.9%;
-        --chart-5: 0 0% 83.1%;
-        --radius: 0.5rem;
-        --sidebar-background: 0 0% 98%;
-        --sidebar-foreground: 240 5.3% 26.1%;
-        --sidebar-primary: 0 100% 60.2%;
-        --sidebar-primary-foreground: 0 0% 98%;
-        --sidebar-accent: 240 4.8% 95.9%;
-        --sidebar-accent-foreground: 240 5.9% 10%;
-        --sidebar-border: 220 13% 91%;
-        --sidebar-ring: 0 100% 60.2%;
-    }
+    /* Base (light) theme - Red/White */
+    --background: 0 0% 100%;
+    /* white */
+    --foreground: 0 0% 3.9%;
+    /* black */
+    --card: 0 0% 100%;
+    /* white */
+    --card-foreground: 0 0% 3.9%;
+    /* black */
+    --popover: 0 0% 100%;
+    /* white */
+    --popover-foreground: 0 0% 3.9%;
+    /* black */
+    --primary: 0 100% 60.2%;
+    /* #ff3131 */
+    --primary-foreground: 0 0% 100%;
+    /* white */
+    --secondary: 0 0% 96.1%;
+    /* light grey */
+    --secondary-foreground: 0 0% 9%;
+    /* dark grey */
+    --muted: 0 0% 96.1%;
+    /* light grey */
+    --muted-foreground: 0 0% 45.1%;
+    /* medium grey */
+    --accent: 0 0% 96.1%;
+    /* light grey */
+    --accent-foreground: 0 0% 9%;
+    /* dark grey */
+    --destructive: 0 100% 60.2%;
+    /* #ff3131 */
+    --destructive-foreground: 0 0% 100%;
+    /* white */
+    --border: 0 0% 89.8%;
+    /* light grey border */
+    --input: 0 0% 89.8%;
+    /* light grey input */
+    --ring: 0 100% 60.2%;
+    /* #ff3131 */
+    --chart-1: 0 100% 60.2%;
+    --chart-2: 24 100% 64.9%;
+    /* #ff914d */
+    --chart-3: 0 0% 63.9%;
+    --chart-4: 0 0% 3.9%;
+    --chart-5: 0 0% 83.1%;
+    --radius: 0.5rem;
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 0 100% 60.2%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 0 100% 60.2%;
+  }
+
   .dark {
-        /* Dark theme - Black/White/Red-Orange */
-        --background: 0 0% 0%; /* black */
-        --foreground: 0 0% 100%; /* white */
-        --card: 240 4% 8%; /* very dark grey (near black) */
-        --card-foreground: 0 0% 98%; /* near white */
-        --popover: 0 0% 0%; /* black */
-        --popover-foreground: 0 0% 100%; /* white */
-        --primary: 0 100% 60.2%; /* #ff3131 */
-        --primary-foreground: 0 0% 100%; /* white */
-        --secondary: 240 4% 10%; /* dark grey */
-        --secondary-foreground: 0 0% 98%; /* near white */
-        --muted: 240 4% 10%; /* dark grey */
-        --muted-foreground: 240 5% 65%; /* lighter grey */
-        --accent: 240 4% 10%; /* dark grey */
-        --accent-foreground: 0 0% 98%; /* near white */
-        --destructive: 0 100% 60.2%; /* #ff3131 */
-        --destructive-foreground: 0 0% 100%; /* white */
-        --border: 240 4% 20%; /* dark grey border */
-        --input: 240 4% 20%; /* dark grey input */
-        --ring: 0 100% 60.2%; /* #ff3131 */
-        --chart-1: 0 100% 60.2%;
-        --chart-2: 24 100% 64.9%; /* #ff914d */
-        --chart-3: 0 0% 83.1%;
-        --chart-4: 0 0% 100%;
-        --chart-5: 0 0% 30%;
-        --sidebar-background: 0 0% 0%; /* black */
-        --sidebar-foreground: 0 0% 95.9%; /* near white */
-        --sidebar-primary: 0 100% 60.2%;
-        --sidebar-primary-foreground: 0 0% 100%;
-        --sidebar-accent: 240 4% 10%;
-        --sidebar-accent-foreground: 0 0% 95.9%;
-        --sidebar-border: 240 4% 20%;
-        --sidebar-ring: 0 100% 60.2%;
-    }
+    /* Dark theme - Black/White/Red-Orange */
+    --background: 0 0% 0%;
+    /* black */
+    --foreground: 0 0% 100%;
+    /* white */
+    --card: 240 4% 8%;
+    /* very dark grey (near black) */
+    --card-foreground: 0 0% 98%;
+    /* near white */
+    --popover: 0 0% 0%;
+    /* black */
+    --popover-foreground: 0 0% 100%;
+    /* white */
+    --primary: 0 100% 60.2%;
+    /* #ff3131 */
+    --primary-foreground: 0 0% 100%;
+    /* white */
+    --secondary: 240 4% 10%;
+    /* dark grey */
+    --secondary-foreground: 0 0% 98%;
+    /* near white */
+    --muted: 240 4% 10%;
+    /* dark grey */
+    --muted-foreground: 240 5% 65%;
+    /* lighter grey */
+    --accent: 240 4% 10%;
+    /* dark grey */
+    --accent-foreground: 0 0% 98%;
+    /* near white */
+    --destructive: 0 100% 60.2%;
+    /* #ff3131 */
+    --destructive-foreground: 0 0% 100%;
+    /* white */
+    --border: 240 4% 20%;
+    /* dark grey border */
+    --input: 240 4% 20%;
+    /* dark grey input */
+    --ring: 0 100% 60.2%;
+    /* #ff3131 */
+    --chart-1: 0 100% 60.2%;
+    --chart-2: 24 100% 64.9%;
+    /* #ff914d */
+    --chart-3: 0 0% 83.1%;
+    --chart-4: 0 0% 100%;
+    --chart-5: 0 0% 30%;
+    --sidebar-background: 0 0% 0%;
+    /* black */
+    --sidebar-foreground: 0 0% 95.9%;
+    /* near white */
+    --sidebar-primary: 0 100% 60.2%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 4% 10%;
+    --sidebar-accent-foreground: 0 0% 95.9%;
+    --sidebar-border: 240 4% 20%;
+    --sidebar-ring: 0 100% 60.2%;
+  }
 }
 
 
@@ -136,21 +180,22 @@ code {
 @layer base {
   * {
     @apply border-border;
-    }
+  }
+
   body {
     @apply bg-background text-foreground;
-    }
-  
+  }
+
   /* Style for datetime-local and date input icons in dark mode */
   .dark .custom-date-icon::-webkit-calendar-picker-indicator {
     /* This filter changes the white icon to the theme's red color */
     filter: invert(30%) sepia(90%) saturate(5000%) hue-rotate(345deg) brightness(100%) contrast(100%);
     cursor: pointer;
   }
-  
+
   /* Style for light mode (in case it's ever used) */
   .custom-date-icon::-webkit-calendar-picker-indicator {
-     /* This filter changes the black icon to the theme's red color */
+    /* This filter changes the black icon to the theme's red color */
     filter: invert(30%) sepia(90%) saturate(5000%) hue-rotate(345deg) brightness(100%) contrast(100%);
     cursor: pointer;
   }
@@ -161,9 +206,11 @@ code {
   0% {
     background-position: 0% 50%;
   }
+
   50% {
     background-position: 100% 50%;
   }
+
   100% {
     background-position: 0% 50%;
   }
@@ -175,11 +222,13 @@ code {
   background-size: 400% 400%;
   animation: gradient-flow 15s ease infinite;
 }
+
 /* --- END OF ANIMATIONS --- */
 
 
 /* Gradient text utilities */
 @layer utilities {
+
   /* This class is now static (no animation) */
   .text-gradient {
     background: linear-gradient(90deg, #ff3131, #ff914d);
@@ -187,12 +236,12 @@ code {
     -webkit-text-fill-color: transparent;
     background-clip: text;
   }
-  
+
   /* These classes are for the GradientText component (LAST letter) */
   .last-letter-gradient {
     display: inline;
   }
-  
+
   .last-letter-gradient .gradient-letter {
     background: linear-gradient(90deg, #ff3131, #ff914d);
     -webkit-background-clip: text;
@@ -204,7 +253,7 @@ code {
   .first-letter-gradient {
     display: inline;
   }
-  
+
   .first-letter-gradient .gradient-letter {
     background: linear-gradient(90deg, #ff3131, #ff914d);
     -webkit-background-clip: text;
@@ -216,7 +265,7 @@ code {
   .first-word-gradient {
     display: inline;
   }
-  
+
   .first-word-gradient .gradient-letter {
     background: linear-gradient(90deg, #ff3131, #ff914d);
     -webkit-background-clip: text;
@@ -228,7 +277,7 @@ code {
   .last-word-gradient {
     display: inline;
   }
-  
+
   /* We reuse the .gradient-letter class for the word */
   .last-word-gradient .gradient-letter {
     background: linear-gradient(90deg, #ff3131, #ff914d);
@@ -248,16 +297,16 @@ code {
   .glass-hover {
     transition: all 0.3s ease;
   }
-  
+
   .glass-hover:hover {
     background: rgba(255, 255, 255, 0.08);
     border-color: rgba(255, 255, 255, 0.1);
     transform: translateY(-2px);
     box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
   }
-  
+
   .glass-card {
-    background: linear-gradient(145deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.01) 100%);
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.01) 100%);
     backdrop-filter: blur(20px);
     border: 1px solid rgba(255, 255, 255, 0.05);
     box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
@@ -268,4 +317,40 @@ code {
 .bg-dot-pattern {
   background-image: radial-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px);
   background-size: 20px 20px;
+}
+
+/* Custom Scrollbar - Thin & Themed */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--muted-foreground) / 0.3) transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #ff3131, #ff914d);
+  border-radius: 10px;
+  transition: background 0.3s ease;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #ff4545, #ffa060);
+}
+
+/* Hidden scrollbar but still scrollable */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }

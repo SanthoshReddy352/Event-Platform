@@ -1,166 +1,117 @@
-'use client'
-
-import { useEffect, useState, useRef } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import ProtectedRoute from '@/components/ProtectedRoute'
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { redirect } from 'next/navigation'
+import { createClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Plus, Edit, Trash2, Users, FileEdit, LayoutDashboard } from 'lucide-react'
-import { format } from 'date-fns'
-import { useAuth } from '@/context/AuthContext' 
-import { supabase } from '@/lib/supabase/client' 
+import { Plus } from 'lucide-react'
 import LastWordGradientText from '@/components/LastWordGradientText'
+import AdminEventsClient from './AdminEventsClient'
+import AdminEventStatsSidebar from './AdminEventStatsSidebar'
 
-function AdminEventsContent() {
-  const router = useRouter()
-  const [events, setEvents] = useState([])
-  const [loading, setLoading] = useState(true)
-  const { user, isSuperAdmin } = useAuth() 
+export const metadata = {
+  title: 'Manage Events | EventX',
+  description: 'Create and manage hackathon events, workshops, and competitions.',
+}
 
-  // Cache ref
-  const cache = useRef({ data: null, timestamp: 0 })
+export default async function AdminEventsPage() {
+  const supabase = createClient()
 
-  useEffect(() => {
-    if (user) {
-      fetchEvents()
-    }
-  }, [user?.id, isSuperAdmin]) 
-
-  const fetchEvents = async () => {
-    // Check cache (valid for 5 minutes for list)
-    const now = Date.now();
-    if (cache.current.data && (now - cache.current.timestamp < 300000)) {
-         setEvents(cache.current.data);
-         setLoading(false);
-         return;
-    }
-
-    try {
-      const response = await fetch('/api/events')
-      const data = await response.json()
-      if (data.success) {
-        const allEvents = data.events;
-        let finalEvents = [];
-        if (isSuperAdmin) {
-          finalEvents = allEvents;
-        } else {
-          finalEvents = allEvents.filter(event => event.created_by === user.id);
-        }
-        setEvents(finalEvents);
-        
-        // Update cache
-        cache.current = { data: finalEvents, timestamp: now };
-      }
-    } catch (error) {
-      console.error('Error fetching events:', error)
-    } finally {
-      setLoading(false)
-    }
+  // 1. Auth Check
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
+    redirect('/login')
   }
 
-  const handleDelete = async (id) => {
-    if (!confirm('Are you sure you want to delete this event?')) return
+  // 2. Fetch Admin Role
+  const { data: adminUser } = await supabase
+    .from('admin_users')
+    .select('role')
+    .eq('user_id', user.id)
+    .maybeSingle()
+  
+  const role = adminUser?.role
+  const isSuperAdmin = role === 'super_admin'
+  const isAuthorized = role === 'admin' || isSuperAdmin
+  
+  if (!isAuthorized) {
+    redirect('/')
+  }
 
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const response = await fetch(`/api/events/${id}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${session.access_token}` }
+  // 3. Fetch Events
+  let query = supabase
+    .from('events')
+    .select('*')
+    .order('created_at', { ascending: false })
+
+  if (!isSuperAdmin) {
+    query = query.eq('created_by', user.id)
+  }
+
+  const { data: events, error } = await query
+
+  if (error) {
+    console.error("Error fetching events:", error)
+  }
+
+  // 4. Fetch Participant Counts for each event
+  const eventIds = (events || []).map(e => e.id)
+  let participantCounts = {}
+  let totalParticipants = 0
+
+  if (eventIds.length > 0) {
+    const { data: participants, error: partError } = await supabase
+      .from('participants')
+      .select('event_id')
+      .in('event_id', eventIds)
+
+    if (!partError && participants) {
+      // Count participants per event
+      participants.forEach(p => {
+        participantCounts[p.event_id] = (participantCounts[p.event_id] || 0) + 1
+        totalParticipants++
       })
-
-      if (await response.json().then(d => d.success)) {
-        fetchEvents()
-      } else {
-        alert('Failed to delete event')
-      }
-    } catch (error) {
-      console.error('Error deleting:', error)
     }
   }
-
-  if (loading) return <div className="text-center py-12">Loading...</div>
 
   return (
-    <div className="container mx-auto px-4 py-12">
-      <div className="flex justify-between items-center mb-8">
+    <div className="container mx-auto px-4 py-8 min-h-screen">
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
         <div>
-          <h1 className="text-4xl font-bold"><LastWordGradientText>Manage Events</LastWordGradientText></h1>
-          <p className="text-gray-400 mt-2">Create and manage hackathon events</p>
+          <h1 className="text-3xl md:text-4xl font-bold mb-2">
+            <LastWordGradientText>Manage Events</LastWordGradientText>
+          </h1>
+          <p className="text-gray-400">
+            You have <span className="text-brand-red font-semibold">{events?.length || 0}</span> event{(events?.length || 0) !== 1 && 's'} to manage.
+          </p>
         </div>
         <Link href="/admin/events/new">
-          <Button className="bg-brand-gradient text-white">
-            <Plus size={20} className="mr-2" />
+          <Button className="bg-brand-gradient text-white shadow-lg shadow-brand-red/20 hover:shadow-brand-red/40 transition-all hover:-translate-y-0.5">
+            <Plus size={18} className="mr-2" />
             Create Event
           </Button>
         </Link>
       </div>
 
-      {events.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center">
-            <p className="text-gray-400 mb-4">No events found.</p>
-            <Link href="/admin/events/new"><Button>Create Your First Event</Button></Link>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {events.map((event) => {
-            const canManage = isSuperAdmin || (user && event.created_by === user.id);
-            const isCompleted = event.event_end_date && new Date() > new Date(event.event_end_date);
-            
-            return (
-              <Card key={event.id} className="flex flex-col hover:border-brand-red/50 transition-colors">
-                <CardHeader>
-                  <div className="flex justify-between items-start mb-2">
-                    {/* Link to Dashboard */}
-                    <Link href={`/admin/events/${event.id}/dashboard`} className="hover:underline">
-                        <CardTitle className="text-lg">{event.title}</CardTitle>
-                    </Link>
-                    <div className="flex gap-2">
-                       {event.event_type === 'hackathon' && <Badge variant="secondary">Hackathon</Badge>}
-                       {isCompleted ? (
-                         <Badge variant="secondary" className="bg-gray-500 text-white hover:bg-gray-600">Completed</Badge>
-                       ) : event.is_active ? (
-                         <Badge className="bg-green-500 hover:bg-green-600">Active</Badge>
-                       ) : (
-                         <Badge variant="outline">Inactive</Badge>
-                       )}
-                    </div>
-                  </div>
-                  <CardDescription className="line-clamp-2">{event.description || 'No description'}</CardDescription>
-                  {event.event_date && <p className="text-sm text-gray-500 mt-2">{format(new Date(event.event_date), 'MMM dd, yyyy')}</p>}
-                </CardHeader>
-                
-                <CardFooter className="mt-auto flex flex-col gap-2">
-                  <Link href={`/admin/events/${event.id}/dashboard`} className="w-full">
-                    <Button className="w-full bg-slate-900 text-white hover:bg-slate-800" disabled={!canManage}>
-                        <LayoutDashboard size={16} className="mr-2" />
-                        Open Dashboard
-                    </Button>
-                  </Link>
-
-                  <Button
-                    variant="destructive"
-                    className="w-full"
-                    size="sm"
-                    onClick={() => handleDelete(event.id)}
-                    disabled={!canManage}
-                  >
-                    <Trash2 size={16} className="mr-1" />
-                    Delete
-                  </Button>
-                </CardFooter>
-              </Card>
-            )
-          })}
+      {/* Main Content - Two Column Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        {/* Left Column - Event List */}
+        <div className="lg:col-span-8 w-full">
+          <AdminEventsClient 
+            events={events || []} 
+            userId={user.id} 
+            isSuperAdmin={isSuperAdmin}
+            participantCounts={participantCounts}
+          />
         </div>
-      )}
+
+        {/* Right Column - Stats Sidebar */}
+        <div className="lg:col-span-4 w-full sticky top-24">
+          <AdminEventStatsSidebar 
+            events={events || []} 
+            totalParticipants={totalParticipants}
+          />
+        </div>
+      </div>
     </div>
   )
-}
-
-export default function AdminEventsPage() {
-  return <ProtectedRoute><AdminEventsContent /></ProtectedRoute>
 }
