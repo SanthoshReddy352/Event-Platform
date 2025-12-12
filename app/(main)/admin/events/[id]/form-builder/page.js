@@ -14,7 +14,10 @@ import { toast } from 'sonner' // Assuming you have sonner or use alert
 import LastWordGradientText from '@/components/LastWordGradientText'
 import { fetchWithTimeout } from '@/lib/utils'
 
+import { useAuth } from '@/context/AuthContext' // Import existing Auth Context
+
 function FormBuilderContent() {
+  const { session } = useAuth() // Destructure session
   const router = useRouter()
   const params = useParams()
   const { id } = params
@@ -85,7 +88,7 @@ function FormBuilderContent() {
 
     setIsSaving(true)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
+      // [FIX] Use cached session
       if (!session) throw new Error('Not authenticated')
 
       const response = await fetchWithTimeout(`/api/events/${id}`, {

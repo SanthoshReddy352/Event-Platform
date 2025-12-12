@@ -9,6 +9,7 @@ export function useAdminStatus() {
   const [isSuperAdmin, setIsSuperAdmin] = useState(false) // NEW
   const [loading, setLoading] = useState(true)
   const [user, setUser] = useState(null)
+  const [session, setSession] = useState(null) // NEW: Store session
 
   useEffect(() => {
     let authSubscription = null;
@@ -48,15 +49,21 @@ export function useAdminStatus() {
         setLoading(false);
       }
     };
+    
+    // [FIX] Update session state wrapper
+    const handleSessionChange = (session) => {
+        setSession(session);
+        checkAdmin(session);
+    }
 
     const setupAuthListener = async () => {
         // Initial session check
         const { data: { session } } = await supabase.auth.getSession();
-        await checkAdmin(session); // Use await to ensure initial check completes
+        await handleSessionChange(session); // Use await to ensure initial check completes
 
         // Set up listener for real-time auth changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-            await checkAdmin(session);
+            await handleSessionChange(session);
         })
         
         if (subscription) {
@@ -73,5 +80,5 @@ export function useAdminStatus() {
     }
   }, [])
 
-  return { isAdmin, isSuperAdmin, loading, user }; // MODIFIED: Return isSuperAdmin
+  return { isAdmin, isSuperAdmin, loading, user, session }; // MODIFIED: Return session
 }

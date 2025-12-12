@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS participants (
     reviewed_at TIMESTAMP WITH TIME ZONE,
     rejection_reason TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     CONSTRAINT participant_status_check CHECK (status IN ('pending', 'approved', 'rejected'))
 );
 
@@ -324,7 +325,7 @@ CREATE INDEX IF NOT EXISTS idx_participants_user_id ON participants(user_id);
 CREATE INDEX IF NOT EXISTS idx_participants_status ON participants(status);
 
 -- [NEW] Composite Indexes for Query Optimization
-CREATE INDEX IF NOT EXISTS idx_participants_event_user ON participants(event_id, user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_participants_event_user ON participants(event_id, user_id);
 CREATE INDEX IF NOT EXISTS idx_participants_status_event ON participants(status, event_id);
 CREATE INDEX IF NOT EXISTS idx_events_active_created ON events(is_active, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_admin_users_user_id ON admin_users(user_id);

@@ -39,7 +39,8 @@ export default function Navbar() {
         keysToRemove.forEach(key => window.localStorage.removeItem(key));
       }
       
-      window.location.href = '/'; 
+      router.replace('/');
+      router.refresh();
     }
   }
   

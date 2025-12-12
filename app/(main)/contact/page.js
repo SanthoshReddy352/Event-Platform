@@ -1,167 +1,103 @@
-'use client'
-
-import { useState, useEffect } from 'react' // --- DATA PERSISTENCE ---
-import GradientText from '@/components/GradientText'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { Loader2, Send } from 'lucide-react'
+import ContactForm from '@/components/contact/ContactForm'
+import { Mail, MapPin, Phone, Github, Twitter, Linkedin } from 'lucide-react'
 import LastWordGradientText from '@/components/LastWordGradientText'
 
+export const metadata = {
+  title: 'Contact Us | EventX',
+  description: 'Get in touch with us for any questions or feedback.',
+}
+
 export default function ContactPage() {
-  
-  // --- START OF DATA PERSISTENCE ---
-  const storageKey = 'contactForm';
-  const defaultState = { name: '', email: '', message: '' };
-  
-  const [formData, setFormData] = useState(() => {
-    if (typeof window === 'undefined') return defaultState;
-    const saved = window.sessionStorage.getItem(storageKey);
-    return saved ? JSON.parse(saved) : defaultState;
-  });
-  // --- END OF DATA PERSISTENCE ---
-  
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [error, setError] = useState(null)
-  const [success, setSuccess] = useState(false)
-
-  // --- START OF DATA PERSISTENCE ---
-  // Save form data to session storage on change
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      window.sessionStorage.setItem(storageKey, JSON.stringify(formData));
-    }
-  }, [formData]);
-  // --- END OF DATA PERSISTENCE ---
-
-  const handleChange = (e) => {
-    const { name, value } = e.target
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }))
-  }
-
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    setIsSubmitting(true)
-    setError(null)
-    setSuccess(false)
-    
-    try {
-      const response = await fetch('/api/contact', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
-      })
-      
-      const data = await response.json()
-      
-      if (data.success) {
-        setSuccess(true)
-        // --- START OF DATA PERSISTENCE ---
-        setFormData(defaultState); // Clear form state
-        if (typeof window !== 'undefined') {
-          window.sessionStorage.removeItem(storageKey); // Clear storage
-        }
-        // --- END OF DATA PERSISTENCE ---
-      } else {
-        throw new Error(data.error || 'An unknown error occurred')
-      }
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
-
   return (
-    <div className="container mx-auto px-4 py-12 max-w-lg">
-      <h1 className="text-4xl font-bold text-center mb-4">
-        <LastWordGradientText >Contact Us</LastWordGradientText>
-      </h1>
-      <p className="text-gray-400 text-center mb-8">
-        Have a question or feedback? Let us know!
-      </p>
+    <div className="min-h-screen w-full bg-grid-white/[0.02] relative overflow-hidden">
+      {/* Background gradients */}
+      <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-purple-500/10 rounded-full blur-[120px]" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-500/10 rounded-full blur-[120px]" />
+      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle><LastWordGradientText>Send us a Message</LastWordGradientText></CardTitle>
-          <CardDescription>
-            We'll get back to you as soon as possible.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {success ? (
-            <div className="text-center py-8">
-              <Send size={48} className="mx-auto text-green-500 mb-4" />
-              <h3 className="text-xl font-semibold mb-2">Message Sent!</h3>
-              <p className="text-gray-400">
-                Thanks for reaching out. We'll be in touch.
-              </p>
+      <div className="container mx-auto px-4 py-20 relative z-10">
+        <div className="max-w-6xl mx-auto">
+          {/* Header */}
+          <div className="text-center mb-16 space-y-4">
+            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight">
+              <LastWordGradientText>Get in Touch</LastWordGradientText>
+            </h1>
+            <p className="text-gray-400 text-lg md:text-xl max-w-2xl mx-auto">
+              Have questions about our platform? We're here to help you host incredible events.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 items-start">
+            {/* Left Column: Contact Info */}
+            <div className="space-y-12">
+              <div className="space-y-8">
+                <h2 className="text-2xl font-semibold text-white">Contact Information</h2>
+                
+                <div className="space-y-6">
+                  <div className="flex items-start space-x-4 group">
+                    <div className="w-12 h-12 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center group-hover:border-primary/50 transition-colors">
+                      <Mail className="w-5 h-5 text-gray-300 group-hover:text-primary transition-colors" />
+                    </div>
+                    <div>
+                      <h3 className="text-white font-medium mb-1">Email Us</h3>
+                      <p className="text-gray-400 font-light">support@eventx.com</p>
+                      <p className="text-gray-400 font-light">business@eventx.com</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start space-x-4 group">
+                    <div className="w-12 h-12 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center group-hover:border-primary/50 transition-colors">
+                      <Phone className="w-5 h-5 text-gray-300 group-hover:text-primary transition-colors" />
+                    </div>
+                    <div>
+                      <h3 className="text-white font-medium mb-1">Call Us</h3>
+                      <p className="text-gray-400 font-light">+1 (555) 123-4567</p>
+                      <p className="text-gray-400 font-light">Mon-Fri from 9am to 6pm</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start space-x-4 group">
+                    <div className="w-12 h-12 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center group-hover:border-primary/50 transition-colors">
+                      <MapPin className="w-5 h-5 text-gray-300 group-hover:text-primary transition-colors" />
+                    </div>
+                    <div>
+                      <h3 className="text-white font-medium mb-1">Visit Us</h3>
+                      <p className="text-gray-400 font-light">123 Innovation Drive</p>
+                      <p className="text-gray-400 font-light">Tech City, TC 90210</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Social Links */}
+              <div className="space-y-6">
+                <h2 className="text-2xl font-semibold text-white">Connect with Us</h2>
+                <div className="flex gap-4">
+                  <a href="#" className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 hover:border-white/20 transition-all text-gray-400 hover:text-white">
+                    <Github className="w-5 h-5" />
+                  </a>
+                  <a href="#" className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 hover:border-white/20 transition-all text-gray-400 hover:text-blue-400">
+                    <Twitter className="w-5 h-5" />
+                  </a>
+                  <a href="#" className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 hover:border-white/20 transition-all text-gray-400 hover:text-blue-600">
+                    <Linkedin className="w-5 h-5" />
+                  </a>
+                </div>
+              </div>
             </div>
-          ) : (
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="name"><LastWordGradientText>Name</LastWordGradientText></Label>
-                <Input
-                  id="name"
-                  name="name"
-                  value={formData.name}
-                  onChange={handleChange}
-                  placeholder="Your name"
-                  required
-                />
+
+            {/* Right Column: Contact Form */}
+            <div className="w-full">
+              <div className="relative">
+                {/* Decorative blob behind form */}
+                <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 to-purple-500/10 rounded-3xl blur-2xl transform rotate-3" />
+                <ContactForm />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="email"><LastWordGradientText>Email</LastWordGradientText></Label>
-                <Input
-                  id="email"
-                  name="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={handleChange}
-                  placeholder="your.email@example.com"
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="message"><LastWordGradientText>Message</LastWordGradientText></Label>
-                <Textarea
-                  id="message"
-                  name="message"
-                  value={formData.message}
-                  onChange={handleChange}
-                  placeholder="Your message..."
-                  rows={6}
-                  required
-                />
-              </div>
-              
-              {error && (
-                <p className="text-red-500 text-sm">{`Error: ${error}`}</p>
-              )}
-              
-              <Button
-                type="submit"
-                className="w-full bg-brand-gradient text-white font-semibold hover:opacity-90 transition-opacity"
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Send className="mr-2 h-4 w-4" />
-                )}
-                {isSubmitting ? 'Sending...' : 'Send Message'}
-              </Button>
-            </form>
-          )}
-        </CardContent>
-      </Card>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

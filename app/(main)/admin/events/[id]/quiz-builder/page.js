@@ -20,7 +20,10 @@ import {
 import { Trash2, Plus, Save, ArrowLeft, Loader2, Pencil, CheckCircle } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 
+import { useAuth } from '@/context/AuthContext' // Import Auth Context
+
 function QuizBuilderContent() {
+  const { session } = useAuth() // Destructure session
   const { id: eventId } = useParams();
   const router = useRouter();
   const [questions, setQuestions] = useState([]);
@@ -45,9 +48,9 @@ function QuizBuilderContent() {
 
   const fetchQuestions = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      // [FIX] Use cached session
       const res = await fetch(`/api/events/${eventId}/quiz`, {
-        headers: { Authorization: `Bearer ${session.access_token}` },
+        headers: { Authorization: `Bearer ${session?.access_token}` },
       });
       const data = await res.json();
       if (data.success) {
@@ -128,8 +131,8 @@ function QuizBuilderContent() {
 
     setSaving(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      
+       // [FIX] Use cached session
+       
       const payload = {
         action: editingId ? "update" : "create",
         question: editingId ? { ...formData, id: editingId } : formData,
@@ -139,7 +142,7 @@ function QuizBuilderContent() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${session?.access_token}`,
         },
         body: JSON.stringify(payload),
       });
@@ -174,12 +177,12 @@ function QuizBuilderContent() {
   const handleDeleteQuestion = async (id) => {
     if (!confirm("Are you sure you want to delete this question?")) return;
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      // [FIX] Use cached session
       const res = await fetch(`/api/events/${eventId}/quiz`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${session?.access_token}`,
         },
         body: JSON.stringify({
           action: "delete",

@@ -10,7 +10,10 @@ import { supabase } from "@/lib/supabase/client";
 
 import { fetchWithTimeout } from "@/lib/utils";
 
+import { useAuth } from "@/context/AuthContext"; // Import Auth Context
+
 function NewEventContent() {
+  const { session } = useAuth(); // Destructure session
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const STORAGE_KEY = "newEventForm";
@@ -18,9 +21,8 @@ function NewEventContent() {
   const handleSubmit = async (formData) => {
     setIsSubmitting(true);
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+      // [FIX] Use cached session instead of fetching again
+      if (!session) throw new Error("No active session");
 
       const response = await fetchWithTimeout(`/api/events`, {
         method: "POST",

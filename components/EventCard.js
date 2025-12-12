@@ -14,7 +14,12 @@ import { Badge } from '@/components/ui/badge'
 const formatEventDate = (start, end, timeZone) => {
   if (!start) return 'Date TBA';
   
-  const tz = formatInTimeZone(start, timeZone, 'zzz');
+  // Handle timezone abbreviation: 'Asia/Kolkata' is commonly displayed as 'IST'
+  // but date-fns might output 'GMT+5:30' depending on locale/context.
+  // We force 'IST' for consistency if it's Kolkata, otherwise use dynamic code.
+  // [FIX] Enforce IST to match server-side rendering
+  const tz = timeZone === 'Asia/Kolkata' ? 'IST' : formatInTimeZone(start, timeZone, 'zzz');
+  
   const startDate = formatInTimeZone(start, timeZone, 'MMM dd');
   const startTime = formatInTimeZone(start, timeZone, 'hh:mm a');
   
@@ -140,7 +145,7 @@ const EventCard = memo(function EventCard({ event }) {
         <div className="space-y-2 text-sm text-gray-400">
           <div className="flex items-start space-x-2">
             <Calendar size={16} className="text-brand-red mt-0.5 flex-shrink-0" />
-            <span>{formattedEventDate}</span>
+            <span suppressHydrationWarning>{formattedEventDate}</span>
           </div>
         </div>
       </CardContent>

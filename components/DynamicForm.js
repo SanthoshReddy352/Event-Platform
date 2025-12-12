@@ -46,10 +46,13 @@ const DynamicForm = memo(function DynamicForm({ fields = [], onSubmit, eventId, 
 
     setIsSubmitting(true)
     try {
+      console.log("[DynamicForm] Calling onSubmit prop...");
       await onSubmit(formData)
+      console.log("[DynamicForm] onSubmit returned successfully.");
     } catch (error) {
       console.error('Form submission error:', error)
     } finally {
+      console.log("[DynamicForm] Resetting submitting state.");
       setIsSubmitting(false)
     }
   }, [validateForm, onSubmit, formData])

@@ -10,7 +10,10 @@ import { ArrowLeft, Save, Loader2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
 import { fetchWithTimeout } from '@/lib/utils'
 
+import { useAuth } from '@/context/AuthContext' // Import existing Auth Context
+
 export default function SubmissionFormBuilderPage() {
+  const { session } = useAuth() // Destructure session
   const params = useParams()
   const router = useRouter()
   const { id } = params
@@ -73,7 +76,7 @@ export default function SubmissionFormBuilderPage() {
 
     setIsSaving(true)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
+      // [FIX] Use cached session
       if (!session) throw new Error('Not authenticated')
 
       const response = await fetchWithTimeout(`/api/events/${id}`, {

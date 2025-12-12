@@ -1,217 +1,145 @@
-'use client'
+import { createClient } from '@/lib/supabase/server';
+import EventsListClient from './EventsListClient';
+import { parseISO } from 'date-fns';
 
-import { useEffect, useState, Suspense } from 'react'
-import { useSearchParams, useRouter } from 'next/navigation' // Import useRouter
-import EventCard from '@/components/EventCard'
-import GradientText from '@/components/GradientText'
-import { Card, CardContent } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Search, X } from 'lucide-react' // Import X
-import { Button } from '@/components/ui/button' // Import Button
-import { parseISO } from 'date-fns' 
-import LastWordGradientText from '@/components/LastWordGradientText'
+export default async function EventsPage({ searchParams }) {
+  const supabase = createClient();
+  const search = searchParams?.search || '';
+  const filter = searchParams?.filter || 'all';
+  const clubFilter = searchParams?.club || '';
 
-// Wrap the main component in Suspense for useSearchParams
-export default function EventsPageWrapper() {
-  return (
-    <Suspense fallback={<LoadingSpinner />}>
-      <EventsPage />
-    </Suspense>
-  )
-}
+  // 1. Parallel Fetching (Mirroring Home Page Logic)
+  const eventsPromise = supabase
+    .from('events')
+    .select('*')
+    .order('created_at', { ascending: false });
 
-function EventsPage() {
-  const [events, setEvents] = useState([])
-  const [filteredEvents, setFilteredEvents] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [searchTerm, setSearchTerm] = useState('')
-  const [filter, setFilter] = useState('all')
+  const clubsPromise = supabase.rpc('get_public_clubs');
 
-  const searchParams = useSearchParams()
-  const router = useRouter()
-  const clubFilterParam = searchParams.get('club')
-  const [clubFilter, setClubFilter] = useState(clubFilterParam || null)
+  const [eventsResult, clubsResult] = await Promise.all([eventsPromise, clubsPromise]);
 
-  useEffect(() => {
-    fetchEvents()
-  }, [])
+  const rawEvents = eventsResult.data || [];
+  const clubsData = clubsResult.data || [];
 
-  useEffect(() => {
-    // Update filter state if URL param changes
-    setClubFilter(clubFilterParam || null)
-  }, [clubFilterParam])
+  // 2. Map Clubs to Events (Manual Join)
+  const clubMap = new Map(clubsData.map(c => [c.user_id, c]));
 
-  useEffect(() => {
-    filterEvents()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchTerm, filter, events, clubFilter]) // Add filter to dependency array
+  const events = rawEvents.map(event => ({
+    ...event,
+    club: clubMap.get(event.created_by) || null
+  }));
 
-  // --- START OF FIX: Helper function to check if event is completed ---
+  // Get unique clubs for the filter dropdown
+  const clubs = [...new Set(events?.map(e => e.club?.club_name).filter(Boolean))].sort();
+
+  // Helper: Check event status
+  const getEventStatusCategory = (event) => {
+    const now = new Date();
+    const eventEndDate = event.event_end_date ? parseISO(event.event_end_date) : null;
+    const regStartDate = event.registration_start ? parseISO(event.registration_start) : null;
+    const regEndDate = event.registration_end ? parseISO(event.registration_end) : null;
+
+    const isCompleted = eventEndDate && now > eventEndDate;
+
+    if (isCompleted) return 'completed';
+    
+    // "Open" logic: Registration is open and within dates
+    const isWithinRegDate = regStartDate && regEndDate && now >= regStartDate && now < regEndDate;
+    if (event.registration_open && (isWithinRegDate || (!regStartDate && !regEndDate))) {
+      return 'open';
+    }
+
+    // "Active" logic: Not completed and is marked active (could be registration closed but event not over)
+    if (event.is_active && !isCompleted) return 'active'; // Broad category for active events
+
+    return 'other';
+  };
+
+  // 1. Filter Logic
+  let filteredEvents = events || [];
+
+  // Filter by Search Term
+  if (search) {
+    const term = search.toLowerCase();
+    filteredEvents = filteredEvents.filter(event => 
+      event.title.toLowerCase().includes(term) ||
+      event.description?.toLowerCase().includes(term)
+    );
+  }
+
+  // Filter by Club
+  if (clubFilter) {
+    // Aggressive normalization: remove non-alphanumeric chars and lowercase
+    // This handles cases like "IEEE Computer Society" vs "ieee-computer-society" vs "IEEE%20Computer%20Society"
+    // Aggressive normalization: remove non-alphanumeric chars and lowercase
+    const normalize = (str) => str ? decodeURIComponent(str).toLowerCase().replace(/[^a-z0-9]/g, '') : '';
+    const target = normalize(clubFilter);
+
+    filteredEvents = filteredEvents.filter(event => {
+      const rawClubName = event.club?.club_name;
+      const clubName = normalize(rawClubName);
+      
+      const match = clubName.includes(target);
+      
+      // console.log(`[Event Debug] ID: ${event.id}, Club Raw: "${rawClubName}", Normalized: "${clubName}", Match: ${match}`);
+      
+      return match; 
+    });
+  }
+
+  // Filter by Status Category
+  if (filter === 'active') {
+    // Show only active, non-completed events
+    filteredEvents = filteredEvents.filter(event => {
+       const status = getEventStatusCategory(event);
+       return event.is_active && status !== 'completed';
+    });
+  } else if (filter === 'open') {
+    filteredEvents = filteredEvents.filter(event => getEventStatusCategory(event) === 'open');
+  } else if (filter === 'completed') {
+    filteredEvents = filteredEvents.filter(event => getEventStatusCategory(event) === 'completed');
+  }
+  // 'all' includes everything fetched (which might be everything in DB depending on RLS/Query, 
+  // but if we want to hide inactive ones by default unless 'all' is strictly "Active Events", 
+  // we might want to default to is_active=true. 
+  // However, mimicking previous logic: "all" meant "all active".
+  if (filter === 'all' || !filter) {
+      // Default view: usually we don't show "Inactive/Archived" unless specifically asked, 
+      // but let's stick to the previous page logic which had .eq('is_active', true).
+      // If the user wants to see *truly* everything including historical non-active, we'd need another flag.
+      // For now, let's assume 'all' means 'all public/active' events.
+      // But wait, the previous code fetched .eq('is_active', true).
+      // And the client side had a filter for 'completed' which implies completed events ARE active in the DB?
+      // Let's assume we want to show everything that is 'publicly visible' (is_active=true).
+      
+      filteredEvents = filteredEvents.filter(e => e.is_active);
+  }
+
+  // 2. Sort Logic (Server Side)
+  // Put active/upcoming first, completed last.
   const isEventCompleted = (event) => {
     const now = new Date();
     const eventEndDate = event.event_end_date ? parseISO(event.event_end_date) : null;
     return eventEndDate && now > eventEndDate;
   };
-  // --- END OF FIX ---
 
-  const fetchEvents = async () => {
-    try {
-      // Fetch active=true (published) events. The API now returns completed events as well.
-      const response = await fetch('/api/events?active=true', { cache: 'no-store' })
-      const data = await response.json()
-      if (data.success) {
-        // --- START OF FIX: Sort events to show active first ---
-        const allEvents = data.events;
-        allEvents.sort((a, b) => {
-          const aCompleted = isEventCompleted(a);
-          const bCompleted = isEventCompleted(b);
+  filteredEvents.sort((a, b) => {
+    const aCompleted = isEventCompleted(a);
+    const bCompleted = isEventCompleted(b);
 
-          if (aCompleted && !bCompleted) {
-            return 1; // a (completed) comes after b (active)
-          }
-          if (!aCompleted && bCompleted) {
-            return -1; // a (active) comes before b (completed)
-          }
-          // If both are active or both are completed, keep original (created_at) order
-          return 0;
-        });
-        // --- END OF FIX ---
+    if (aCompleted && !bCompleted) return 1;
+    if (!aCompleted && bCompleted) return -1;
+    
+    // Secondary sort: Closest event date first for active, most recent first for completed?
+    // Original logic just kept DB order (created_at desc).
+    return 0; 
+  });
 
-        setEvents(allEvents)
-        setFilteredEvents(allEvents)
-      }
-    } catch (error) {
-      console.error('Error fetching events:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const filterEvents = () => {
-    let filtered = events
-    const now = new Date();
-
-    if (clubFilter) {
-      filtered = filtered.filter(event => 
-        event.club && event.club.club_name === clubFilter
-      )
-    }
-
-    // Filter by search term
-    if (searchTerm) {
-      filtered = filtered.filter(event =>
-        event.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        event.description?.toLowerCase().includes(searchTerm.toLowerCase())
-      )
-    }
-
-    // Filter by status
-    if (filter === 'active') {
-      filtered = filtered.filter(event => {
-        const eventEndDate = event.event_end_date ? parseISO(event.event_end_date) : null;
-        const isCompleted = eventEndDate && now > eventEndDate;
-        
-        return !isCompleted && event.is_active;
-      })
-    } else if (filter === 'open') {
-      filtered = filtered.filter(event => {
-        const regStartDate = event.registration_start ? parseISO(event.registration_start) : null;
-        const regEndDate = event.registration_end ? parseISO(event.registration_end) : null;
-        const eventEndDate = event.event_end_date ? parseISO(event.event_end_date) : null;
-
-        const isCompleted = eventEndDate && now > eventEndDate;
-        const isWithinDateRange = regStartDate && regEndDate && now >= regStartDate && now < regEndDate;
-
-        return event.registration_open && isWithinDateRange && !isCompleted;
-      })
-    } else if (filter === 'completed') {
-      filtered = filtered.filter(event => {
-        const eventEndDate = event.event_end_date ? parseISO(event.event_end_date) : null;
-        return eventEndDate && now > eventEndDate;
-      })
-    }
-    // If filter is 'all', we do nothing and show all fetched (is_active: true) events
-
-    setFilteredEvents(filtered)
-  }
-
-  const clearClubFilter = () => {
-    setClubFilter(null)
-    router.push('/events') // Update URL to remove query param
-  }
 
   return (
-    <div className="container mx-auto px-4 py-12">
-      <div className="mb-8">
-        <h1 className="text-4xl font-bold mb-4">
-          <LastWordGradientText>All Events</LastWordGradientText>
-        </h1>
-        <p className="text-gray-400">Browse and register for our hackathons and tech events</p>
-      </div>
-
-      {/* Filters */}
-      <div className="mb-4 flex flex-col md:flex-row gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-3 text-gray-400" size={20} />
-          <Input
-            placeholder="Search events..."
-            className="pl-10"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
-        <Select value={filter} onValueChange={setFilter}>
-          <SelectTrigger className="w-full md:w-48">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Events</SelectItem>
-            <SelectItem value="active">Active Only</SelectItem>
-            <SelectItem value="open">Registration Open</SelectItem>
-            <SelectItem value="completed">Completed</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      {clubFilter && (
-        <div className="mb-6 flex justify-start">
-          <Button variant="outline" onClick={clearClubFilter} className="bg-brand-red/10 border-brand-red text-brand-orange hover:bg-brand-red/20">
-            Filtering by: <strong className="ml-1">{clubFilter}</strong>
-            <X size={16} className="ml-2" />
-          </Button>
-        </div>
-      )}
-
-
-      {/* Events Grid */}
-      {loading ? (
-        <LoadingSpinner />
-      ) : filteredEvents.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredEvents.map((event) => (
-            <EventCard key={event.id} event={event} />
-          ))}
-        </div>
-      ) : (
-        <Card>
-          <CardContent className="py-12 text-center text-gray-500">
-            <p>
-              {searchTerm || filter !== 'all' || clubFilter
-                ? 'No events match your search criteria'
-                : 'No events available at the moment'}
-            </p>
-          </CardContent>
-        </Card>
-      )}
-    </div>
-  )
-}
-
-function LoadingSpinner() {
-  return (
-    <div className="text-center py-12">
-      <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-brand-red"></div>
-    </div>
+    <EventsListClient 
+      initialEvents={filteredEvents}
+      clubs={clubs}
+    />
   );
 }

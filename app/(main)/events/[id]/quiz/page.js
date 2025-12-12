@@ -9,7 +9,10 @@ import { Label } from "@/components/ui/label";
 import { Loader2, CheckCircle, Flag } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 
+import { useAuth } from '@/context/AuthContext'
+
 function QuizContent() {
+  const { session } = useAuth() // Cache session
   const { id: eventId } = useParams();
   const router = useRouter();
   const [questions, setQuestions] = useState([]);
@@ -83,7 +86,6 @@ function QuizContent() {
 
   const saveProgress = async () => {
       // ... (keep existing DB save logic)
-      const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
       setSaving(true);
@@ -161,14 +163,14 @@ function QuizContent() {
     return `${minutes}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const fetchQuizData = async () => {
+    const fetchQuizData = async () => {
     // ... (keep existing fetch logic)
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      // [FIX] Use cached session
       
       // ... (Event Details)
       const eventRes = await fetch(`/api/events/${eventId}`, {
-         headers: { Authorization: `Bearer ${session.access_token}` },
+         headers: { Authorization: `Bearer ${session?.access_token}` },
          cache: 'no-store'
       });
       const eventData = await eventRes.json();
@@ -198,7 +200,7 @@ function QuizContent() {
       // 2. Fetch Questions (API)
       console.log("Fetching questions...");
       const questionsRes = await fetch(`/api/events/${eventId}/quiz`, {
-        headers: { Authorization: `Bearer ${session.access_token}` },
+        headers: { Authorization: `Bearer ${session?.access_token}` },
         cache: 'no-store'
       });
 
@@ -299,12 +301,11 @@ function QuizContent() {
 
     setSubmitting(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch(`/api/events/${eventId}/quiz/submit`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${session?.access_token}`,
         },
         body: JSON.stringify({
           answers,
@@ -535,23 +536,17 @@ function QuizContent() {
 
 export default function QuizPage() {
   const router = useRouter();
-  const [checkingAuth, setCheckingAuth] = useState(true);
+  const { session, loading } = useAuth(); // [FIX] Use cached session
 
   useEffect(() => {
-    const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        router.push("/login?redirect=" + window.location.pathname);
-      } else {
-        setCheckingAuth(false);
-      }
-    };
-    checkAuth();
-  }, []);
+    if (!loading && !session) {
+      router.push("/login?redirect=" + window.location.pathname);
+    }
+  }, [session, loading]);
 
-  if (checkingAuth) {
+  if (loading) {
       return <div className="flex justify-center py-20"><Loader2 className="animate-spin" /></div>;
   }
 
-  return <QuizContent />;
+  return session ? <QuizContent /> : null;
 }

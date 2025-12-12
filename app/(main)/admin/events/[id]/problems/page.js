@@ -12,7 +12,11 @@ import { ArrowLeft, Plus, Trash2, Users, Loader2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
 import { toast } from 'sonner' // Assuming you have sonner or use-toast, if not change to alert
 
+import { useAuth } from '@/context/AuthContext'
+import { fetchWithTimeout } from '@/lib/utils'
+
 export default function ProblemStatementsPage() {
+  const { session } = useAuth()
   const params = useParams()
   const router = useRouter()
   const [loading, setLoading] = useState(true)
@@ -69,16 +73,24 @@ export default function ProblemStatementsPage() {
 
     try {
       setIsSubmitting(true)
-      const { error } = await supabase
-        .from('problem_statements')
-        .insert({
-          event_id: params.id,
-          title: newProblem.title,
-          description: newProblem.description,
-          max_selections: parseInt(newProblem.max_selections)
-        })
 
-      if (error) throw error
+      // [FIX] Use API to avoid session hang
+      const response = await fetchWithTimeout(`/api/events/${params.id}/problems`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token}`
+        },
+        body: JSON.stringify({
+            title: newProblem.title,
+            description: newProblem.description,
+            max_selections: parseInt(newProblem.max_selections)
+        }),
+        timeout: 15000
+      })
+      
+      const data = await response.json()
+      if (!data.success) throw new Error(data.error)
 
       toast.success('Problem statement added')
       setNewProblem({ title: '', description: '', max_selections: 1 }) // Reset form
@@ -97,12 +109,17 @@ export default function ProblemStatementsPage() {
     if (!confirm('Are you sure? This cannot be undone.')) return
 
     try {
-      const { error } = await supabase
-        .from('problem_statements')
-        .delete()
-        .eq('id', id)
+      // [FIX] Use API for delete
+      const response = await fetchWithTimeout(`/api/events/${params.id}/problems/${id}`, {
+          method: 'DELETE',
+          headers: {
+              'Authorization': `Bearer ${session?.access_token}`
+          },
+          timeout: 15000
+      })
 
-      if (error) throw error
+      const data = await response.json()
+      if (!data.success) throw new Error(data.error)
       
       toast.success('Problem statement deleted')
       setProblems(prev => prev.filter(p => p.id !== id))

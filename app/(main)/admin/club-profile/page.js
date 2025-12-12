@@ -15,7 +15,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import LastWordGradientText from '@/components/LastWordGradientText'
 
 function ClubProfileContent() {
-  const { user, loading: authLoading } = useAuth()
+  const { user, session, loading: authLoading } = useAuth()
   
   // --- DATA PERSISTENCE & STATE ---
   const storageKey = 'adminClubProfileForm';
@@ -151,31 +151,35 @@ function ClubProfileContent() {
       if (formData.mode === 'upload' && uploadFile) {
         finalLogoUrl = await handleUpload();
       }
-
-      const updates = {
+      
+      const payload = {
         club_name: formData.clubName,
         club_logo_url: finalLogoUrl,
         razorpay_key_id: formData.razorpayKeyId,
-        updated_at: new Date().toISOString(),
       }
       
-      // SECURITY: Only update the secret in DB if the user actually typed a new one.
-      // If the field is empty, we assume they want to keep the old one.
       if (formData.razorpayKeySecret && formData.razorpayKeySecret.trim() !== '') {
-          updates.razorpay_key_secret = formData.razorpayKeySecret;
+        payload.razorpay_key_secret = formData.razorpayKeySecret;
       }
       
-      const { error } = await supabase
-        .from('admin_users')
-        .update(updates)
-        .eq('user_id', user.id)
+      // [FIX] Use fetch with cached session instead of direct Supabase call
+      const response = await fetch('/api/admin/club-profile', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify(payload)
+      });
+      
+      const data = await response.json();
 
-      if (error) throw error
+      if (!data.success) throw new Error(data.error);
       
       alert('Profile updated successfully!')
       
       // Update UI state to reflect that a secret is set
-      if (updates.razorpay_key_secret) {
+      if (payload.razorpay_key_secret) {
           setIsSecretSet(true);
       }
 

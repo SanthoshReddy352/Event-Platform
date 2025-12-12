@@ -16,7 +16,7 @@ import { isWithinInterval, format } from 'date-fns'
 export default function ProjectSubmissionPage() {
   const params = useParams()
   const router = useRouter()
-  const { user, loading: authLoading } = useAuth()
+  const { user, session, loading: authLoading } = useAuth()
   
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
@@ -67,7 +67,7 @@ export default function ProjectSubmissionPage() {
     try {
       if (!scopeStatus) setLoading(true)
       
-      const { data: { session } } = await supabase.auth.getSession()
+      // [FIX] Use cached session
       if (!session) throw new Error('Please log in')
 
       // 1. Fetch event details
@@ -129,13 +129,13 @@ export default function ProjectSubmissionPage() {
 
     setSubmitting(true)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
+      // [FIX] Use cached session
       
       const response = await fetch(`/api/events/${params.id}/submit-project`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`
+          'Authorization': `Bearer ${session?.access_token}`
         },
         body: JSON.stringify({ submission_data: submissionData })
       })

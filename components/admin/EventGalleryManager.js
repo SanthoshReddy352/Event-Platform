@@ -11,7 +11,11 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 
+import { useAuth } from '@/context/AuthContext' // Import Auth Context
+import { fetchWithTimeout } from '@/lib/utils'
+
 export default function EventGalleryManager({ eventId, initialEvent }) {
+    const { session } = useAuth() // Destructure session
     const router = useRouter()
     const [images, setImages] = useState(initialEvent?.gallery_images || [])
     const [loading, setLoading] = useState(false)
@@ -76,12 +80,21 @@ export default function EventGalleryManager({ eventId, initialEvent }) {
     const handleSave = async () => {
         try {
             setSaving(true)
-            const { error } = await supabase
-                .from('events')
-                .update({ gallery_images: images })
-                .eq('id', eventId)
+            setSaving(true)
+            
+            // [FIX] Use API and cached session
+            const response = await fetchWithTimeout(`/api/events/${eventId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session?.access_token}`
+                },
+                body: JSON.stringify({ gallery_images: images }),
+                timeout: 15000
+            })
 
-            if (error) throw error
+            const data = await response.json()
+            if (!data.success) throw new Error(data.error)
 
             // Clear draft on successful save
             localStorage.removeItem(STORAGE_KEY)

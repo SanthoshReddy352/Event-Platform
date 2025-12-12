@@ -21,6 +21,8 @@ module.exports = {
           // --- START OF NEW THEME COLORS ---
           'brand-red': '#ff3131',
           'brand-orange': '#ff914d',
+          'brand-primary': '#ff3131', // Aliased to brand-red
+          'brand-secondary': '#ff914d', // Aliased to brand-orange
           // --- END OF NEW THEME COLORS ---
     			border: 'hsl(var(--border))',
     			input: 'hsl(var(--input))',

@@ -682,6 +682,8 @@ export async function POST(request) {
 
     // POST /api/participants
     if (segments[0] === "participants" && !segments[1]) {
+      console.log("[Participants API] Received registration request", body);
+
       let participantUserId = body.user_id;
 
       // Try verifying via token if body.user_id not trusted (or logic requires it)
@@ -723,6 +725,8 @@ export async function POST(request) {
         status: "approved",
       };
 
+      console.log(`[Participans API] Attempting registration for Event: ${body.event_id}, Key User: ${participantUserId}`);
+
       const { data, error } = await supabaseAdmin
         .from("participants")
         .insert([participantData])
@@ -730,11 +734,15 @@ export async function POST(request) {
         .single();
 
       if (error) {
+        console.error(`[Participants API] DB Insert Error: ${error.message}`);
         return NextResponse.json(
           { success: false, error: error.message },
           { status: 500, headers: corsHeaders },
         );
       }
+      
+      console.log(`[Participants API] Registration successful. ID: ${data?.id}`);
+
 
       // Email Logic (Async)
       (async () => {
@@ -927,6 +935,51 @@ export async function PUT(request) {
       );
     }
 
+    // PUT /api/admin/club-profile - [NEW]
+    if (segments[0] === "admin" && segments[1] === "club-profile") {
+      const body = await request.json();
+      // Use getAdminUser to verify admin status
+      const { user, error: adminError } = await getAdminUser(request);
+      
+      if (adminError || !user) {
+        return NextResponse.json(
+          { success: false, error: adminError?.message || "Unauthorized" },
+          { status: 401, headers: corsHeaders },
+        );
+      }
+
+      const updates = {
+        club_name: body.club_name,
+        club_logo_url: body.club_logo_url,
+        razorpay_key_id: body.razorpay_key_id,
+        updated_at: new Date().toISOString(),
+      };
+
+      // Only update secret if provided
+      if (body.razorpay_key_secret) {
+        updates.razorpay_key_secret = body.razorpay_key_secret;
+      }
+
+      const { data, error } = await supabaseAdmin
+        .from("admin_users")
+        .update(updates)
+        .eq("user_id", user.id)
+        .select()
+        .single();
+
+      if (error) {
+        return NextResponse.json(
+          { success: false, error: error.message },
+          { status: 500, headers: corsHeaders },
+        );
+      }
+
+      return NextResponse.json(
+        { success: true, profile: data },
+        { headers: corsHeaders },
+      );
+    }
+
     // PUT /api/events/:id
     if (segments[0] === "events" && segments[1]) {
       const body = await request.json();
@@ -1030,6 +1083,129 @@ export async function DELETE(request) {
         { success: true, message: "User deleted" },
         { headers: corsHeaders },
       );
+    }
+
+    // DELETE /api/events/:id/problems/:problemId - [NEW] Delete Problem
+    if (segments[0] === "events" && segments[1] && segments[2] === "problems" && segments[3]) {
+        const problemId = segments[3];
+        
+        const { user, error: adminError } = await getAdminUser(request);
+        if (adminError || !user) {
+            return NextResponse.json(
+              { success: false, error: adminError?.message || "Unauthorized" },
+              { status: 401, headers: corsHeaders },
+            );
+        }
+
+        const { error } = await supabaseAdmin
+            .from('problem_statements')
+            .delete()
+            .eq('id', problemId);
+
+        if (error) {
+            return NextResponse.json(
+              { success: false, error: error.message },
+              { status: 500, headers: corsHeaders },
+            );
+        }
+
+        return NextResponse.json(
+          { success: true, message: "Problem deleted successfully" },
+          { headers: corsHeaders },
+        );
+    }
+
+    // POST /api/events/:id/quiz - [NEW] Manage Quiz (Fetch, Create, Update, Delete)
+    if (segments[0] === "events" && segments[1] && segments[2] === "quiz" && request.method === "POST") {
+        const eventId = segments[1];
+        
+        // This endpoint logic is a bit unusual in the frontend: 
+        // fetchQuestions uses GET (but here we check for POST?). 
+        // Wait, the frontend uses POST for save/delete but what about fetch?
+        // Let's check frontend again.
+        // Frontend: `fetchQuestions` does `fetch(/api/events/${eventId}/quiz` (default method GET).
+        // Frontend: `handleSave` uses POST with action: 'create'/'update'.
+        // Frontend: `handleDelete` uses POST with action: 'delete'.
+        
+        // So we need to handle both GET and POST. 
+        // But this block is inside a monolithic route.js, so request.method check matters.
+    }
+    
+    // GET /api/events/:id/quiz - [NEW] Fetch Questions
+    if (segments[0] === "events" && segments[1] && segments[2] === "quiz" && request.method === "GET") {
+        const eventId = segments[1];
+        const { user, error: adminError } = await getAdminUser(request);
+         if (adminError || !user) {
+            return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+        }
+
+        const { data, error } = await supabaseAdmin
+            .from('quiz_questions')
+            .select('*')
+            .eq('event_id', eventId)
+            .order('created_at', { ascending: true });
+
+        if (error) {
+            return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+        }
+        return NextResponse.json({ success: true, questions: data });
+    }
+
+    // POST /api/events/:id/quiz - [NEW] Manage Questions (Create/Update/Delete)
+    if (segments[0] === "events" && segments[1] && segments[2] === "quiz" && request.method === "POST") {
+        const eventId = segments[1];
+        const body = await request.json();
+        const { action, question } = body;
+        
+        const { user, error: adminError } = await getAdminUser(request);
+        if (adminError || !user) {
+            return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+        }
+
+        let result;
+        let error;
+
+        if (action === 'create') {
+            const { data, error: insertError } = await supabaseAdmin
+                .from('quiz_questions')
+                .insert({
+                    event_id: eventId,
+                    question_text: question.question_text,
+                    options: question.options,
+                    correct_option_index: question.correct_option_index,
+                    points: question.points
+                })
+                .select()
+                .single();
+            result = data;
+            error = insertError;
+        } else if (action === 'update') {
+             const { data, error: updateError } = await supabaseAdmin
+                .from('quiz_questions')
+                .update({
+                    question_text: question.question_text,
+                    options: question.options,
+                    correct_option_index: question.correct_option_index,
+                    points: question.points
+                })
+                .eq('id', question.id)
+                .select()
+                .single();
+            result = data;
+            error = updateError;
+        } else if (action === 'delete') {
+             const { error: deleteError } = await supabaseAdmin
+                .from('quiz_questions')
+                .delete()
+                .eq('id', question.id);
+             error = deleteError;
+             result = { success: true };
+        }
+
+        if (error) {
+            return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+        }
+        return NextResponse.json({ success: true, question: result });
     }
 
     // DELETE /api/events/:id

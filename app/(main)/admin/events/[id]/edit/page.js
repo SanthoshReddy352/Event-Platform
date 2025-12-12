@@ -11,7 +11,10 @@ import LastWordGradientText from '@/components/LastWordGradientText'
 
 import { fetchWithTimeout } from '@/lib/utils'
 
+import { useAuth } from '@/context/AuthContext' // Import Auth Context
+
 function EditEventContent() {
+  const { session } = useAuth() // Destructure session
   const router = useRouter()
   const params = useParams()
   const { id } = params
@@ -51,7 +54,8 @@ function EditEventContent() {
   const handleSubmit = async (submissionData) => {
     setIsSubmitting(true)
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      // [FIX] Use cached session instead of fetching again
+      if (!session) throw new Error("No active session");
       
       const response = await fetchWithTimeout(`/api/events/${id}`, {
         method: 'PUT',
